@@ -3,7 +3,7 @@ module forge.lthn.ai/core/go-ai
 go 1.25.5
 
 require (
-	forge.lthn.ai/core/go v0.0.0
+	forge.lthn.ai/core/cli v0.0.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/modelcontextprotocol/go-sdk v1.3.0
@@ -32,6 +32,7 @@ require (
 	github.com/parquet-go/jsonlite v1.4.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -52,4 +53,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace forge.lthn.ai/core/go => ../go
+replace forge.lthn.ai/core/cli => /Users/claude/Code/host-uk/packages/core

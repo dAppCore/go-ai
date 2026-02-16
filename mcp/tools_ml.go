@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/cli/pkg/log"
 	"forge.lthn.ai/core/go-ai/ml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

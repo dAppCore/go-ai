@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/cli/pkg/log"
 	"github.com/qdrant/go-client/qdrant"
 )
 
