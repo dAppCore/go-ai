@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"forge.lthn.ai/core/go/pkg/ws"
+	"forge.lthn.ai/core/cli/pkg/ws"
 	"github.com/gorilla/websocket"
 )
 
