@@ -252,6 +252,7 @@ func (t *Tokenizer) encodeGPT2(text string) []int32 {
 }
 
 // Decode converts token IDs back to text.
+// For full-sequence decoding, the SentencePiece leading space is stripped.
 func (t *Tokenizer) Decode(tokens []int32) string {
 	var sb strings.Builder
 	for _, id := range tokens {
@@ -275,6 +276,26 @@ func (t *Tokenizer) Decode(tokens []int32) string {
 		result = result[1:]
 	}
 	return result
+}
+
+// DecodeToken converts a single token ID to text for streaming.
+// Unlike Decode, it preserves the leading space (word boundary) so that
+// token-by-token output maintains correct spacing between words.
+func (t *Tokenizer) DecodeToken(id int32) string {
+	text, ok := t.invVocab[id]
+	if !ok {
+		return ""
+	}
+	if _, isSpecial := t.special[text]; isSpecial {
+		return ""
+	}
+
+	if t.isGPT2BPE {
+		return t.decodeGPT2Bytes(text)
+	}
+
+	// SentencePiece: replace ▁ with space but keep it (it's the word boundary)
+	return strings.ReplaceAll(text, "▁", " ")
 }
 
 // decodeGPT2Bytes converts GPT-2 byte-level BPE Unicode back to real bytes.

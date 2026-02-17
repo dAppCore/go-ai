@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"strings"
 	"sync"
 
 	"forge.lthn.ai/core/go-ai/mlx"
@@ -85,6 +86,7 @@ func (b *MLXBackend) generate(ctx context.Context, tokens []int32, opts GenOpts,
 	}
 
 	var output []int32
+	firstToken := true
 	for i := 0; i < maxTokens; i++ {
 		select {
 		case <-ctx.Done():
@@ -108,7 +110,12 @@ func (b *MLXBackend) generate(ctx context.Context, tokens []int32, opts GenOpts,
 
 		// Stream the token text to the callback
 		if cb != nil {
-			tokenText := b.tok.Decode([]int32{nextToken})
+			tokenText := b.tok.DecodeToken(nextToken)
+			// Strip the SentencePiece leading space only on the first token
+			if firstToken {
+				tokenText = strings.TrimLeft(tokenText, " ")
+				firstToken = false
+			}
 			if err := cb(tokenText); err != nil {
 				runtime.GC()
 				mlx.ClearCache()
