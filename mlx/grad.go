@@ -289,6 +289,22 @@ func CrossEntropyLoss(logits, targets *Array) *Array {
 	return MeanAll(perPos)
 }
 
+// MaskedCrossEntropyLoss computes cross-entropy loss only on masked positions.
+// logits: [B, L, V], targets: [B, L], mask: [B, L] (1.0 = compute loss, 0.0 = ignore)
+// Returns scalar loss averaged over masked positions only.
+func MaskedCrossEntropyLoss(logits, targets, mask *Array) *Array {
+	Init()
+	lse := LogSumExp(logits, -1, false)
+	tgtExpanded := ExpandDims(targets, -1)
+	gathered := TakeAlongAxis(logits, tgtExpanded, -1)
+	gathered = Squeeze(gathered, -1)
+	perPos := Subtract(lse, gathered) // [B, L]
+
+	// Apply mask and average over masked positions
+	masked := Mul(perPos, mask)
+	return Divide(SumAll(masked), SumAll(mask))
+}
+
 // MSELoss computes the mean squared error loss: mean((predictions - targets)^2).
 func MSELoss(predictions, targets *Array) *Array {
 	diff := Subtract(predictions, targets)

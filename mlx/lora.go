@@ -11,6 +11,7 @@ import "C"
 import (
 	"fmt"
 	"math"
+	"sort"
 	"unsafe"
 )
 
@@ -73,8 +74,10 @@ func NewLoRALinear(base *Linear, rank int, alpha float32) *LoRALinear {
 }
 
 // Forward computes: base(x) + scale * (x @ A^T) @ B^T
+// Calls baseForward on the underlying Linear to avoid infinite recursion
+// when the Linear's Forward method dispatches through LoRA.
 func (l *LoRALinear) Forward(x *Array) *Array {
-	baseOut := l.Base.Forward(x)
+	baseOut := l.Base.baseForward(x)
 
 	// LoRA path: x @ A^T gives [B, L, rank], then @ B^T gives [B, L, out]
 	loraOut := Matmul(x, Transpose(l.A))
@@ -135,14 +138,37 @@ func (a *LoRAAdapter) TotalParams() int {
 	return total
 }
 
+// SortedNames returns layer names in deterministic sorted order.
+func (a *LoRAAdapter) SortedNames() []string {
+	names := make([]string, 0, len(a.Layers))
+	for name := range a.Layers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // AllTrainableParams returns all trainable arrays (A and B from every layer),
-// in a deterministic order by layer name.
+// in a deterministic order sorted by layer name.
 func (a *LoRAAdapter) AllTrainableParams() []*Array {
-	var params []*Array
-	for _, l := range a.Layers {
-		params = append(params, l.TrainableParams()...)
+	names := a.SortedNames()
+	params := make([]*Array, 0, len(names)*2)
+	for _, name := range names {
+		l := a.Layers[name]
+		params = append(params, l.A, l.B)
 	}
 	return params
+}
+
+// SetAllParams updates all LoRA A and B arrays from a flat slice,
+// in the same deterministic order as AllTrainableParams.
+func (a *LoRAAdapter) SetAllParams(params []*Array) {
+	names := a.SortedNames()
+	for i, name := range names {
+		l := a.Layers[name]
+		l.A = params[i*2]
+		l.B = params[i*2+1]
+	}
 }
 
 // Save writes the LoRA adapter weights to a safetensors file.

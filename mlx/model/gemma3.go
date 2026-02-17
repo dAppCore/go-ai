@@ -414,3 +414,35 @@ func (m *GemmaModel) Tokenizer() *tokenizer.Tokenizer { return m.Tok }
 
 // ModelType returns the architecture identifier.
 func (m *GemmaModel) ModelType() string { return "gemma3" }
+
+// ApplyLoRA wraps target projection layers with LoRA adapters.
+func (m *GemmaModel) ApplyLoRA(cfg mlx.LoRAConfig) *mlx.LoRAAdapter {
+	adapter := &mlx.LoRAAdapter{
+		Layers: make(map[string]*mlx.LoRALinear),
+		Config: cfg,
+	}
+
+	for i, layer := range m.Layers {
+		prefix := fmt.Sprintf("model.layers.%d.self_attn", i)
+		for _, target := range cfg.TargetKeys {
+			var proj *mlx.Linear
+			switch target {
+			case "q_proj":
+				proj = layer.Attention.QProj
+			case "k_proj":
+				proj = layer.Attention.KProj
+			case "v_proj":
+				proj = layer.Attention.VProj
+			case "o_proj":
+				proj = layer.Attention.OProj
+			}
+			if proj != nil {
+				lora := mlx.NewLoRALinear(proj, cfg.Rank, cfg.Alpha)
+				proj.LoRA = lora
+				adapter.Layers[prefix+"."+target] = lora
+			}
+		}
+	}
+
+	return adapter
+}

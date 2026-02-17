@@ -4,6 +4,7 @@ package mlx
 
 // Linear is a fully-connected layer: y = x @ W.T + bias.
 // For quantized models, set Scales/Biases/GroupSize/Bits to use QuantizedMatmul.
+// Set LoRA to inject a low-rank adapter (training only).
 type Linear struct {
 	Weight    *Array `weight:"weight"`
 	Scales    *Array `weight:"scales"`
@@ -11,6 +12,8 @@ type Linear struct {
 	Bias      *Array `weight:"bias"`
 	GroupSize int
 	Bits      int
+
+	LoRA *LoRALinear // Optional LoRA adapter — if set, Forward routes through it
 }
 
 // NewLinear creates a dense Linear layer with optional bias.
@@ -31,8 +34,18 @@ func NewQuantizedLinear(weight, scales, biases, bias *Array, groupSize, bits int
 }
 
 // Forward computes the linear transformation.
+// If a LoRA adapter is attached, routes through it instead (base + low-rank delta).
 // Uses QuantizedMatmul when quantization parameters are present.
 func (l *Linear) Forward(x *Array) *Array {
+	if l.LoRA != nil {
+		return l.LoRA.Forward(x)
+	}
+	return l.baseForward(x)
+}
+
+// baseForward is the raw linear transformation without LoRA.
+// Used internally by LoRALinear to avoid infinite recursion.
+func (l *Linear) baseForward(x *Array) *Array {
 	var out *Array
 	if l.Scales != nil {
 		out = QuantizedMatmul(x, l.Weight, l.Scales, l.Biases, true, l.GroupSize, l.Bits)

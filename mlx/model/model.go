@@ -30,6 +30,10 @@ type Model interface {
 
 	// ModelType returns the architecture identifier (e.g. "gemma3", "qwen3").
 	ModelType() string
+
+	// ApplyLoRA wraps target projection layers with LoRA adapters for training.
+	// Returns the adapter which holds references to all LoRA layers.
+	ApplyLoRA(cfg mlx.LoRAConfig) *mlx.LoRAAdapter
 }
 
 // QuantizationConfig holds quantization parameters from config.json.
