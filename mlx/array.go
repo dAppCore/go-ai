@@ -204,10 +204,18 @@ func (t Array) Int() int {
 }
 
 // Float extracts a scalar float64 value.
+// Handles both float32 and float64 array dtypes.
 func (t Array) Float() float64 {
-	var item C.double
-	C.mlx_array_item_float64(&item, t.ctx)
-	return float64(item)
+	switch t.Dtype() {
+	case DTypeFloat32:
+		var item C.float
+		C.mlx_array_item_float32(&item, t.ctx)
+		return float64(item)
+	default:
+		var item C.double
+		C.mlx_array_item_float64(&item, t.ctx)
+		return float64(item)
+	}
 }
 
 // Ints extracts all elements as int slice (from int32 data).

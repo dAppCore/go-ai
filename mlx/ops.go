@@ -335,3 +335,19 @@ func PutAlongAxis(a, indices, values *Array, axis int) *Array {
 	C.mlx_put_along_axis(&out.ctx, a.ctx, indices.ctx, values.ctx, C.int(axis), DefaultStream().ctx)
 	return out
 }
+
+// TakeAlongAxis gathers elements from a along axis using indices.
+// Unlike Take, this uses the same number of dimensions for indices and input.
+func TakeAlongAxis(a, indices *Array, axis int) *Array {
+	out := New("TAKE_ALONG_AXIS", a, indices)
+	C.mlx_take_along_axis(&out.ctx, a.ctx, indices.ctx, C.int(axis), DefaultStream().ctx)
+	return out
+}
+
+// LogSumExp computes log(sum(exp(a))) along the given axis.
+// Numerically stable reduction for cross-entropy loss.
+func LogSumExp(a *Array, axis int, keepDims bool) *Array {
+	out := New("LOGSUMEXP", a)
+	C.mlx_logsumexp_axis(&out.ctx, a.ctx, C.int(axis), C._Bool(keepDims), DefaultStream().ctx)
+	return out
+}

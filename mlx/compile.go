@@ -49,10 +49,14 @@ func goCompiledFunc(outputs *C.mlx_vector_array, inputs C.mlx_vector_array, payl
 	// Call user function
 	goOutputs := fn(goInputs)
 
-	// Set outputs
+	// The output vector arrives with ctx=nullptr. Create a valid vector,
+	// fill it, then copy to the output pointer.
+	tmp := C.mlx_vector_array_new()
 	for _, out := range goOutputs {
-		C.mlx_vector_array_append_value(*outputs, out.ctx)
+		C.mlx_vector_array_append_value(tmp, out.ctx)
 	}
+	C.mlx_vector_array_set(outputs, tmp)
+	C.mlx_vector_array_free(tmp)
 	return 0
 }
 
