@@ -43,6 +43,24 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+// TokenCallback receives each generated token as text. Return a non-nil
+// error to stop generation early (e.g. client disconnect).
+type TokenCallback func(token string) error
+
+// StreamingBackend extends Backend with token-by-token streaming.
+// Backends that generate tokens incrementally (e.g. MLX) should implement
+// this interface. The serve handler uses SSE when the client sends
+// "stream": true and the active backend satisfies StreamingBackend.
+type StreamingBackend interface {
+	Backend
+
+	// GenerateStream streams tokens from a single prompt via the callback.
+	GenerateStream(ctx context.Context, prompt string, opts GenOpts, cb TokenCallback) error
+
+	// ChatStream streams tokens from a chat conversation via the callback.
+	ChatStream(ctx context.Context, messages []Message, opts GenOpts, cb TokenCallback) error
+}
+
 // DefaultGenOpts returns sensible defaults for generation.
 func DefaultGenOpts() GenOpts {
 	return GenOpts{

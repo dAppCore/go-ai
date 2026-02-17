@@ -1,0 +1,6 @@
+mlx/build/
+mlx/dist/
+*.o
+*.a
+*.so
+*.dylib

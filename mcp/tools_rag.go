@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"forge.lthn.ai/core/cli/pkg/log"
+	"forge.lthn.ai/core/go/pkg/log"
 	"forge.lthn.ai/core/go-ai/rag"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

@@ -3,7 +3,7 @@ module forge.lthn.ai/core/go-ai
 go 1.25.5
 
 require (
-	forge.lthn.ai/core/cli v0.0.0
+	forge.lthn.ai/core/go v0.0.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/modelcontextprotocol/go-sdk v1.3.0
@@ -53,4 +53,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace forge.lthn.ai/core/cli => /Users/claude/Code/host-uk/packages/core
+replace forge.lthn.ai/core/go => ../core
