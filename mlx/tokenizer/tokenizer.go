@@ -1,6 +1,6 @@
-//go:build darwin && arm64 && mlx
+//go:build darwin && arm64
 
-// Package tokenizer provides BPE/SentencePiece tokenization for Gemma models.
+// Package tokenizer provides BPE tokenization for transformer models.
 package tokenizer
 
 import (
@@ -19,6 +19,11 @@ type Tokenizer struct {
 
 	bosToken int32
 	eosToken int32
+
+	// GPT-2 byte-level BPE support (used by Qwen, GPT, Llama, etc.)
+	isGPT2BPE   bool
+	gpt2Decoder map[rune]byte // Unicode char → original byte
+	gpt2Encoder map[byte]rune // original byte → Unicode char
 }
 
 type mergePair struct {
@@ -32,7 +37,7 @@ type tokenizerJSON struct {
 		Type         string          `json:"type"`
 		Vocab        json.RawMessage `json:"vocab"`
 		Merges       json.RawMessage `json:"merges"`
-		ByteFallback bool           `json:"byte_fallback"`
+		ByteFallback bool            `json:"byte_fallback"`
 	} `json:"model"`
 	AddedTokens []struct {
 		ID      int32  `json:"id"`
@@ -71,7 +76,6 @@ func Load(path string) (*Tokenizer, error) {
 
 	// Parse merges — supports both ["a b", ...] and [["a","b"], ...] formats
 	if len(tj.Model.Merges) > 0 {
-		// Try array-of-strings first
 		var stringMerges []string
 		if err := json.Unmarshal(tj.Model.Merges, &stringMerges); err == nil {
 			for rank, merge := range stringMerges {
@@ -81,7 +85,6 @@ func Load(path string) (*Tokenizer, error) {
 				}
 			}
 		} else {
-			// Try array-of-arrays: [["a","b"], ...]
 			var arrayMerges [][]string
 			if err := json.Unmarshal(tj.Model.Merges, &arrayMerges); err == nil {
 				for rank, pair := range arrayMerges {
@@ -102,37 +105,77 @@ func Load(path string) (*Tokenizer, error) {
 		t.invVocab[tok.ID] = tok.Content
 	}
 
-	// Set BOS/EOS
+	// Detect GPT-2 byte-level BPE (Qwen, GPT, Llama use Ġ for space)
+	if _, ok := t.vocab["Ġ"]; ok {
+		t.isGPT2BPE = true
+		t.gpt2Decoder, t.gpt2Encoder = buildGPT2ByteMaps()
+	}
+
+	// Set BOS/EOS — detect model family from special tokens
 	if id, ok := t.special["<bos>"]; ok {
 		t.bosToken = id
 	}
 	if id, ok := t.special["<eos>"]; ok {
 		t.eosToken = id
 	}
+	// Gemma: <end_of_turn> is the generation stop token
 	if id, ok := t.special["<end_of_turn>"]; ok {
-		t.eosToken = id // Gemma uses end_of_turn as EOS
+		t.eosToken = id
+	}
+	// Qwen3: <|im_end|> is the generation stop token
+	if id, ok := t.special["<|im_end|>"]; ok {
+		t.eosToken = id
+	}
+	// Qwen3 BOS: <|im_start|>
+	if id, ok := t.special["<|im_start|>"]; ok {
+		t.bosToken = id
 	}
 
 	return t, nil
+}
+
+// buildGPT2ByteMaps creates the GPT-2 byte-level BPE encoding/decoding maps.
+// GPT-2 maps all 256 bytes to printable Unicode characters to avoid control chars
+// in the vocabulary. Printable ASCII + Latin-1 Supplement map to themselves;
+// everything else (0-32, 127-160, 173) maps to U+0100 onwards.
+func buildGPT2ByteMaps() (decoder map[rune]byte, encoder map[byte]rune) {
+	encoder = make(map[byte]rune, 256)
+	decoder = make(map[rune]byte, 256)
+
+	// Self-mapping ranges: printable ASCII + Latin-1 Supplement
+	// Use int loop variable to avoid byte overflow at 255.
+	selfMap := func(lo, hi int) {
+		for b := lo; b <= hi; b++ {
+			encoder[byte(b)] = rune(b)
+			decoder[rune(b)] = byte(b)
+		}
+	}
+	selfMap(33, 126)  // ! through ~
+	selfMap(161, 172) // ¡ through ¬
+	selfMap(174, 255) // ® through ÿ
+
+	// Non-self-mapping: control chars, space, DEL, and gaps
+	n := 0
+	for b := 0; b < 256; b++ {
+		if _, ok := encoder[byte(b)]; !ok {
+			r := rune(256 + n)
+			encoder[byte(b)] = r
+			decoder[r] = byte(b)
+			n++
+		}
+	}
+	return
 }
 
 // Encode converts text to token IDs. Prepends BOS token.
 func (t *Tokenizer) Encode(text string) []int32 {
 	tokens := []int32{t.bosToken}
 
-	// Simple BPE encoding — split into characters then merge
-	// This is a simplified version. Full implementation handles
-	// Unicode, byte fallback, and efficient BPE merging.
-	chars := []string{}
-	for _, r := range text {
-		s := string(r)
-		if s == " " {
-			s = "▁" // SentencePiece space marker
-		}
-		chars = append(chars, s)
+	if t.isGPT2BPE {
+		return t.encodeGPT2(text)
 	}
 
-	// Check for special tokens first
+	// SentencePiece style encoding
 	remaining := text
 	for remaining != "" {
 		found := false
@@ -145,7 +188,6 @@ func (t *Tokenizer) Encode(text string) []int32 {
 			}
 		}
 		if !found {
-			// Encode character by character (simplified BPE)
 			r := []rune(remaining)
 			ch := "▁" + string(r[0])
 			if id, ok := t.vocab[ch]; ok {
@@ -160,22 +202,93 @@ func (t *Tokenizer) Encode(text string) []int32 {
 	return tokens
 }
 
+// encodeGPT2 encodes text using GPT-2 byte-level BPE.
+func (t *Tokenizer) encodeGPT2(text string) []int32 {
+	tokens := []int32{t.bosToken}
+
+	// Convert text bytes to GPT-2 Unicode representation
+	var encoded strings.Builder
+	for _, b := range []byte(text) {
+		if r, ok := t.gpt2Encoder[b]; ok {
+			encoded.WriteRune(r)
+		}
+	}
+	gpt2Text := encoded.String()
+
+	// Scan for special tokens and regular text
+	remaining := gpt2Text
+	for remaining != "" {
+		// Check special tokens (these are stored as-is, not byte-encoded)
+		found := false
+		for tok, id := range t.special {
+			// Special tokens in GPT-2 tokenizers are stored in their original form
+			// Convert the special token to GPT-2 encoding for matching
+			var encTok strings.Builder
+			for _, b := range []byte(tok) {
+				if r, ok := t.gpt2Encoder[b]; ok {
+					encTok.WriteRune(r)
+				}
+			}
+			encStr := encTok.String()
+			if strings.HasPrefix(remaining, encStr) {
+				tokens = append(tokens, id)
+				remaining = remaining[len(encStr):]
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Character-by-character lookup (simplified BPE)
+			r := []rune(remaining)
+			ch := string(r[0])
+			if id, ok := t.vocab[ch]; ok {
+				tokens = append(tokens, id)
+			}
+			remaining = string(r[1:])
+		}
+	}
+
+	return tokens
+}
+
 // Decode converts token IDs back to text.
 func (t *Tokenizer) Decode(tokens []int32) string {
 	var sb strings.Builder
 	for _, id := range tokens {
 		if text, ok := t.invVocab[id]; ok {
-			// Replace SentencePiece space marker
-			text = strings.ReplaceAll(text, "▁", " ")
+			// Skip special tokens in decode output
+			if _, isSpecial := t.special[text]; isSpecial {
+				continue
+			}
 			sb.WriteString(text)
 		}
 	}
-	result := sb.String()
-	// Trim leading space from SentencePiece encoding
+	raw := sb.String()
+
+	if t.isGPT2BPE {
+		return t.decodeGPT2Bytes(raw)
+	}
+
+	// SentencePiece style
+	result := strings.ReplaceAll(raw, "▁", " ")
 	if strings.HasPrefix(result, " ") {
 		result = result[1:]
 	}
 	return result
+}
+
+// decodeGPT2Bytes converts GPT-2 byte-level BPE Unicode back to real bytes.
+func (t *Tokenizer) decodeGPT2Bytes(s string) string {
+	var buf []byte
+	for _, r := range s {
+		if b, ok := t.gpt2Decoder[r]; ok {
+			buf = append(buf, b)
+		} else {
+			// Non-mapped runes pass through as UTF-8
+			buf = append(buf, []byte(string(r))...)
+		}
+	}
+	return string(buf)
 }
 
 // BOSToken returns the beginning-of-sequence token ID.

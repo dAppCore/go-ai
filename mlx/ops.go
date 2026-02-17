@@ -1,4 +1,4 @@
-//go:build darwin && arm64 && mlx
+//go:build darwin && arm64
 
 package mlx
 
@@ -66,6 +66,18 @@ func Exp(a *Array) *Array {
 	out := New("EXP", a)
 	C.mlx_exp(&out.ctx, a.ctx, DefaultStream().ctx)
 	return out
+}
+
+// Sigmoid returns element-wise 1/(1+exp(-a)).
+func Sigmoid(a *Array) *Array {
+	out := New("SIGMOID", a)
+	C.mlx_sigmoid(&out.ctx, a.ctx, DefaultStream().ctx)
+	return out
+}
+
+// SiLU returns element-wise x * sigmoid(x) (Swish activation).
+func SiLU(a *Array) *Array {
+	return Mul(a, Sigmoid(a))
 }
 
 // Tanh returns element-wise tanh(a).

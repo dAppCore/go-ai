@@ -1,4 +1,4 @@
-//go:build darwin && arm64 && mlx
+//go:build darwin && arm64
 
 // Package cache provides KV cache implementations for transformer inference.
 package cache

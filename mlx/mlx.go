@@ -1,4 +1,4 @@
-//go:build darwin && arm64 && mlx
+//go:build darwin && arm64
 
 // Package mlx provides Go bindings for Apple's MLX framework via mlx-c.
 //
@@ -6,9 +6,9 @@
 //
 //	cd pkg/mlx && go generate ./...
 //
-// Build with MLX enabled:
+// Build (MLX is auto-enabled on darwin/arm64):
 //
-//	go build -tags mlx -o core .
+//	go build -o core .
 package mlx
 
 //go:generate cmake -S . -B build -DCMAKE_INSTALL_PREFIX=dist -DCMAKE_BUILD_TYPE=Release

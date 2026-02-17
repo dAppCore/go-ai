@@ -1,4 +1,4 @@
-//go:build !(darwin && arm64 && mlx)
+//go:build !(darwin && arm64)
 
 // Package mlx provides Go bindings for Apple's MLX framework via mlx-c.
 // This stub file is used on non-darwin/non-arm64 platforms or when the

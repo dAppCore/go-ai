@@ -1,4 +1,4 @@
-//go:build darwin && arm64 && mlx
+//go:build darwin && arm64
 
 // Package model provides transformer model architectures for MLX inference.
 package model
@@ -15,12 +15,6 @@ import (
 	"forge.lthn.ai/core/go-ai/mlx/cache"
 	"forge.lthn.ai/core/go-ai/mlx/tokenizer"
 )
-
-// QuantizationConfig holds quantization parameters from config.json.
-type QuantizationConfig struct {
-	GroupSize int `json:"group_size"`
-	Bits      int `json:"bits"`
-}
 
 // TextConfig holds Gemma 3 text model configuration.
 type TextConfig struct {
@@ -166,17 +160,6 @@ func parseConfig(data []byte) (*TextConfig, error) {
 	}
 
 	return &cfg, nil
-}
-
-// resolveWeight looks up a weight with optional "language_model." prefix.
-func resolveWeight(weights map[string]*mlx.Array, name string) *mlx.Array {
-	if w, ok := weights[name]; ok {
-		return w
-	}
-	if w, ok := weights["language_model."+name]; ok {
-		return w
-	}
-	return nil
 }
 
 // LoadGemma3 loads a Gemma 3 text model from a directory.
@@ -428,3 +411,6 @@ func (m *GemmaModel) NumLayers() int { return len(m.Layers) }
 
 // Tokenizer returns the model's tokenizer.
 func (m *GemmaModel) Tokenizer() *tokenizer.Tokenizer { return m.Tok }
+
+// ModelType returns the architecture identifier.
+func (m *GemmaModel) ModelType() string { return "gemma3" }

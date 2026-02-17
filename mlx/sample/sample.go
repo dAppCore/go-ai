@@ -1,4 +1,4 @@
-//go:build darwin && arm64 && mlx
+//go:build darwin && arm64
 
 // Package sample provides composable token sampling strategies.
 package sample
