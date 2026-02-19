@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"forge.lthn.ai/core/go/pkg/log"
-	"forge.lthn.ai/core/go-ai/ml"
+	"forge.lthn.ai/core/go-ml"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

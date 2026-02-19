@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"forge.lthn.ai/core/go-ai/ml"
+	"forge.lthn.ai/core/go-ml"
 )
 
 func main() {
