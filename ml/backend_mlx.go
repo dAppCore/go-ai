@@ -10,11 +10,11 @@ import (
 	"strings"
 	"sync"
 
-	"forge.lthn.ai/core/go-ai/mlx"
-	"forge.lthn.ai/core/go-ai/mlx/cache"
-	"forge.lthn.ai/core/go-ai/mlx/model"
-	"forge.lthn.ai/core/go-ai/mlx/sample"
-	"forge.lthn.ai/core/go-ai/mlx/tokenizer"
+	"forge.lthn.ai/core/go-mlx"
+	"forge.lthn.ai/core/go-mlx/cache"
+	"forge.lthn.ai/core/go-mlx/model"
+	"forge.lthn.ai/core/go-mlx/sample"
+	"forge.lthn.ai/core/go-mlx/tokenizer"
 )
 
 // MLXBackend implements Backend and StreamingBackend for native Metal inference.

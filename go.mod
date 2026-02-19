@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	forge.lthn.ai/core/go v0.0.0
+	forge.lthn.ai/core/go-mlx v0.0.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/modelcontextprotocol/go-sdk v1.3.0
@@ -54,3 +55,5 @@ require (
 )
 
 replace forge.lthn.ai/core/go => ../core
+
+replace forge.lthn.ai/core/go-mlx => ../go-mlx
