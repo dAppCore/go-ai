@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"forge.lthn.ai/core/go-ai/rag"
+	"forge.lthn.ai/core/go-rag"
 )
 
 // TaskInfo carries the minimal task data needed for RAG queries,
