@@ -6,10 +6,10 @@ Virgil dispatches tasks. Mark `[x]` when done, note commit hash.
 
 ## Phase 1: Post-Split Cleanup
 
-- [ ] **Remove `test-mlx.go`** — Standalone test script in module root. Not part of the library. Delete it.
-- [ ] **Verify `go build ./...` passes** — With replace directives pointing at local clones (via go.work or go.mod). Fix any stale import paths that reference old monolith structure.
-- [ ] **Verify `go vet ./...` passes** — Fix any vet warnings.
-- [ ] **Run full test suite** — `go test ./...` should pass. 84 tests documented in TEST-RESULTS.md. Confirm they still pass after the split.
+- [x] **Remove `test-mlx.go`** — Deleted standalone test script from module root.
+- [x] **Verify `go build ./...` passes** — Clean build, no stale import paths.
+- [x] **Verify `go vet ./...` passes** — No vet warnings.
+- [x] **Run full test suite** — All tests pass. Fixed `TestSandboxing_Symlinks_Blocked` (renamed; asserts sandbox blocks symlink escape) and `TestNewTCPTransport_Warning` (added missing security warning to `NewTCPTransport`).
 
 ## Phase 2: go-inference Migration
 

@@ -26,7 +26,12 @@ type TCPTransport struct {
 
 // NewTCPTransport creates a new TCP transport listener.
 // It listens on the provided address (e.g. "localhost:9100").
+// Emits a security warning when binding to 0.0.0.0 (all interfaces).
 func NewTCPTransport(addr string) (*TCPTransport, error) {
+	host, _, _ := net.SplitHostPort(addr)
+	if host == "0.0.0.0" || host == "" {
+		fmt.Fprintf(os.Stderr, "WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
+	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err

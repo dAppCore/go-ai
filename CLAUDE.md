@@ -130,7 +130,6 @@ go-ai/
 │       ├── tools_chat.go  # ide_chat_send/history, ide_session_list/create, ide_plan_status
 │       ├── tools_build.go # ide_build_status/list/logs
 │       └── tools_dashboard.go # ide_dashboard_overview/activity/metrics
-└── test-mlx.go            # Standalone scoring pipeline test script
 ```
 
 ## Tool Inventory (49 tools)
@@ -152,17 +151,20 @@ go-ai/
 
 ## Dependencies
 
+### Direct
+
 | Module | Role |
 |--------|------|
 | `forge.lthn.ai/core/go` | Core framework: `pkg/io` (filesystem), `pkg/log`, `pkg/process`, `pkg/ws`, `pkg/webview` |
 | `forge.lthn.ai/core/go-ml` | ML scoring engine: heuristic scores, judge backend, probes, InfluxDB status |
 | `forge.lthn.ai/core/go-rag` | RAG: Qdrant vector DB client, Ollama embeddings, markdown chunking |
-| `forge.lthn.ai/core/go-mlx` | Native Metal GPU inference (Apple Silicon) |
 | `github.com/modelcontextprotocol/go-sdk` | MCP Go SDK (server, transports, JSON-RPC) |
 | `github.com/gorilla/websocket` | WebSocket client for IDE bridge |
-| `github.com/marcboeker/go-duckdb` | DuckDB (analytics) |
-| `github.com/qdrant/go-client` | Qdrant gRPC client |
-| `github.com/ollama/ollama` | Ollama API types |
+| `github.com/stretchr/testify` | Test assertions |
+
+### Indirect (transitive via go-ml / go-rag)
+
+`go-mlx`, `go-inference`, `go-duckdb`, `parquet-go`, `ollama`, `qdrant/go-client` are now indirect dependencies pulled in through `go-ml` and `go-rag`. They are not imported directly by go-ai.
 
 All `forge.lthn.ai/core/*` dependencies use `replace` directives pointing to local sibling directories during development.
 

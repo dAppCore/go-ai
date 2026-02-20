@@ -4,20 +4,16 @@ go 1.25.5
 
 require (
 	forge.lthn.ai/core/go v0.0.0
-	forge.lthn.ai/core/go-mlx v0.0.0
 	forge.lthn.ai/core/go-ml v0.0.0
 	forge.lthn.ai/core/go-rag v0.0.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/modelcontextprotocol/go-sdk v1.3.0
-	github.com/ollama/ollama v0.16.1
-	github.com/parquet-go/parquet-go v0.27.0
-	github.com/qdrant/go-client v1.16.2
 	github.com/stretchr/testify v1.11.1
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	forge.lthn.ai/core/go-inference v0.0.0 // indirect
+	forge.lthn.ai/core/go-mlx v0.0.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/apache/arrow-go/v18 v18.5.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -31,11 +27,14 @@ require (
 	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
+	github.com/marcboeker/go-duckdb v1.8.5 // indirect
+	github.com/ollama/ollama v0.16.1 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.4.0 // indirect
+	github.com/parquet-go/parquet-go v0.27.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/qdrant/go-client v1.16.2 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -51,9 +50,10 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251111163417-95abcf5c77ba // indirect
-	google.golang.org/grpc v1.78.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/grpc v1.79.1 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace forge.lthn.ai/core/go => ../core
@@ -63,3 +63,5 @@ replace forge.lthn.ai/core/go-mlx => ../go-mlx
 replace forge.lthn.ai/core/go-ml => ../go-ml
 
 replace forge.lthn.ai/core/go-rag => ../go-rag
+
+replace forge.lthn.ai/core/go-inference => ../go-inference
