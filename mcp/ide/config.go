@@ -12,6 +12,10 @@ type Config struct {
 	// WorkspaceRoot is the local path used as the default workspace context.
 	WorkspaceRoot string
 
+	// Token is the Bearer token sent in the Authorization header during
+	// WebSocket upgrade. When empty, no auth header is sent.
+	Token string
+
 	// ReconnectInterval controls how long to wait between reconnect attempts.
 	ReconnectInterval time.Duration
 
@@ -45,4 +49,9 @@ func WithWorkspaceRoot(root string) Option {
 // WithReconnectInterval sets the base reconnect interval.
 func WithReconnectInterval(d time.Duration) Option {
 	return func(c *Config) { c.ReconnectInterval = d }
+}
+
+// WithToken sets the Bearer token for WebSocket authentication.
+func WithToken(token string) Option {
+	return func(c *Config) { c.Token = token }
 }

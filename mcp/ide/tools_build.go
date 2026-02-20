@@ -70,6 +70,8 @@ func (s *Subsystem) registerBuildTools(server *mcp.Server) {
 	}, s.buildLogs)
 }
 
+// buildStatus requests build status from the Laravel backend.
+// Stub implementation: sends request via bridge, returns "unknown" status. Awaiting Laravel backend.
 func (s *Subsystem) buildStatus(_ context.Context, _ *mcp.CallToolRequest, input BuildStatusInput) (*mcp.CallToolResult, BuildStatusOutput, error) {
 	if s.bridge == nil {
 		return nil, BuildStatusOutput{}, fmt.Errorf("bridge not available")
@@ -83,6 +85,8 @@ func (s *Subsystem) buildStatus(_ context.Context, _ *mcp.CallToolRequest, input
 	}, nil
 }
 
+// buildList requests a list of builds from the Laravel backend.
+// Stub implementation: sends request via bridge, returns empty list. Awaiting Laravel backend.
 func (s *Subsystem) buildList(_ context.Context, _ *mcp.CallToolRequest, input BuildListInput) (*mcp.CallToolResult, BuildListOutput, error) {
 	if s.bridge == nil {
 		return nil, BuildListOutput{}, fmt.Errorf("bridge not available")
@@ -94,6 +98,8 @@ func (s *Subsystem) buildList(_ context.Context, _ *mcp.CallToolRequest, input B
 	return nil, BuildListOutput{Builds: []BuildInfo{}}, nil
 }
 
+// buildLogs requests build log output from the Laravel backend.
+// Stub implementation: sends request via bridge, returns empty lines. Awaiting Laravel backend.
 func (s *Subsystem) buildLogs(_ context.Context, _ *mcp.CallToolRequest, input BuildLogsInput) (*mcp.CallToolResult, BuildLogsOutput, error) {
 	if s.bridge == nil {
 		return nil, BuildLogsOutput{}, fmt.Errorf("bridge not available")

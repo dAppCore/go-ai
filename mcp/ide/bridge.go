@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -113,7 +114,14 @@ func (b *Bridge) dial(ctx context.Context) error {
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
-	conn, _, err := dialer.DialContext(ctx, b.cfg.LaravelWSURL, nil)
+
+	var header http.Header
+	if b.cfg.Token != "" {
+		header = http.Header{}
+		header.Set("Authorization", "Bearer "+b.cfg.Token)
+	}
+
+	conn, _, err := dialer.DialContext(ctx, b.cfg.LaravelWSURL, header)
 	if err != nil {
 		return err
 	}

@@ -83,6 +83,8 @@ func (s *Subsystem) registerDashboardTools(server *mcp.Server) {
 	}, s.dashboardMetrics)
 }
 
+// dashboardOverview returns a platform overview with bridge status.
+// Stub implementation: only BridgeOnline is live; other fields return zero values. Awaiting Laravel backend.
 func (s *Subsystem) dashboardOverview(_ context.Context, _ *mcp.CallToolRequest, _ DashboardOverviewInput) (*mcp.CallToolResult, DashboardOverviewOutput, error) {
 	connected := s.bridge != nil && s.bridge.Connected()
 
@@ -97,6 +99,8 @@ func (s *Subsystem) dashboardOverview(_ context.Context, _ *mcp.CallToolRequest,
 	}, nil
 }
 
+// dashboardActivity requests the activity feed from the Laravel backend.
+// Stub implementation: sends request via bridge, returns empty events. Awaiting Laravel backend.
 func (s *Subsystem) dashboardActivity(_ context.Context, _ *mcp.CallToolRequest, input DashboardActivityInput) (*mcp.CallToolResult, DashboardActivityOutput, error) {
 	if s.bridge == nil {
 		return nil, DashboardActivityOutput{}, fmt.Errorf("bridge not available")
@@ -108,6 +112,8 @@ func (s *Subsystem) dashboardActivity(_ context.Context, _ *mcp.CallToolRequest,
 	return nil, DashboardActivityOutput{Events: []ActivityEvent{}}, nil
 }
 
+// dashboardMetrics requests aggregate metrics from the Laravel backend.
+// Stub implementation: sends request via bridge, returns zero metrics. Awaiting Laravel backend.
 func (s *Subsystem) dashboardMetrics(_ context.Context, _ *mcp.CallToolRequest, input DashboardMetricsInput) (*mcp.CallToolResult, DashboardMetricsOutput, error) {
 	if s.bridge == nil {
 		return nil, DashboardMetricsOutput{}, fmt.Errorf("bridge not available")
