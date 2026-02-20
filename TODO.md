@@ -15,10 +15,10 @@ Virgil dispatches tasks. Mark `[x]` when done, note commit hash.
 
 go-ml is migrating to use `go-inference` shared interfaces. Once that's done, go-ai's ML subsystem should use go-inference too.
 
-- [x] **Update `tools_ml.go` MLSubsystem** — mlGenerate/mlScore/mlProbe unchanged (work correctly via go-ml.Service → InferenceAdapter → inference.TextModel). Added flow documentation comments.
-- [x] **Update `ml_backends` tool** — Rewritten to use `inference.List()/Get()/Default()` instead of `ml.Service.Backends()/Backend()/DefaultBackend()`.
-- [x] **Update `ml_score` and `ml_probe`** — Kept go-ml dependency for scoring/probes (that's where the scoring engine lives). Generation flows through go-inference via InferenceAdapter. Added documentation comments.
-- [x] **Add go-inference to go.mod** — Promoted from indirect to direct require. Replace directive already present.
+- [x] **Update `tools_ml.go` MLSubsystem** — mlGenerate/mlScore/mlProbe unchanged (work correctly via go-ml.Service → InferenceAdapter → inference.TextModel). Added flow documentation comments. `4d73fa2`
+- [x] **Update `ml_backends` tool** — Rewritten to use `inference.List()/Get()/Default()` instead of `ml.Service.Backends()/Backend()/DefaultBackend()`. `4d73fa2`
+- [x] **Update `ml_score` and `ml_probe`** — Kept go-ml dependency for scoring/probes (that's where the scoring engine lives). Generation flows through go-inference via InferenceAdapter. Added documentation comments. `4d73fa2`
+- [x] **Add go-inference to go.mod** — Promoted from indirect to direct require. Replace directive already present. `4d73fa2`
 
 ## Phase 3: MCP Transport Testing
 
