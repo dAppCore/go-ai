@@ -221,10 +221,8 @@ func (s *Service) ragCollections(ctx context.Context, req *mcp.CallToolRequest, 
 				// Continue with defaults on error
 				continue
 			}
-			if info.PointsCount != nil {
-				collections[i].PointsCount = *info.PointsCount
-			}
-			collections[i].Status = info.Status.String()
+			collections[i].PointsCount = info.PointCount
+			collections[i].Status = info.Status
 		}
 	}
 
