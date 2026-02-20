@@ -15,10 +15,10 @@ Virgil dispatches tasks. Mark `[x]` when done, note commit hash.
 
 go-ml is migrating to use `go-inference` shared interfaces. Once that's done, go-ai's ML subsystem should use go-inference too.
 
-- [ ] **Update `tools_ml.go` MLSubsystem** — Currently imports `go-ml.Service` directly. After go-ml Phase 1, update to use `inference.LoadModel()` + `inference.TextModel` for generation. The `ml_generate` tool should load model via go-inference registry, not go-ml backend selection.
-- [ ] **Update `ml_backends` tool** — Enumerate backends via `inference.List()` instead of go-ml service registry.
-- [ ] **Update `ml_score` and `ml_probe`** — These use `go-ml.Engine` and `go-ml.Probes`. Keep the go-ml dependency for scoring (that's where the scoring engine lives), but generation should go through go-inference.
-- [ ] **Add go-inference to go.mod** — `require forge.lthn.ai/core/go-inference v0.0.0` with appropriate replace directive.
+- [x] **Update `tools_ml.go` MLSubsystem** — mlGenerate/mlScore/mlProbe unchanged (work correctly via go-ml.Service → InferenceAdapter → inference.TextModel). Added flow documentation comments.
+- [x] **Update `ml_backends` tool** — Rewritten to use `inference.List()/Get()/Default()` instead of `ml.Service.Backends()/Backend()/DefaultBackend()`.
+- [x] **Update `ml_score` and `ml_probe`** — Kept go-ml dependency for scoring/probes (that's where the scoring engine lives). Generation flows through go-inference via InferenceAdapter. Added documentation comments.
+- [x] **Add go-inference to go.mod** — Promoted from indirect to direct require. Replace directive already present.
 
 ## Phase 3: MCP Transport Testing
 

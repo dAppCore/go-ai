@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	forge.lthn.ai/core/go v0.0.0
+	forge.lthn.ai/core/go-inference v0.0.0
 	forge.lthn.ai/core/go-ml v0.0.0
 	forge.lthn.ai/core/go-rag v0.0.0
 	github.com/gorilla/websocket v1.5.3
@@ -12,7 +13,6 @@ require (
 )
 
 require (
-	forge.lthn.ai/core/go-inference v0.0.0 // indirect
 	forge.lthn.ai/core/go-mlx v0.0.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/apache/arrow-go/v18 v18.5.1 // indirect

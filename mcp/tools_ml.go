@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/go-inference"
 	"forge.lthn.ai/core/go-ml"
+	"forge.lthn.ai/core/go/pkg/log"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -133,6 +134,9 @@ type MLBackendInfo struct {
 
 // --- Tool handlers ---
 
+// mlGenerate delegates to go-ml.Service.Generate, which internally uses
+// InferenceAdapter to route generation through an inference.TextModel.
+// Flow: go-ai → go-ml.Service.Generate → InferenceAdapter → inference.TextModel.
 func (m *MLSubsystem) mlGenerate(ctx context.Context, req *mcp.CallToolRequest, input MLGenerateInput) (*mcp.CallToolResult, MLGenerateOutput, error) {
 	m.logger.Info("MCP tool execution", "tool", "ml_generate", "backend", input.Backend, "user", log.Username())
 
@@ -195,6 +199,8 @@ func (m *MLSubsystem) mlScore(ctx context.Context, req *mcp.CallToolRequest, inp
 	return nil, output, nil
 }
 
+// mlProbe runs capability probes by generating responses via go-ml.Service.
+// Flow: go-ai → go-ml.Service.Generate → InferenceAdapter → inference.TextModel.
 func (m *MLSubsystem) mlProbe(ctx context.Context, req *mcp.CallToolRequest, input MLProbeInput) (*mcp.CallToolResult, MLProbeOutput, error) {
 	m.logger.Info("MCP tool execution", "tool", "ml_probe", "backend", input.Backend, "user", log.Username())
 
@@ -254,21 +260,24 @@ func (m *MLSubsystem) mlStatus(ctx context.Context, req *mcp.CallToolRequest, in
 	return nil, MLStatusOutput{Status: buf.String()}, nil
 }
 
+// mlBackends enumerates registered backends via the go-inference registry,
+// bypassing go-ml.Service entirely. This is the canonical source of truth
+// for backend availability since all backends register with inference.Register().
 func (m *MLSubsystem) mlBackends(ctx context.Context, req *mcp.CallToolRequest, input MLBackendsInput) (*mcp.CallToolResult, MLBackendsOutput, error) {
 	m.logger.Info("MCP tool execution", "tool", "ml_backends", "user", log.Username())
 
-	names := m.service.Backends()
-	backends := make([]MLBackendInfo, len(names))
-	defaultName := ""
-	for i, name := range names {
-		b := m.service.Backend(name)
-		backends[i] = MLBackendInfo{
+	names := inference.List()
+	backends := make([]MLBackendInfo, 0, len(names))
+	for _, name := range names {
+		b, ok := inference.Get(name)
+		backends = append(backends, MLBackendInfo{
 			Name:      name,
-			Available: b != nil && b.Available(),
-		}
+			Available: ok && b.Available(),
+		})
 	}
 
-	if db := m.service.DefaultBackend(); db != nil {
+	defaultName := ""
+	if db, err := inference.Default(); err == nil {
 		defaultName = db.Name()
 	}
 
