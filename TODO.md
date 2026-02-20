@@ -29,9 +29,9 @@ go-ml is migrating to use `go-inference` shared interfaces. Once that's done, go
 
 ## Phase 4: IDE Subsystem Hardening
 
-- [ ] **Bridge reconnection test** — Kill mock Laravel WS server, verify exponential backoff + reconnect in `bridge.go`.
-- [ ] **Add auth to bridge** — `bridge.go` connects unauthenticated. Add token header on WebSocket upgrade.
-- [ ] **Dashboard tools beyond stubs** — `tools_dashboard.go` returns empty data. Implement real data fetching or document as stub.
+- [x] **Bridge reconnection test** — Fixed data race (atomic.Int32), added exponential backoff test (HTTP 403 path), server shutdown detection test. `8c0ef43`
+- [x] **Add auth to bridge** — Token field in Config, WithToken option, Bearer header in dial(). Tests for presence + absence. `8c0ef43`
+- [x] **Dashboard/chat/build tool tests** — 49 tests: all 11 tool handlers with nil bridge (error) and connected mock (success), JSON round-trips for all types, stub doc comments. `8c0ef43`
 
 ## Phase 5: Testing Gaps
 
