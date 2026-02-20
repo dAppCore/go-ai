@@ -35,10 +35,10 @@ go-ml is migrating to use `go-inference` shared interfaces. Once that's done, go
 
 ## Phase 5: Testing Gaps
 
-- [ ] **Process tools CI tests** — `tools_process.go` needs CI-safe tests (start/stop lightweight processes like `echo` or `sleep`).
-- [ ] **RAG tools mock** — `tools_rag.go` needs Qdrant + Ollama mocks for CI. Test `rag_query`, `rag_ingest`, `rag_collections` without live services.
-- [ ] **ML tools mock** — `tools_ml.go` needs mock backend for CI. No real inference in tests.
-- [ ] **Metrics benchmark** — Benchmark `metrics_record` + `metrics_query` at scale (10K+ JSONL events).
+- [x] **Process tools CI tests** — Full handler tests using real process.Service with echo/sleep/cat/pwd/env. Validation, lifecycle, stdin/stdout round-trip. `2c745a6`
+- [x] **RAG tools mock** — Handler validation (empty question/path), default application, graceful Qdrant/Ollama errors. Struct round-trips. `2c745a6`
+- [x] **ML tools mock** — Mock ml.Backend + inference.Backend for CI. Generate, score (heuristic/semantic/content), probes (23), backends registry. `2c745a6`
+- [x] **Metrics benchmark** — 6 benchmarks (Record, Parallel, Query 10K/50K, Summary, full cycle). 10K unit test. `2c745a6`
 
 ---
 
