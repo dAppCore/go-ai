@@ -1,49 +1,50 @@
 # TODO — go-ai
 
-Virgil dispatches tasks. Mark `[x]` when done.
+Virgil dispatches tasks. Mark `[x]` when done, note commit hash.
+
+---
 
 ## Phase 1: Post-Split Cleanup
 
-- [ ] Verify all 49 tool registrations work after go-ml/go-rag/go-agentic extraction
-- [ ] Update any stale import paths that still reference old monolith paths
-- [ ] Test MCP Stdio transport end-to-end (`core mcp serve` over stdin/stdout)
-- [ ] Test MCP TCP transport end-to-end (`MCP_ADDR=:9100 core mcp serve`)
-- [ ] Test MCP Unix transport end-to-end (explicit socket path)
-- [ ] Confirm `go build ./...` and `go vet ./...` pass cleanly with all replace directives
-- [ ] Remove `test-mlx.go` from module root (standalone script, not part of the library)
+- [ ] **Remove `test-mlx.go`** — Standalone test script in module root. Not part of the library. Delete it.
+- [ ] **Verify `go build ./...` passes** — With replace directives pointing at local clones (via go.work or go.mod). Fix any stale import paths that reference old monolith structure.
+- [ ] **Verify `go vet ./...` passes** — Fix any vet warnings.
+- [ ] **Run full test suite** — `go test ./...` should pass. 84 tests documented in TEST-RESULTS.md. Confirm they still pass after the split.
 
 ## Phase 2: go-inference Migration
 
-- [ ] Define `go-inference` Backend interface that abstracts over go-ml, go-mlx, and Ollama
-- [ ] Update `tools_ml.go` MLSubsystem to use `go-inference` interfaces instead of direct `go-ml.Service`
-- [ ] Decouple `ml_generate` from specific backend selection — let go-inference route
-- [ ] Decouple `ml_score` and `ml_probe` from direct `go-ml` types
-- [ ] Update `ml_backends` to enumerate backends via go-inference registry
-- [ ] Remove direct `forge.lthn.ai/core/go-ml` import from `tools_ml.go` once migration is complete
+go-ml is migrating to use `go-inference` shared interfaces. Once that's done, go-ai's ML subsystem should use go-inference too.
 
-## Phase 3: IDE Subsystem
+- [ ] **Update `tools_ml.go` MLSubsystem** — Currently imports `go-ml.Service` directly. After go-ml Phase 1, update to use `inference.LoadModel()` + `inference.TextModel` for generation. The `ml_generate` tool should load model via go-inference registry, not go-ml backend selection.
+- [ ] **Update `ml_backends` tool** — Enumerate backends via `inference.List()` instead of go-ml service registry.
+- [ ] **Update `ml_score` and `ml_probe`** — These use `go-ml.Engine` and `go-ml.Probes`. Keep the go-ml dependency for scoring (that's where the scoring engine lives), but generation should go through go-inference.
+- [ ] **Add go-inference to go.mod** — `require forge.lthn.ai/core/go-inference v0.0.0` with appropriate replace directive.
 
-- [ ] Bridge reconnection stress testing (kill Laravel, verify exponential backoff + reconnect)
-- [ ] Add session management (track active sessions locally, not just fire-and-forget to Laravel)
-- [ ] Implement dashboard tools beyond stubs (currently return empty data, rely on bridge forwarding)
-- [ ] Add authentication to bridge WebSocket connection (token or shared secret)
-- [ ] Test bridge with real Laravel core-agentic instance (not just unit mocks)
-- [ ] Add heartbeat/ping-pong to detect stale connections faster
+## Phase 3: MCP Transport Testing
 
-## Phase 4: Testing Gaps
+- [ ] **Stdio transport e2e** — Test `core mcp serve` over stdin/stdout with a mock MCP client. Verify tool discovery + file_read round-trip.
+- [ ] **TCP transport e2e** — Test `MCP_ADDR=:9100 core mcp serve`. Connect, list tools, call `file_read`, verify response.
+- [ ] **Unix transport** — Currently untested. Add basic connect + tool call test.
+- [ ] **Webview tools CI guard** — `tools_webview.go` tools require Chrome. Add `testing.Short()` skip or build tag so CI doesn't fail.
 
-- [ ] Add integration tests with actual MCP client (connect via TCP, call tools, verify responses)
-- [ ] Webview tools are untested in CI (require Chrome with `--remote-debugging-port`)
-- [ ] Process tools need CI-safe tests (start/stop/kill lightweight processes)
-- [ ] RAG tools need Qdrant + Ollama test fixtures or mocks for CI
-- [ ] ML tools need mock backend for CI (no real inference in tests)
-- [ ] Add benchmark tests for metrics JSONL read/write at scale
-- [ ] Unix transport has no tests
+## Phase 4: IDE Subsystem Hardening
+
+- [ ] **Bridge reconnection test** — Kill mock Laravel WS server, verify exponential backoff + reconnect in `bridge.go`.
+- [ ] **Add auth to bridge** — `bridge.go` connects unauthenticated. Add token header on WebSocket upgrade.
+- [ ] **Dashboard tools beyond stubs** — `tools_dashboard.go` returns empty data. Implement real data fetching or document as stub.
+
+## Phase 5: Testing Gaps
+
+- [ ] **Process tools CI tests** — `tools_process.go` needs CI-safe tests (start/stop lightweight processes like `echo` or `sleep`).
+- [ ] **RAG tools mock** — `tools_rag.go` needs Qdrant + Ollama mocks for CI. Test `rag_query`, `rag_ingest`, `rag_collections` without live services.
+- [ ] **ML tools mock** — `tools_ml.go` needs mock backend for CI. No real inference in tests.
+- [ ] **Metrics benchmark** — Benchmark `metrics_record` + `metrics_query` at scale (10K+ JSONL events).
+
+---
 
 ## Workflow
 
-```
-Virgil assigns → agent picks up → branch → implement → test → PR → merge
-```
-
-Standing rule: all tasks go through `core dev commit` with conventional commits.
+1. Virgil in core/go writes tasks here after research
+2. This repo's session picks up tasks in phase order
+3. Mark `[x]` when done, note commit hash
+4. New discoveries → add tasks, flag in FINDINGS.md
