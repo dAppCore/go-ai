@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"io"
 	"net"
 	"os"
 	"strings"
@@ -33,11 +32,10 @@ func TestNewTCPTransport_Defaults(t *testing.T) {
 }
 
 func TestNewTCPTransport_Warning(t *testing.T) {
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-	defer func() { os.Stderr = oldStderr }()
+	// Capture warning output via setDiagWriter (mutex-protected, no race).
+	var buf bytes.Buffer
+	old := setDiagWriter(&buf)
+	defer setDiagWriter(old)
 
 	// Trigger warning
 	tr, err := NewTCPTransport("0.0.0.0:9101")
@@ -45,11 +43,6 @@ func TestNewTCPTransport_Warning(t *testing.T) {
 		t.Fatalf("Failed to create transport: %v", err)
 	}
 	defer tr.listener.Close()
-
-	// Restore stderr
-	w.Close()
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 
 	output := buf.String()
 	if !strings.Contains(output, "WARNING") {

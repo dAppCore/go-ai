@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -14,6 +15,30 @@ import (
 
 // DefaultTCPAddr is the default address for the MCP TCP server.
 const DefaultTCPAddr = "127.0.0.1:9100"
+
+// diagMu protects diagWriter from concurrent access across tests and goroutines.
+var diagMu sync.Mutex
+
+// diagWriter is the destination for warning and diagnostic messages.
+// Use diagPrintf to write to it safely.
+var diagWriter io.Writer = os.Stderr
+
+// diagPrintf writes a formatted message to diagWriter under the mutex.
+func diagPrintf(format string, args ...any) {
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	fmt.Fprintf(diagWriter, format, args...)
+}
+
+// setDiagWriter swaps the diagnostic writer and returns the previous one.
+// Used by tests to capture output without racing.
+func setDiagWriter(w io.Writer) io.Writer {
+	diagMu.Lock()
+	defer diagMu.Unlock()
+	old := diagWriter
+	diagWriter = w
+	return old
+}
 
 // maxMCPMessageSize is the maximum size for MCP JSON-RPC messages (10 MB).
 const maxMCPMessageSize = 10 * 1024 * 1024
@@ -30,7 +55,7 @@ type TCPTransport struct {
 func NewTCPTransport(addr string) (*TCPTransport, error) {
 	host, _, _ := net.SplitHostPort(addr)
 	if host == "0.0.0.0" || host == "" {
-		fmt.Fprintf(os.Stderr, "WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
+		diagPrintf( "WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -57,7 +82,7 @@ func (s *Service) ServeTCP(ctx context.Context, addr string) error {
 	if addr == "" {
 		addr = t.listener.Addr().String()
 	}
-	fmt.Fprintf(os.Stderr, "MCP TCP server listening on %s\n", addr)
+	diagPrintf( "MCP TCP server listening on %s\n", addr)
 
 	for {
 		conn, err := t.listener.Accept()
@@ -66,7 +91,7 @@ func (s *Service) ServeTCP(ctx context.Context, addr string) error {
 			case <-ctx.Done():
 				return nil
 			default:
-				fmt.Fprintf(os.Stderr, "Accept error: %v\n", err)
+				diagPrintf( "Accept error: %v\n", err)
 				continue
 			}
 		}
@@ -92,7 +117,7 @@ func (s *Service) handleConnection(ctx context.Context, conn net.Conn) {
 	// Run server (blocks until connection closed)
 	// Server.Run calls Connect, then Read loop.
 	if err := server.Run(ctx, transport); err != nil {
-		fmt.Fprintf(os.Stderr, "Connection error: %v\n", err)
+		diagPrintf( "Connection error: %v\n", err)
 	}
 }
 
