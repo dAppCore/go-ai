@@ -7,6 +7,18 @@ import (
 	"forge.lthn.ai/core/go/pkg/webview"
 )
 
+// skipIfShort skips webview tests in short mode (go test -short).
+// Webview tool handlers require a running Chrome instance with
+// --remote-debugging-port, which is not available in CI.
+// Struct-level tests below are safe without Chrome, but any future
+// tests that call webview tool handlers MUST use this guard.
+func skipIfShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("webview tests skipped in short mode (no Chrome available)")
+	}
+}
+
 // TestWebviewToolsRegistered_Good verifies that webview tools are registered with the MCP server.
 func TestWebviewToolsRegistered_Good(t *testing.T) {
 	// Create a new MCP service - this should register all tools including webview
@@ -23,6 +35,48 @@ func TestWebviewToolsRegistered_Good(t *testing.T) {
 	// Verify the service was created with expected defaults
 	if s.logger == nil {
 		t.Error("Logger should not be nil")
+	}
+}
+
+// TestWebviewToolHandlers_RequiresChrome demonstrates the CI guard
+// for tests that would require a running Chrome instance. Any future
+// test that calls webview tool handlers (webviewConnect, webviewNavigate,
+// etc.) should call skipIfShort(t) at the top.
+func TestWebviewToolHandlers_RequiresChrome(t *testing.T) {
+	skipIfShort(t)
+
+	// This test verifies that webview tool handlers correctly reject
+	// calls when not connected to Chrome.
+	tmpDir := t.TempDir()
+	s, err := New(WithWorkspaceRoot(tmpDir))
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := t.Context()
+
+	// webview_navigate should fail without a connection
+	_, _, err = s.webviewNavigate(ctx, nil, WebviewNavigateInput{URL: "https://example.com"})
+	if err == nil {
+		t.Error("Expected error when navigating without a webview connection")
+	}
+
+	// webview_click should fail without a connection
+	_, _, err = s.webviewClick(ctx, nil, WebviewClickInput{Selector: "#btn"})
+	if err == nil {
+		t.Error("Expected error when clicking without a webview connection")
+	}
+
+	// webview_eval should fail without a connection
+	_, _, err = s.webviewEval(ctx, nil, WebviewEvalInput{Script: "1+1"})
+	if err == nil {
+		t.Error("Expected error when evaluating without a webview connection")
+	}
+
+	// webview_connect with invalid URL should fail
+	_, _, err = s.webviewConnect(ctx, nil, WebviewConnectInput{DebugURL: ""})
+	if err == nil {
+		t.Error("Expected error when connecting with empty debug URL")
 	}
 }
 

@@ -22,10 +22,10 @@ go-ml is migrating to use `go-inference` shared interfaces. Once that's done, go
 
 ## Phase 3: MCP Transport Testing
 
-- [ ] **Stdio transport e2e** — Test `core mcp serve` over stdin/stdout with a mock MCP client. Verify tool discovery + file_read round-trip.
-- [ ] **TCP transport e2e** — Test `MCP_ADDR=:9100 core mcp serve`. Connect, list tools, call `file_read`, verify response.
-- [ ] **Unix transport** — Currently untested. Add basic connect + tool call test.
-- [ ] **Webview tools CI guard** — `tools_webview.go` tools require Chrome. Add `testing.Short()` skip or build tag so CI doesn't fail.
+- [x] **Stdio transport e2e** — SDK's StdioTransport binds os.Stdin/Stdout directly; documented skip with rationale. Protocol covered by TCP/Unix e2e tests. `a6a7fb8`
+- [x] **TCP transport e2e** — Full JSON-RPC round-trip: initialize → tools/list → tools/call file_read + file_write. Plus tools discovery and error handling tests. `a6a7fb8`
+- [x] **Unix transport** — Full e2e via unix domain socket: initialize → tools/list → file_read + dir_list. Short socket paths for macOS sun_path limit. `a6a7fb8`
+- [x] **Webview tools CI guard** — Added `skipIfShort()` guard + `TestWebviewToolHandlers_RequiresChrome` test (skipped with `-short`). Existing struct tests are CI-safe. `a6a7fb8`
 
 ## Phase 4: IDE Subsystem Hardening
 
