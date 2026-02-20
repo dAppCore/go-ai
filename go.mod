@@ -56,7 +56,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace forge.lthn.ai/core/go => ../core
+replace forge.lthn.ai/core/go => ../go
 
 replace forge.lthn.ai/core/go-mlx => ../go-mlx
 
