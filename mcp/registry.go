@@ -3,10 +3,16 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
 	"reflect"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// RESTHandler handles a tool call from a REST endpoint.
+// It receives raw JSON input and returns the typed output or an error.
+type RESTHandler func(ctx context.Context, body []byte) (any, error)
 
 // ToolRecord captures metadata about a registered MCP tool.
 type ToolRecord struct {
@@ -15,18 +21,34 @@ type ToolRecord struct {
 	Group        string         // Subsystem group name, e.g. "files", "rag"
 	InputSchema  map[string]any // JSON Schema from Go struct reflection
 	OutputSchema map[string]any // JSON Schema from Go struct reflection
+	RESTHandler  RESTHandler    // REST-callable handler created at registration time
 }
 
 // addToolRecorded registers a tool with the MCP server AND records its metadata.
 // This is a generic function that captures the In/Out types for schema extraction.
+// It also creates a RESTHandler closure that can unmarshal JSON to the correct
+// input type and call the handler directly, enabling the MCP-to-REST bridge.
 func addToolRecorded[In, Out any](s *Service, server *mcp.Server, group string, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
 	mcp.AddTool(server, t, h)
+
+	restHandler := func(ctx context.Context, body []byte) (any, error) {
+		var input In
+		if len(body) > 0 {
+			if err := json.Unmarshal(body, &input); err != nil {
+				return nil, err
+			}
+		}
+		_, output, err := h(ctx, nil, input)
+		return output, err
+	}
+
 	s.tools = append(s.tools, ToolRecord{
 		Name:         t.Name,
 		Description:  t.Description,
 		Group:        group,
 		InputSchema:  structSchema(new(In)),
 		OutputSchema: structSchema(new(Out)),
+		RESTHandler:  restHandler,
 	})
 }
 
