@@ -38,6 +38,8 @@ func addToolRecorded[In, Out any](s *Service, server *mcp.Server, group string, 
 				return nil, err
 			}
 		}
+		// nil: REST callers have no MCP request context.
+		// Tool handlers called via REST must not dereference CallToolRequest.
 		_, output, err := h(ctx, nil, input)
 		return output, err
 	}
