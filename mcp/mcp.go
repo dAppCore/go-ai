@@ -29,6 +29,7 @@ type Service struct {
 	wsHub          *ws.Hub          // WebSocket hub for real-time streaming (optional)
 	wsServer       *http.Server     // WebSocket HTTP server (optional)
 	wsAddr         string           // WebSocket server address
+	tools          []ToolRecord     // Parallel tool registry for REST bridge
 }
 
 // Option configures a Service.
@@ -110,6 +111,11 @@ func (s *Service) Subsystems() []Subsystem {
 	return s.subsystems
 }
 
+// Tools returns all recorded tool metadata.
+func (s *Service) Tools() []ToolRecord {
+	return s.tools
+}
+
 // Shutdown gracefully shuts down all subsystems that support it.
 func (s *Service) Shutdown(ctx context.Context) error {
 	for _, sub := range s.subsystems {
@@ -151,54 +157,54 @@ func (s *Service) ProcessService() *process.Service {
 // registerTools adds file operation tools to the MCP server.
 func (s *Service) registerTools(server *mcp.Server) {
 	// File operations
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "file_read",
 		Description: "Read the contents of a file",
 	}, s.readFile)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "file_write",
 		Description: "Write content to a file",
 	}, s.writeFile)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "file_delete",
 		Description: "Delete a file or empty directory",
 	}, s.deleteFile)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "file_rename",
 		Description: "Rename or move a file",
 	}, s.renameFile)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "file_exists",
 		Description: "Check if a file or directory exists",
 	}, s.fileExists)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "file_edit",
 		Description: "Edit a file by replacing old_string with new_string. Use replace_all=true to replace all occurrences.",
 	}, s.editDiff)
 
 	// Directory operations
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "dir_list",
 		Description: "List contents of a directory",
 	}, s.listDirectory)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "files", &mcp.Tool{
 		Name:        "dir_create",
 		Description: "Create a new directory",
 	}, s.createDirectory)
 
 	// Language detection
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "language", &mcp.Tool{
 		Name:        "lang_detect",
 		Description: "Detect the programming language of a file",
 	}, s.detectLanguage)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addToolRecorded(s, server, "language", &mcp.Tool{
 		Name:        "lang_list",
 		Description: "Get list of supported programming languages",
 	}, s.getSupportedLanguages)
