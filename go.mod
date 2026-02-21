@@ -7,7 +7,7 @@ require (
 	forge.lthn.ai/core/go-api v0.0.0-20260221015744-0d3479839dc5
 	forge.lthn.ai/core/go-inference v0.0.0-20260220151119-1576f744d105
 	forge.lthn.ai/core/go-ml v0.0.0-20260221191458-812c926dac42
-	forge.lthn.ai/core/go-rag v0.0.0-20260221191926-4c741992dc78
+	forge.lthn.ai/core/go-rag v0.0.0-20260221193811-2a8d8b0820b5
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/modelcontextprotocol/go-sdk v1.3.0

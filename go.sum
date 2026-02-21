@@ -10,8 +10,8 @@ forge.lthn.ai/core/go-ml v0.0.0-20260221191458-812c926dac42 h1:rxhnHgWVGnQ93/mhU
 forge.lthn.ai/core/go-ml v0.0.0-20260221191458-812c926dac42/go.mod h1:lmhzv04VCP41ym7Wuhck+T1HeC5PoLtfOqXe8fW26Hc=
 forge.lthn.ai/core/go-mlx v0.0.0-20260221191404-2292557fd65f h1:dlb6hFFhxfnJvD1ZYoQVsxD9NM4CV+sXkjHa6kBGzeE=
 forge.lthn.ai/core/go-mlx v0.0.0-20260221191404-2292557fd65f/go.mod h1:QHspfOk9MgbuG6Wb4m+RzQyCMibtoQNZw+hUs4yclOA=
-forge.lthn.ai/core/go-rag v0.0.0-20260221191926-4c741992dc78 h1:M7ftoQ3AB87W/h4cELK+dxetzLoQi68KwnK2JhkSA8k=
-forge.lthn.ai/core/go-rag v0.0.0-20260221191926-4c741992dc78/go.mod h1:f0WQYSeg3Oc7gCHTLUL0aCIzK1fS2mgMBDnBzjKgOzQ=
+forge.lthn.ai/core/go-rag v0.0.0-20260221193811-2a8d8b0820b5 h1:AD7a3IY0W/LaxmPRnPkxuxbWYw11/jsm2zELG1FfSNY=
+forge.lthn.ai/core/go-rag v0.0.0-20260221193811-2a8d8b0820b5/go.mod h1:s5OWHz87LELq2UKk93cBFJA9pydLoytHN1pPbgX0ShE=
 github.com/99designs/gqlgen v0.17.87 h1:pSnCIMhBQezAE8bc1GNmfdLXFmnWtWl1GRDFEE/nHP8=
 github.com/99designs/gqlgen v0.17.87/go.mod h1:fK05f1RqSNfQpd4CfW5qk/810Tqi4/56Wf6Nem0khAg=
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
