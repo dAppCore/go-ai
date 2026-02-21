@@ -11,10 +11,6 @@ import (
 	"forge.lthn.ai/core/go/pkg/i18n"
 )
 
-func init() {
-	cli.RegisterCommands(AddMetricsCommand)
-}
-
 var (
 	metricsSince string
 	metricsJSON  bool

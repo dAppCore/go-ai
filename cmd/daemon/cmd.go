@@ -18,10 +18,6 @@ import (
 	"forge.lthn.ai/core/go-ai/mcp"
 )
 
-func init() {
-	cli.RegisterCommands(AddDaemonCommand)
-}
-
 // Transport types for MCP server.
 const (
 	TransportStdio  = "stdio"

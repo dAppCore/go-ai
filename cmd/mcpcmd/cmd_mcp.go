@@ -14,10 +14,6 @@ import (
 	"forge.lthn.ai/core/go-ai/mcp"
 )
 
-func init() {
-	cli.RegisterCommands(AddMCPCommands)
-}
-
 var workspaceFlag string
 
 var mcpCmd = &cli.Command{
