@@ -3,11 +3,11 @@ module forge.lthn.ai/core/go-ai
 go 1.25.5
 
 require (
-	forge.lthn.ai/core/go v0.0.0
-	forge.lthn.ai/core/go-api v0.0.0
-	forge.lthn.ai/core/go-inference v0.0.0
-	forge.lthn.ai/core/go-ml v0.0.0
-	forge.lthn.ai/core/go-rag v0.0.0
+	forge.lthn.ai/core/go v0.0.0-20260221191103-d091fa62023f
+	forge.lthn.ai/core/go-api v0.0.0-20260221015744-0d3479839dc5
+	forge.lthn.ai/core/go-inference v0.0.0-20260220151119-1576f744d105
+	forge.lthn.ai/core/go-ml v0.0.0-20260221191458-812c926dac42
+	forge.lthn.ai/core/go-rag v0.0.0-20260221191926-4c741992dc78
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/modelcontextprotocol/go-sdk v1.3.0
@@ -15,7 +15,7 @@ require (
 )
 
 require (
-	forge.lthn.ai/core/go-mlx v0.0.0 // indirect
+	forge.lthn.ai/core/go-mlx v0.0.0-20260221191404-2292557fd65f // indirect
 	github.com/99designs/gqlgen v0.17.87 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
@@ -124,15 +124,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace forge.lthn.ai/core/go => ../go
-
-replace forge.lthn.ai/core/go-mlx => ../go-mlx
-
-replace forge.lthn.ai/core/go-ml => ../go-ml
-
-replace forge.lthn.ai/core/go-rag => ../go-rag
-
-replace forge.lthn.ai/core/go-inference => ../go-inference
-
-replace forge.lthn.ai/core/go-api => ../go-api

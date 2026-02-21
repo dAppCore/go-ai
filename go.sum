@@ -1,3 +1,15 @@
+forge.lthn.ai/core/go v0.0.0-20260221191103-d091fa62023f h1:CcSh/FFY93K5m0vADHLxwxKn2pTIM8HzYX1eGa4WZf4=
+forge.lthn.ai/core/go v0.0.0-20260221191103-d091fa62023f/go.mod h1:WCPJVEZm/6mTcJimHV0uX8ZhnKEF3dN0rQp13ByaSPg=
+forge.lthn.ai/core/go-api v0.0.0-20260221015744-0d3479839dc5 h1:60reee4fmT4USZqEd6dyCTXsTj47eOOEc6Pp0HHJbd0=
+forge.lthn.ai/core/go-api v0.0.0-20260221015744-0d3479839dc5/go.mod h1:f0hPLX+GZT/ME8Tb7c8wVDlfLqnpOKRwf2k5lpJq87g=
+forge.lthn.ai/core/go-inference v0.0.0-20260220151119-1576f744d105 h1:CVUVxp1BfUI8wmlEUW0Nay8w4hADR54nqBmeF+KK2Ac=
+forge.lthn.ai/core/go-inference v0.0.0-20260220151119-1576f744d105/go.mod h1:hmLtynfw1yo0ByuX3pslLZMgCdqJH2r+2+wGJDhmmi0=
+forge.lthn.ai/core/go-ml v0.0.0-20260221191458-812c926dac42 h1:rxhnHgWVGnQ93/mhUyLxIw/Q2l80njiGfNvv0kKISb0=
+forge.lthn.ai/core/go-ml v0.0.0-20260221191458-812c926dac42/go.mod h1:lmhzv04VCP41ym7Wuhck+T1HeC5PoLtfOqXe8fW26Hc=
+forge.lthn.ai/core/go-mlx v0.0.0-20260221191404-2292557fd65f h1:dlb6hFFhxfnJvD1ZYoQVsxD9NM4CV+sXkjHa6kBGzeE=
+forge.lthn.ai/core/go-mlx v0.0.0-20260221191404-2292557fd65f/go.mod h1:QHspfOk9MgbuG6Wb4m+RzQyCMibtoQNZw+hUs4yclOA=
+forge.lthn.ai/core/go-rag v0.0.0-20260221191926-4c741992dc78 h1:M7ftoQ3AB87W/h4cELK+dxetzLoQi68KwnK2JhkSA8k=
+forge.lthn.ai/core/go-rag v0.0.0-20260221191926-4c741992dc78/go.mod h1:f0WQYSeg3Oc7gCHTLUL0aCIzK1fS2mgMBDnBzjKgOzQ=
 github.com/99designs/gqlgen v0.17.87 h1:pSnCIMhBQezAE8bc1GNmfdLXFmnWtWl1GRDFEE/nHP8=
 github.com/99designs/gqlgen v0.17.87/go.mod h1:fK05f1RqSNfQpd4CfW5qk/810Tqi4/56Wf6Nem0khAg=
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
