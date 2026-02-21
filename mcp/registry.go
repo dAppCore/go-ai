@@ -44,7 +44,7 @@ func structSchema(v any) map[string]any {
 		return nil
 	}
 	if t.NumField() == 0 {
-		return nil
+		return map[string]any{"type": "object", "properties": map[string]any{}}
 	}
 
 	properties := make(map[string]any)

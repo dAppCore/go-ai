@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package mcp provides a lightweight MCP (Model Context Protocol) server for CLI use.
 // For full GUI integration (display, webview, process management), see core-gui/pkg/mcp.
 package mcp
