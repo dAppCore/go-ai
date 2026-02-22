@@ -150,13 +150,13 @@ func (m *MLSubsystem) mlGenerate(ctx context.Context, req *mcp.CallToolRequest, 
 		Model:       input.Model,
 	}
 
-	response, err := m.service.Generate(ctx, input.Backend, input.Prompt, opts)
+	result, err := m.service.Generate(ctx, input.Backend, input.Prompt, opts)
 	if err != nil {
 		return nil, MLGenerateOutput{}, fmt.Errorf("generate: %w", err)
 	}
 
 	return nil, MLGenerateOutput{
-		Response: response,
+		Response: result.Text,
 		Backend:  input.Backend,
 		Model:    input.Model,
 	}, nil
@@ -222,14 +222,15 @@ func (m *MLSubsystem) mlProbe(ctx context.Context, req *mcp.CallToolRequest, inp
 
 	var results []MLProbeResultItem
 	for _, probe := range probes {
-		resp, err := m.service.Generate(ctx, input.Backend, probe.Prompt, ml.GenOpts{Temperature: 0.7, MaxTokens: 2048})
+		result, err := m.service.Generate(ctx, input.Backend, probe.Prompt, ml.GenOpts{Temperature: 0.7, MaxTokens: 2048})
+		respText := result.Text
 		if err != nil {
-			resp = fmt.Sprintf("error: %v", err)
+			respText = fmt.Sprintf("error: %v", err)
 		}
 		results = append(results, MLProbeResultItem{
 			ID:       probe.ID,
 			Category: probe.Category,
-			Response: resp,
+			Response: respText,
 		})
 	}
 

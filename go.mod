@@ -144,3 +144,9 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace (
+	forge.lthn.ai/core/go-inference => /Users/snider/Code/go-inference
+	forge.lthn.ai/core/go-ml => /Users/snider/Code/go-ml
+	forge.lthn.ai/core/go-mlx => /Users/snider/Code/go-mlx
+)

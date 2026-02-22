@@ -39,12 +39,12 @@ type mockMLBackend struct {
 func (m *mockMLBackend) Name() string      { return m.name }
 func (m *mockMLBackend) Available() bool    { return m.available }
 
-func (m *mockMLBackend) Generate(_ context.Context, _ string, _ ml.GenOpts) (string, error) {
-	return m.generateResp, m.generateErr
+func (m *mockMLBackend) Generate(_ context.Context, _ string, _ ml.GenOpts) (ml.Result, error) {
+	return ml.Result{Text: m.generateResp}, m.generateErr
 }
 
-func (m *mockMLBackend) Chat(_ context.Context, _ []ml.Message, _ ml.GenOpts) (string, error) {
-	return m.generateResp, m.generateErr
+func (m *mockMLBackend) Chat(_ context.Context, _ []ml.Message, _ ml.GenOpts) (ml.Result, error) {
+	return ml.Result{Text: m.generateResp}, m.generateErr
 }
 
 // newTestMLSubsystem creates an MLSubsystem with a real ml.Service for testing.
