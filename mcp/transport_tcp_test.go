@@ -164,7 +164,7 @@ func TestServeTCP_MultipleConnections(t *testing.T) {
 
 	// Connect multiple clients
 	const numClients = 3
-	for i := 0; i < numClients; i++ {
+	for i := range numClients {
 		conn, err := net.Dial("tcp", actualAddr)
 		if err != nil {
 			t.Fatalf("Client %d failed to connect: %v", i, err)

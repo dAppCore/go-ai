@@ -35,7 +35,7 @@ func setupBenchMetricsDir(b *testing.B) string {
 func seedEvents(b *testing.B, n int) {
 	b.Helper()
 	now := time.Now()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ev := Event{
 			Type:      fmt.Sprintf("type-%d", i%10),
 			Timestamp: now.Add(-time.Duration(i) * time.Millisecond),
@@ -162,7 +162,7 @@ func BenchmarkMetricsRecordAndQuery(b *testing.B) {
 	now := time.Now()
 
 	// Write 10K events
-	for i := 0; i < 10_000; i++ {
+	for i := range 10_000 {
 		ev := Event{
 			Type:      fmt.Sprintf("type-%d", i%10),
 			Timestamp: now,
@@ -206,7 +206,7 @@ func TestMetricsRecordAndRead_10K_Good(t *testing.T) {
 	const n = 10_000
 
 	// Write events
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ev := Event{
 			Type:      fmt.Sprintf("type-%d", i%10),
 			Timestamp: now.Add(-time.Duration(i) * time.Millisecond),

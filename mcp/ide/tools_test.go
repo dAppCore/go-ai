@@ -758,8 +758,7 @@ func TestChatSend_Good_BridgeMessageType(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	sub := New(hub, WithLaravelURL(wsURL(ts)), WithReconnectInterval(50*time.Millisecond))

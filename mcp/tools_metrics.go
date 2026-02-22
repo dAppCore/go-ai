@@ -141,10 +141,7 @@ func (s *Service) metricsQuery(ctx context.Context, req *mcp.CallToolRequest, in
 	}
 
 	// Get recent events (last 10, most recent first)
-	startIdx := len(events) - DefaultMetricsLimit
-	if startIdx < 0 {
-		startIdx = 0
-	}
+	startIdx := max(len(events)-DefaultMetricsLimit, 0)
 	for i := len(events) - 1; i >= startIdx; i-- {
 		ev := events[i]
 		output.Events = append(output.Events, MetricEventBrief{

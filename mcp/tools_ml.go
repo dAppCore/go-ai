@@ -176,7 +176,7 @@ func (m *MLSubsystem) mlScore(ctx context.Context, req *mcp.CallToolRequest, inp
 
 	output := MLScoreOutput{}
 
-	for _, suite := range strings.Split(suites, ",") {
+	for suite := range strings.SplitSeq(suites, ",") {
 		suite = strings.TrimSpace(suite)
 		switch suite {
 		case "heuristic":
@@ -208,7 +208,7 @@ func (m *MLSubsystem) mlProbe(ctx context.Context, req *mcp.CallToolRequest, inp
 	probes := ml.CapabilityProbes
 	if input.Categories != "" {
 		cats := make(map[string]bool)
-		for _, c := range strings.Split(input.Categories, ",") {
+		for c := range strings.SplitSeq(input.Categories, ",") {
 			cats[strings.TrimSpace(c)] = true
 		}
 		var filtered []ml.Probe

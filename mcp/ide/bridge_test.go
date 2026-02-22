@@ -62,8 +62,7 @@ func TestBridge_Good_ConnectAndSend(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -89,8 +88,7 @@ func TestBridge_Good_Shutdown(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -147,8 +145,7 @@ func TestBridge_Good_MessageDispatch(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -194,8 +191,7 @@ func TestBridge_Good_Reconnect(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -233,8 +229,7 @@ func TestBridge_Good_ExponentialBackoff(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -302,8 +297,7 @@ func TestBridge_Good_ReconnectDetectsServerShutdown(t *testing.T) {
 	}))
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -354,8 +348,7 @@ func TestBridge_Good_AuthHeader(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()
@@ -400,8 +393,7 @@ func TestBridge_Good_NoAuthHeaderWhenTokenEmpty(t *testing.T) {
 	defer ts.Close()
 
 	hub := ws.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go hub.Run(ctx)
 
 	cfg := DefaultConfig()

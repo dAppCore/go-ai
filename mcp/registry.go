@@ -61,7 +61,7 @@ func structSchema(v any) map[string]any {
 	if t == nil {
 		return nil
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
@@ -74,8 +74,8 @@ func structSchema(v any) map[string]any {
 	properties := make(map[string]any)
 	required := make([]string, 0)
 
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 		if !f.IsExported() {
 			continue
 		}
