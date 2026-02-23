@@ -5,7 +5,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"reflect"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -117,20 +119,12 @@ func structSchema(v any) map[string]any {
 
 // splitTag splits a struct tag value by commas.
 func splitTag(tag string) []string {
-	var parts []string
-	for tag != "" {
-		i := 0
-		for i < len(tag) && tag[i] != ',' {
-			i++
-		}
-		parts = append(parts, tag[:i])
-		if i < len(tag) {
-			tag = tag[i+1:]
-		} else {
-			break
-		}
-	}
-	return parts
+	return strings.Split(tag, ",")
+}
+
+// splitTagSeq returns an iterator over the tag parts.
+func splitTagSeq(tag string) iter.Seq[string] {
+	return strings.SplitSeq(tag, ",")
 }
 
 // goTypeToJSONType maps Go types to JSON Schema types.

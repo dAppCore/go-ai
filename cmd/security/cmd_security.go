@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
@@ -173,15 +174,10 @@ func filterBySeverity(severity, filter string) bool {
 		return true
 	}
 
-	severities := strings.Split(strings.ToLower(filter), ",")
 	sev := strings.ToLower(severity)
-
-	for _, s := range severities {
-		if strings.TrimSpace(s) == sev {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(slices.Collect(strings.SplitSeq(strings.ToLower(filter), ",")), func(s string) bool {
+		return strings.TrimSpace(s) == sev
+	})
 }
 
 // getReposToCheck returns the list of repos to check based on flags.

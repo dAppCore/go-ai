@@ -2,11 +2,12 @@ package ai
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -160,9 +161,11 @@ func sortedMap(m map[string]int) []map[string]any {
 	for k, v := range m {
 		entries = append(entries, entry{k, v})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].count > entries[j].count
+
+	slices.SortFunc(entries, func(a, b entry) int {
+		return cmp.Compare(b.count, a.count)
 	})
+
 	result := make([]map[string]any, len(entries))
 	for i, e := range entries {
 		result[i] = map[string]any{"key": e.key, "count": e.count}

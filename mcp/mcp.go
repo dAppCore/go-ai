@@ -7,9 +7,11 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"iter"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"forge.lthn.ai/core/go/pkg/io"
@@ -113,9 +115,19 @@ func (s *Service) Subsystems() []Subsystem {
 	return s.subsystems
 }
 
+// SubsystemsSeq returns an iterator over the registered subsystems.
+func (s *Service) SubsystemsSeq() iter.Seq[Subsystem] {
+	return slices.Values(s.subsystems)
+}
+
 // Tools returns all recorded tool metadata.
 func (s *Service) Tools() []ToolRecord {
 	return s.tools
+}
+
+// ToolsSeq returns an iterator over all recorded tool metadata.
+func (s *Service) ToolsSeq() iter.Seq[ToolRecord] {
+	return slices.Values(s.tools)
 }
 
 // Shutdown gracefully shuts down all subsystems that support it.

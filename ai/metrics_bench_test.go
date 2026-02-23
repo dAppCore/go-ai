@@ -58,7 +58,7 @@ func BenchmarkMetricsRecord(b *testing.B) {
 	now := time.Now()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ev := Event{
 			Type:      "bench_record",
 			Timestamp: now,
@@ -105,7 +105,7 @@ func BenchmarkMetricsQuery_10K(b *testing.B) {
 	since := time.Now().Add(-24 * time.Hour)
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		events, err := ReadEvents(since)
 		if err != nil {
 			b.Fatalf("ReadEvents failed: %v", err)
@@ -124,7 +124,7 @@ func BenchmarkMetricsQuery_50K(b *testing.B) {
 	since := time.Now().Add(-24 * time.Hour)
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		events, err := ReadEvents(since)
 		if err != nil {
 			b.Fatalf("ReadEvents failed: %v", err)
@@ -147,7 +147,7 @@ func BenchmarkMetricsSummary_10K(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		summary := Summary(events)
 		if summary["total"].(int) < 10_000 {
 			b.Fatalf("Expected total >= 10K, got %d", summary["total"].(int))
@@ -177,7 +177,7 @@ func BenchmarkMetricsRecordAndQuery(b *testing.B) {
 	since := now.Add(-24 * time.Hour)
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		events, err := ReadEvents(since)
 		if err != nil {
 			b.Fatalf("ReadEvents failed: %v", err)

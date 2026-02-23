@@ -21,7 +21,7 @@ const maxBodySize = 10 << 20 // 10 MB
 // to the tool's RESTHandler (which knows the concrete input type), and
 // wraps the result in the standard api.Response envelope.
 func BridgeToAPI(svc *Service, bridge *api.ToolBridge) {
-	for _, rec := range svc.Tools() {
+	for rec := range svc.ToolsSeq() {
 		desc := api.ToolDescriptor{
 			Name:         rec.Name,
 			Description:  rec.Description,
