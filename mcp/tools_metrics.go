@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -79,7 +80,7 @@ func (s *Service) metricsRecord(ctx context.Context, req *mcp.CallToolRequest, i
 
 	// Validate input
 	if input.Type == "" {
-		return nil, MetricsRecordOutput{}, fmt.Errorf("type cannot be empty")
+		return nil, MetricsRecordOutput{}, errors.New("type cannot be empty")
 	}
 
 	// Create the event
@@ -178,7 +179,7 @@ func convertMetricCounts(data any) []MetricCount {
 // parseDuration parses a duration string like "7d", "24h", "30m".
 func parseDuration(s string) (time.Duration, error) {
 	if s == "" {
-		return 0, fmt.Errorf("duration cannot be empty")
+		return 0, errors.New("duration cannot be empty")
 	}
 
 	s = strings.TrimSpace(s)

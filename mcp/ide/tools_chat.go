@@ -2,6 +2,7 @@ package ide
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -117,7 +118,7 @@ func (s *Subsystem) registerChatTools(server *mcp.Server) {
 // Stub implementation: delegates to bridge, real response arrives via WebSocket subscription.
 func (s *Subsystem) chatSend(_ context.Context, _ *mcp.CallToolRequest, input ChatSendInput) (*mcp.CallToolResult, ChatSendOutput, error) {
 	if s.bridge == nil {
-		return nil, ChatSendOutput{}, fmt.Errorf("bridge not available")
+		return nil, ChatSendOutput{}, errors.New("bridge not available")
 	}
 	err := s.bridge.Send(BridgeMessage{
 		Type:      "chat_send",
@@ -139,7 +140,7 @@ func (s *Subsystem) chatSend(_ context.Context, _ *mcp.CallToolRequest, input Ch
 // Stub implementation: sends request via bridge, returns empty messages. Real data arrives via WebSocket.
 func (s *Subsystem) chatHistory(_ context.Context, _ *mcp.CallToolRequest, input ChatHistoryInput) (*mcp.CallToolResult, ChatHistoryOutput, error) {
 	if s.bridge == nil {
-		return nil, ChatHistoryOutput{}, fmt.Errorf("bridge not available")
+		return nil, ChatHistoryOutput{}, errors.New("bridge not available")
 	}
 	// Request history via bridge; for now return placeholder indicating the
 	// request was forwarded. Real data arrives via WebSocket subscription.
@@ -158,7 +159,7 @@ func (s *Subsystem) chatHistory(_ context.Context, _ *mcp.CallToolRequest, input
 // Stub implementation: sends request via bridge, returns empty sessions. Awaiting Laravel backend.
 func (s *Subsystem) sessionList(_ context.Context, _ *mcp.CallToolRequest, _ SessionListInput) (*mcp.CallToolResult, SessionListOutput, error) {
 	if s.bridge == nil {
-		return nil, SessionListOutput{}, fmt.Errorf("bridge not available")
+		return nil, SessionListOutput{}, errors.New("bridge not available")
 	}
 	_ = s.bridge.Send(BridgeMessage{Type: "session_list"})
 	return nil, SessionListOutput{Sessions: []Session{}}, nil
@@ -168,7 +169,7 @@ func (s *Subsystem) sessionList(_ context.Context, _ *mcp.CallToolRequest, _ Ses
 // Stub implementation: sends request via bridge, returns placeholder session. Awaiting Laravel backend.
 func (s *Subsystem) sessionCreate(_ context.Context, _ *mcp.CallToolRequest, input SessionCreateInput) (*mcp.CallToolResult, SessionCreateOutput, error) {
 	if s.bridge == nil {
-		return nil, SessionCreateOutput{}, fmt.Errorf("bridge not available")
+		return nil, SessionCreateOutput{}, errors.New("bridge not available")
 	}
 	_ = s.bridge.Send(BridgeMessage{
 		Type: "session_create",
@@ -187,7 +188,7 @@ func (s *Subsystem) sessionCreate(_ context.Context, _ *mcp.CallToolRequest, inp
 // Stub implementation: sends request via bridge, returns "unknown" status. Awaiting Laravel backend.
 func (s *Subsystem) planStatus(_ context.Context, _ *mcp.CallToolRequest, input PlanStatusInput) (*mcp.CallToolResult, PlanStatusOutput, error) {
 	if s.bridge == nil {
-		return nil, PlanStatusOutput{}, fmt.Errorf("bridge not available")
+		return nil, PlanStatusOutput{}, errors.New("bridge not available")
 	}
 	_ = s.bridge.Send(BridgeMessage{
 		Type:      "plan_status",
