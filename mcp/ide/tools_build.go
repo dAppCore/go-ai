@@ -2,7 +2,6 @@ package ide
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -74,7 +73,7 @@ func (s *Subsystem) registerBuildTools(server *mcp.Server) {
 // Stub implementation: sends request via bridge, returns "unknown" status. Awaiting Laravel backend.
 func (s *Subsystem) buildStatus(_ context.Context, _ *mcp.CallToolRequest, input BuildStatusInput) (*mcp.CallToolResult, BuildStatusOutput, error) {
 	if s.bridge == nil {
-		return nil, BuildStatusOutput{}, errors.New("bridge not available")
+		return nil, BuildStatusOutput{}, errBridgeNotAvailable
 	}
 	_ = s.bridge.Send(BridgeMessage{
 		Type: "build_status",
@@ -89,7 +88,7 @@ func (s *Subsystem) buildStatus(_ context.Context, _ *mcp.CallToolRequest, input
 // Stub implementation: sends request via bridge, returns empty list. Awaiting Laravel backend.
 func (s *Subsystem) buildList(_ context.Context, _ *mcp.CallToolRequest, input BuildListInput) (*mcp.CallToolResult, BuildListOutput, error) {
 	if s.bridge == nil {
-		return nil, BuildListOutput{}, errors.New("bridge not available")
+		return nil, BuildListOutput{}, errBridgeNotAvailable
 	}
 	_ = s.bridge.Send(BridgeMessage{
 		Type: "build_list",
@@ -102,7 +101,7 @@ func (s *Subsystem) buildList(_ context.Context, _ *mcp.CallToolRequest, input B
 // Stub implementation: sends request via bridge, returns empty lines. Awaiting Laravel backend.
 func (s *Subsystem) buildLogs(_ context.Context, _ *mcp.CallToolRequest, input BuildLogsInput) (*mcp.CallToolResult, BuildLogsOutput, error) {
 	if s.bridge == nil {
-		return nil, BuildLogsOutput{}, errors.New("bridge not available")
+		return nil, BuildLogsOutput{}, errBridgeNotAvailable
 	}
 	_ = s.bridge.Send(BridgeMessage{
 		Type: "build_logs",

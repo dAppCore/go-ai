@@ -2,7 +2,6 @@ package ide
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -103,7 +102,7 @@ func (s *Subsystem) dashboardOverview(_ context.Context, _ *mcp.CallToolRequest,
 // Stub implementation: sends request via bridge, returns empty events. Awaiting Laravel backend.
 func (s *Subsystem) dashboardActivity(_ context.Context, _ *mcp.CallToolRequest, input DashboardActivityInput) (*mcp.CallToolResult, DashboardActivityOutput, error) {
 	if s.bridge == nil {
-		return nil, DashboardActivityOutput{}, errors.New("bridge not available")
+		return nil, DashboardActivityOutput{}, errBridgeNotAvailable
 	}
 	_ = s.bridge.Send(BridgeMessage{
 		Type: "dashboard_activity",
@@ -116,7 +115,7 @@ func (s *Subsystem) dashboardActivity(_ context.Context, _ *mcp.CallToolRequest,
 // Stub implementation: sends request via bridge, returns zero metrics. Awaiting Laravel backend.
 func (s *Subsystem) dashboardMetrics(_ context.Context, _ *mcp.CallToolRequest, input DashboardMetricsInput) (*mcp.CallToolResult, DashboardMetricsOutput, error) {
 	if s.bridge == nil {
-		return nil, DashboardMetricsOutput{}, errors.New("bridge not available")
+		return nil, DashboardMetricsOutput{}, errBridgeNotAvailable
 	}
 	period := input.Period
 	if period == "" {
