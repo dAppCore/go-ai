@@ -3,6 +3,7 @@ package ide
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -73,7 +74,7 @@ func (b *Bridge) Send(msg BridgeMessage) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.conn == nil {
-		return fmt.Errorf("bridge: not connected")
+		return errors.New("bridge: not connected")
 	}
 	msg.Timestamp = time.Now()
 	data, err := json.Marshal(msg)

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,12 @@ import (
 // webviewInstance holds the current webview connection.
 // This is managed by the MCP service.
 var webviewInstance *webview.Webview
+
+// Sentinel errors for webview tools.
+var (
+	errNotConnected     = errors.New("not connected; use webview_connect first")
+	errSelectorRequired = errors.New("selector is required")
+)
 
 // WebviewConnectInput contains parameters for connecting to Chrome DevTools.
 type WebviewConnectInput struct {
@@ -203,7 +210,7 @@ func (s *Service) webviewConnect(ctx context.Context, req *mcp.CallToolRequest, 
 	s.logger.Security("MCP tool execution", "tool", "webview_connect", "debug_url", input.DebugURL, "user", log.Username())
 
 	if input.DebugURL == "" {
-		return nil, WebviewConnectOutput{}, fmt.Errorf("debug_url is required")
+		return nil, WebviewConnectOutput{}, errors.New("debug_url is required")
 	}
 
 	// Close existing connection if any
@@ -265,11 +272,11 @@ func (s *Service) webviewNavigate(ctx context.Context, req *mcp.CallToolRequest,
 	s.logger.Info("MCP tool execution", "tool", "webview_navigate", "url", input.URL, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewNavigateOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewNavigateOutput{}, errNotConnected
 	}
 
 	if input.URL == "" {
-		return nil, WebviewNavigateOutput{}, fmt.Errorf("url is required")
+		return nil, WebviewNavigateOutput{}, errors.New("url is required")
 	}
 
 	if err := webviewInstance.Navigate(input.URL); err != nil {
@@ -288,11 +295,11 @@ func (s *Service) webviewClick(ctx context.Context, req *mcp.CallToolRequest, in
 	s.logger.Info("MCP tool execution", "tool", "webview_click", "selector", input.Selector, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewClickOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewClickOutput{}, errNotConnected
 	}
 
 	if input.Selector == "" {
-		return nil, WebviewClickOutput{}, fmt.Errorf("selector is required")
+		return nil, WebviewClickOutput{}, errSelectorRequired
 	}
 
 	if err := webviewInstance.Click(input.Selector); err != nil {
@@ -308,11 +315,11 @@ func (s *Service) webviewType(ctx context.Context, req *mcp.CallToolRequest, inp
 	s.logger.Info("MCP tool execution", "tool", "webview_type", "selector", input.Selector, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewTypeOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewTypeOutput{}, errNotConnected
 	}
 
 	if input.Selector == "" {
-		return nil, WebviewTypeOutput{}, fmt.Errorf("selector is required")
+		return nil, WebviewTypeOutput{}, errSelectorRequired
 	}
 
 	if err := webviewInstance.Type(input.Selector, input.Text); err != nil {
@@ -328,11 +335,11 @@ func (s *Service) webviewQuery(ctx context.Context, req *mcp.CallToolRequest, in
 	s.logger.Info("MCP tool execution", "tool", "webview_query", "selector", input.Selector, "all", input.All, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewQueryOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewQueryOutput{}, errNotConnected
 	}
 
 	if input.Selector == "" {
-		return nil, WebviewQueryOutput{}, fmt.Errorf("selector is required")
+		return nil, WebviewQueryOutput{}, errSelectorRequired
 	}
 
 	if input.All {
@@ -386,7 +393,7 @@ func (s *Service) webviewConsole(ctx context.Context, req *mcp.CallToolRequest, 
 	s.logger.Info("MCP tool execution", "tool", "webview_console", "clear", input.Clear, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewConsoleOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewConsoleOutput{}, errNotConnected
 	}
 
 	messages := webviewInstance.GetConsole()
@@ -418,11 +425,11 @@ func (s *Service) webviewEval(ctx context.Context, req *mcp.CallToolRequest, inp
 	s.logger.Security("MCP tool execution", "tool", "webview_eval", "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewEvalOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewEvalOutput{}, errNotConnected
 	}
 
 	if input.Script == "" {
-		return nil, WebviewEvalOutput{}, fmt.Errorf("script is required")
+		return nil, WebviewEvalOutput{}, errors.New("script is required")
 	}
 
 	result, err := webviewInstance.Evaluate(input.Script)
@@ -445,7 +452,7 @@ func (s *Service) webviewScreenshot(ctx context.Context, req *mcp.CallToolReques
 	s.logger.Info("MCP tool execution", "tool", "webview_screenshot", "format", input.Format, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewScreenshotOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewScreenshotOutput{}, errNotConnected
 	}
 
 	format := input.Format
@@ -471,11 +478,11 @@ func (s *Service) webviewWait(ctx context.Context, req *mcp.CallToolRequest, inp
 	s.logger.Info("MCP tool execution", "tool", "webview_wait", "selector", input.Selector, "timeout", input.Timeout, "user", log.Username())
 
 	if webviewInstance == nil {
-		return nil, WebviewWaitOutput{}, fmt.Errorf("not connected; use webview_connect first")
+		return nil, WebviewWaitOutput{}, errNotConnected
 	}
 
 	if input.Selector == "" {
-		return nil, WebviewWaitOutput{}, fmt.Errorf("selector is required")
+		return nil, WebviewWaitOutput{}, errSelectorRequired
 	}
 
 	if err := webviewInstance.WaitForSelector(input.Selector); err != nil {

@@ -2,10 +2,11 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"forge.lthn.ai/core/go/pkg/log"
 	"forge.lthn.ai/core/go-rag"
+	"forge.lthn.ai/core/go/pkg/log"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -107,7 +108,7 @@ func (s *Service) ragQuery(ctx context.Context, req *mcp.CallToolRequest, input 
 
 	// Validate input
 	if input.Question == "" {
-		return nil, RAGQueryOutput{}, fmt.Errorf("question cannot be empty")
+		return nil, RAGQueryOutput{}, errors.New("question cannot be empty")
 	}
 
 	// Call the RAG query function
@@ -150,7 +151,7 @@ func (s *Service) ragIngest(ctx context.Context, req *mcp.CallToolRequest, input
 
 	// Validate input
 	if input.Path == "" {
-		return nil, RAGIngestOutput{}, fmt.Errorf("path cannot be empty")
+		return nil, RAGIngestOutput{}, errors.New("path cannot be empty")
 	}
 
 	// Check if path is a file or directory using the medium

@@ -1,13 +1,14 @@
 package security
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
 
-	"forge.lthn.ai/core/go-ai/ai"
 	"forge.lthn.ai/core/cli/pkg/cli"
+	"forge.lthn.ai/core/go-ai/ai"
 	"forge.lthn.ai/core/go/pkg/i18n"
 )
 
@@ -68,7 +69,7 @@ func runJobs() error {
 func createJobForTarget(target string) error {
 	parts := strings.SplitN(target, "/", 2)
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid target format: use owner/repo")
+		return errors.New("invalid target format: use owner/repo")
 	}
 
 	// Gather findings

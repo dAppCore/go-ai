@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"net/http"
@@ -471,7 +472,7 @@ func (s *Service) getSupportedLanguages(ctx context.Context, req *mcp.CallToolRe
 
 func (s *Service) editDiff(ctx context.Context, req *mcp.CallToolRequest, input EditDiffInput) (*mcp.CallToolResult, EditDiffOutput, error) {
 	if input.OldString == "" {
-		return nil, EditDiffOutput{}, fmt.Errorf("old_string cannot be empty")
+		return nil, EditDiffOutput{}, errors.New("old_string cannot be empty")
 	}
 
 	content, err := s.medium.Read(input.Path)
@@ -484,12 +485,12 @@ func (s *Service) editDiff(ctx context.Context, req *mcp.CallToolRequest, input 
 	if input.ReplaceAll {
 		count = strings.Count(content, input.OldString)
 		if count == 0 {
-			return nil, EditDiffOutput{}, fmt.Errorf("old_string not found in file")
+			return nil, EditDiffOutput{}, errors.New("old_string not found in file")
 		}
 		content = strings.ReplaceAll(content, input.OldString, input.NewString)
 	} else {
 		if !strings.Contains(content, input.OldString) {
-			return nil, EditDiffOutput{}, fmt.Errorf("old_string not found in file")
+			return nil, EditDiffOutput{}, errors.New("old_string not found in file")
 		}
 		content = strings.Replace(content, input.OldString, input.NewString, 1)
 		count = 1

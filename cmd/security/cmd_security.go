@@ -146,7 +146,7 @@ func runGHAPI(endpoint string) ([]byte, error) {
 				return []byte("[]"), nil // Return empty array for not found
 			}
 			if strings.Contains(stderr, "403") {
-				return nil, fmt.Errorf("access denied (check token permissions)")
+				return nil, errors.New("access denied (check token permissions)")
 			}
 		}
 		return nil, cli.Wrap(err, "run gh api")

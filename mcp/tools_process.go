@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,9 @@ import (
 	"forge.lthn.ai/core/go/pkg/process"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// errIDEmpty is returned when a process tool call omits the required ID.
+var errIDEmpty = errors.New("id cannot be empty")
 
 // ProcessStartInput contains parameters for starting a new process.
 type ProcessStartInput struct {
@@ -144,7 +148,7 @@ func (s *Service) processStart(ctx context.Context, req *mcp.CallToolRequest, in
 	s.logger.Security("MCP tool execution", "tool", "process_start", "command", input.Command, "args", input.Args, "dir", input.Dir, "user", log.Username())
 
 	if input.Command == "" {
-		return nil, ProcessStartOutput{}, fmt.Errorf("command cannot be empty")
+		return nil, ProcessStartOutput{}, errors.New("command cannot be empty")
 	}
 
 	opts := process.RunOptions{
@@ -175,7 +179,7 @@ func (s *Service) processStop(ctx context.Context, req *mcp.CallToolRequest, inp
 	s.logger.Security("MCP tool execution", "tool", "process_stop", "id", input.ID, "user", log.Username())
 
 	if input.ID == "" {
-		return nil, ProcessStopOutput{}, fmt.Errorf("id cannot be empty")
+		return nil, ProcessStopOutput{}, errIDEmpty
 	}
 
 	proc, err := s.processService.Get(input.ID)
@@ -203,7 +207,7 @@ func (s *Service) processKill(ctx context.Context, req *mcp.CallToolRequest, inp
 	s.logger.Security("MCP tool execution", "tool", "process_kill", "id", input.ID, "user", log.Username())
 
 	if input.ID == "" {
-		return nil, ProcessKillOutput{}, fmt.Errorf("id cannot be empty")
+		return nil, ProcessKillOutput{}, errIDEmpty
 	}
 
 	if err := s.processService.Kill(input.ID); err != nil {
@@ -256,7 +260,7 @@ func (s *Service) processOutput(ctx context.Context, req *mcp.CallToolRequest, i
 	s.logger.Info("MCP tool execution", "tool", "process_output", "id", input.ID, "user", log.Username())
 
 	if input.ID == "" {
-		return nil, ProcessOutputOutput{}, fmt.Errorf("id cannot be empty")
+		return nil, ProcessOutputOutput{}, errIDEmpty
 	}
 
 	output, err := s.processService.Output(input.ID)
@@ -276,10 +280,10 @@ func (s *Service) processInput(ctx context.Context, req *mcp.CallToolRequest, in
 	s.logger.Security("MCP tool execution", "tool", "process_input", "id", input.ID, "user", log.Username())
 
 	if input.ID == "" {
-		return nil, ProcessInputOutput{}, fmt.Errorf("id cannot be empty")
+		return nil, ProcessInputOutput{}, errIDEmpty
 	}
 	if input.Input == "" {
-		return nil, ProcessInputOutput{}, fmt.Errorf("input cannot be empty")
+		return nil, ProcessInputOutput{}, errors.New("input cannot be empty")
 	}
 
 	proc, err := s.processService.Get(input.ID)

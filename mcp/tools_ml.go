@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -141,7 +142,7 @@ func (m *MLSubsystem) mlGenerate(ctx context.Context, req *mcp.CallToolRequest, 
 	m.logger.Info("MCP tool execution", "tool", "ml_generate", "backend", input.Backend, "user", log.Username())
 
 	if input.Prompt == "" {
-		return nil, MLGenerateOutput{}, fmt.Errorf("prompt cannot be empty")
+		return nil, MLGenerateOutput{}, errors.New("prompt cannot be empty")
 	}
 
 	opts := ml.GenOpts{
@@ -166,7 +167,7 @@ func (m *MLSubsystem) mlScore(ctx context.Context, req *mcp.CallToolRequest, inp
 	m.logger.Info("MCP tool execution", "tool", "ml_score", "suites", input.Suites, "user", log.Username())
 
 	if input.Prompt == "" || input.Response == "" {
-		return nil, MLScoreOutput{}, fmt.Errorf("prompt and response cannot be empty")
+		return nil, MLScoreOutput{}, errors.New("prompt and response cannot be empty")
 	}
 
 	suites := input.Suites
@@ -184,7 +185,7 @@ func (m *MLSubsystem) mlScore(ctx context.Context, req *mcp.CallToolRequest, inp
 		case "semantic":
 			judge := m.service.Judge()
 			if judge == nil {
-				return nil, MLScoreOutput{}, fmt.Errorf("semantic scoring requires a judge backend")
+				return nil, MLScoreOutput{}, errors.New("semantic scoring requires a judge backend")
 			}
 			s, err := judge.ScoreSemantic(ctx, input.Prompt, input.Response)
 			if err != nil {
@@ -192,7 +193,7 @@ func (m *MLSubsystem) mlScore(ctx context.Context, req *mcp.CallToolRequest, inp
 			}
 			output.Semantic = s
 		case "content":
-			return nil, MLScoreOutput{}, fmt.Errorf("content scoring requires a ContentProbe — use ml_probe instead")
+			return nil, MLScoreOutput{}, errors.New("content scoring requires a ContentProbe — use ml_probe instead")
 		}
 	}
 
