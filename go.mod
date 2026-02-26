@@ -3,12 +3,12 @@ module forge.lthn.ai/core/go-ai
 go 1.26.0
 
 require (
-	forge.lthn.ai/core/cli v0.0.4
-	forge.lthn.ai/core/go v0.0.9
-	forge.lthn.ai/core/go-api v0.0.3
-	forge.lthn.ai/core/go-inference v0.0.2
-	forge.lthn.ai/core/go-ml v0.0.3
-	forge.lthn.ai/core/go-rag v0.0.3
+	forge.lthn.ai/core/cli v0.1.0
+	forge.lthn.ai/core/go v0.1.0
+	forge.lthn.ai/core/go-api v0.1.0
+	forge.lthn.ai/core/go-inference v0.1.0
+	forge.lthn.ai/core/go-ml v0.1.0
+	forge.lthn.ai/core/go-rag v0.1.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/modelcontextprotocol/go-sdk v1.3.0
@@ -16,8 +16,8 @@ require (
 )
 
 require (
-	forge.lthn.ai/core/go-crypt v0.0.3 // indirect
-	forge.lthn.ai/core/go-mlx v0.0.2 // indirect
+	forge.lthn.ai/core/go-crypt v0.1.0 // indirect
+	forge.lthn.ai/core/go-mlx v0.1.0 // indirect
 	github.com/99designs/gqlgen v0.17.87 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
