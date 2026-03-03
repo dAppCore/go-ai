@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -216,6 +217,13 @@ func main() {
 
 // -- Ollama helpers --
 
+// httpClient trusts self-signed certs for .lan domains behind Traefik.
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // .lan only
+	},
+}
+
 type embedRequest struct {
 	Model  string `json:"model"`
 	Prompt string `json:"prompt"`
@@ -227,7 +235,7 @@ type embedResponse struct {
 
 func embed(model, text string) ([]float64, error) {
 	body, _ := json.Marshal(embedRequest{Model: model, Prompt: text})
-	resp, err := http.Post(*ollamaURL+"/api/embeddings", "application/json", bytes.NewReader(body))
+	resp, err := httpClient.Post(*ollamaURL+"/api/embeddings", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +254,7 @@ func embed(model, text string) ([]float64, error) {
 }
 
 func modelAvailable(model string) bool {
-	resp, err := http.Get(*ollamaURL + "/api/tags")
+	resp, err := httpClient.Get(*ollamaURL + "/api/tags")
 	if err != nil {
 		return false
 	}
