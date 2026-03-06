@@ -8,7 +8,7 @@ import (
 
 	"forge.lthn.ai/core/go-inference"
 	"forge.lthn.ai/core/go-ml"
-	"forge.lthn.ai/core/go/pkg/framework"
+	"forge.lthn.ai/core/go/pkg/core"
 	"forge.lthn.ai/core/go-log"
 )
 
@@ -50,13 +50,13 @@ func (m *mockMLBackend) Chat(_ context.Context, _ []ml.Message, _ ml.GenOpts) (m
 // newTestMLSubsystem creates an MLSubsystem with a real ml.Service for testing.
 func newTestMLSubsystem(t *testing.T, backends ...ml.Backend) *MLSubsystem {
 	t.Helper()
-	c, err := framework.New(
-		framework.WithName("ml", ml.NewService(ml.Options{})),
+	c, err := core.New(
+		core.WithName("ml", ml.NewService(ml.Options{})),
 	)
 	if err != nil {
 		t.Fatalf("Failed to create framework core: %v", err)
 	}
-	svc, err := framework.ServiceFor[*ml.Service](c, "ml")
+	svc, err := core.ServiceFor[*ml.Service](c, "ml")
 	if err != nil {
 		t.Fatalf("Failed to get ML service: %v", err)
 	}
@@ -456,13 +456,13 @@ func TestMLSubsystem_Good_Name(t *testing.T) {
 
 // TestNewMLSubsystem_Good verifies constructor.
 func TestNewMLSubsystem_Good(t *testing.T) {
-	c, err := framework.New(
-		framework.WithName("ml", ml.NewService(ml.Options{})),
+	c, err := core.New(
+		core.WithName("ml", ml.NewService(ml.Options{})),
 	)
 	if err != nil {
 		t.Fatalf("Failed to create core: %v", err)
 	}
-	svc, err := framework.ServiceFor[*ml.Service](c, "ml")
+	svc, err := core.ServiceFor[*ml.Service](c, "ml")
 	if err != nil {
 		t.Fatalf("Failed to get service: %v", err)
 	}

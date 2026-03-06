@@ -6,20 +6,20 @@ import (
 	"testing"
 	"time"
 
-	"forge.lthn.ai/core/go/pkg/framework"
+	"forge.lthn.ai/core/go/pkg/core"
 	"forge.lthn.ai/core/go-process"
 )
 
-// newTestProcessService creates a real process.Service backed by a framework.Core for CI tests.
+// newTestProcessService creates a real process.Service backed by a core.Core for CI tests.
 func newTestProcessService(t *testing.T) *process.Service {
 	t.Helper()
-	c, err := framework.New(
-		framework.WithName("process", process.NewService(process.Options{})),
+	c, err := core.New(
+		core.WithName("process", process.NewService(process.Options{})),
 	)
 	if err != nil {
 		t.Fatalf("Failed to create framework core: %v", err)
 	}
-	svc, err := framework.ServiceFor[*process.Service](c, "process")
+	svc, err := core.ServiceFor[*process.Service](c, "process")
 	if err != nil {
 		t.Fatalf("Failed to get process service: %v", err)
 	}
