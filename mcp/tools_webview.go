@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"forge.lthn.ai/core/go-log"
-	"forge.lthn.ai/core/go/pkg/webview"
+	"forge.lthn.ai/core/go-webview"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

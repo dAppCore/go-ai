@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"forge.lthn.ai/core/go/pkg/ws"
+	"forge.lthn.ai/core/go-ws"
 )
 
 // --- Helpers ---

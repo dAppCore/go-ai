@@ -18,6 +18,7 @@ forge.lthn.ai/core/go-ml v0.1.0 h1:nV/XHZMy9VaFhk2dCYW5Jnp5UqpYVsYg85bsKMqdu8o=
 forge.lthn.ai/core/go-ml v0.1.0/go.mod h1:FPV9JhIUOZdLeJpX1ggC15BpmM740NPg6rycnOc5vss=
 forge.lthn.ai/core/go-mlx v0.1.0 h1:nMDhMma3M9iSm2ymNyqMe+aAbJDasNnxgi/1dZ+Zq7c=
 forge.lthn.ai/core/go-mlx v0.1.0/go.mod h1:b4BJX67nx9QZiyREl2lmYIPJ+Yp5amZug3y7vXaRy/Y=
+forge.lthn.ai/core/go-process v0.1.0 h1:lRpliQuu/Omt+kAHMFoQYOb5PKEIKg8yTMchFhejpK8=
 forge.lthn.ai/core/go-rag v0.1.0 h1:H5umiRryuq6J6l889s0OsxWpmq5P5c3A9Bkj0cQyO7k=
 forge.lthn.ai/core/go-rag v0.1.0/go.mod h1:bB8Fy98G2zxVoe7k2B85gXvim6frJdbAMnDyW4peUVU=
 github.com/99designs/gqlgen v0.17.87 h1:pSnCIMhBQezAE8bc1GNmfdLXFmnWtWl1GRDFEE/nHP8=

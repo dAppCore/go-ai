@@ -17,8 +17,8 @@ import (
 
 	"forge.lthn.ai/core/go-io"
 	"forge.lthn.ai/core/go-log"
-	"forge.lthn.ai/core/go/pkg/process"
-	"forge.lthn.ai/core/go/pkg/ws"
+	"forge.lthn.ai/core/go-process"
+	"forge.lthn.ai/core/go-ws"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

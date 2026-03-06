@@ -11,6 +11,7 @@ require (
 	forge.lthn.ai/core/go-io v0.0.1
 	forge.lthn.ai/core/go-log v0.0.1
 	forge.lthn.ai/core/go-ml v0.1.0
+	forge.lthn.ai/core/go-process v0.1.0
 	forge.lthn.ai/core/go-rag v0.1.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/websocket v1.5.3

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
-	"forge.lthn.ai/core/go/pkg/lab"
-	"forge.lthn.ai/core/go/pkg/lab/collector"
-	"forge.lthn.ai/core/go/pkg/lab/handler"
+	"forge.lthn.ai/lthn/lem/pkg/lab"
+	"forge.lthn.ai/lthn/lem/pkg/lab/collector"
+	"forge.lthn.ai/lthn/lem/pkg/lab/handler"
 )
 
 func init() {

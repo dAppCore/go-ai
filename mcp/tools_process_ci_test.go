@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"forge.lthn.ai/core/go/pkg/framework"
-	"forge.lthn.ai/core/go/pkg/process"
+	"forge.lthn.ai/core/go-process"
 )
 
 // newTestProcessService creates a real process.Service backed by a framework.Core for CI tests.

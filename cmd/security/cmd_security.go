@@ -10,7 +10,7 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 	"forge.lthn.ai/core/go-i18n"
 	"forge.lthn.ai/core/go-io"
-	"forge.lthn.ai/core/go/pkg/repos"
+	"forge.lthn.ai/core/go-scm/repos"
 )
 
 var (

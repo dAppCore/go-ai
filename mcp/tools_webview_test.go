@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"forge.lthn.ai/core/go/pkg/webview"
+	"forge.lthn.ai/core/go-webview"
 )
 
 // skipIfShort skips webview tests in short mode (go test -short).

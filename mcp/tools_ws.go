@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"forge.lthn.ai/core/go-log"
-	"forge.lthn.ai/core/go/pkg/ws"
+	"forge.lthn.ai/core/go-ws"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
