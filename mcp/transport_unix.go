@@ -5,7 +5,7 @@ import (
 	"net"
 	"os"
 
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/go-log"
 )
 
 // ServeUnix starts a Unix domain socket server for the MCP service.

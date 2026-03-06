@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/go-log"
 	"forge.lthn.ai/core/go/pkg/webview"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )

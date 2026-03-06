@@ -15,8 +15,8 @@ import (
 	"slices"
 	"strings"
 
-	"forge.lthn.ai/core/go/pkg/io"
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/go-io"
+	"forge.lthn.ai/core/go-log"
 	"forge.lthn.ai/core/go/pkg/process"
 	"forge.lthn.ai/core/go/pkg/ws"
 	"github.com/modelcontextprotocol/go-sdk/mcp"

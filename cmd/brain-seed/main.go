@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // brain-seed imports Claude Code MEMORY.md files into the OpenBrain knowledge
-// store by embedding them via Ollama and storing vectors in Qdrant.
+// store via the MCP HTTP API (brain_remember tool). The Laravel app handles
+// embedding, Qdrant storage, and MariaDB dual-write internally.
 //
 // Usage:
 //
-//	go run ./cmd/brain-seed
-//	go run ./cmd/brain-seed -ollama https://ollama.lan -qdrant https://qdrant.lan
-//	go run ./cmd/brain-seed -dry-run
-//	go run ./cmd/brain-seed -plans  # Also import plan docs
+//	go run ./cmd/brain-seed -api-key YOUR_KEY
+//	go run ./cmd/brain-seed -api-key YOUR_KEY -api https://lthn.sh/api/v1/mcp
+//	go run ./cmd/brain-seed -api-key YOUR_KEY -dry-run
+//	go run ./cmd/brain-seed -api-key YOUR_KEY -plans
+//	go run ./cmd/brain-seed -api-key YOUR_KEY -claude-md  # Also import CLAUDE.md files
 package main
 
 import (
@@ -24,40 +26,49 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 var (
-	ollamaURL  = flag.String("ollama", "https://ollama.lan", "Ollama base URL")
-	qdrantURL  = flag.String("qdrant", "https://qdrant.lan", "Qdrant base URL")
-	collection = flag.String("collection", "openbrain", "Qdrant collection name")
-	model      = flag.String("model", "embeddinggemma", "Embedding model")
-	workspace  = flag.Int("workspace", 1, "Workspace ID")
-	agent      = flag.String("agent", "virgil", "Agent ID")
+	apiURL     = flag.String("api", "https://lthn.sh/api/v1/mcp", "MCP API base URL")
+	apiKey     = flag.String("api-key", "", "MCP API key (Bearer token)")
+	server     = flag.String("server", "hosthub-agent", "MCP server ID")
+	agent      = flag.String("agent", "charon", "Agent ID for attribution")
 	dryRun     = flag.Bool("dry-run", false, "Preview without storing")
 	plans      = flag.Bool("plans", false, "Also import plan documents")
+	claudeMd   = flag.Bool("claude-md", false, "Also import CLAUDE.md files")
 	memoryPath = flag.String("memory-path", "", "Override memory scan path (default: ~/.claude/projects/*/memory/)")
 	planPath   = flag.String("plan-path", "", "Override plan scan path (default: ~/Code/*/docs/plans/)")
+	codePath   = flag.String("code-path", "", "Override code root for CLAUDE.md scan (default: ~/Code)")
+	maxChars   = flag.Int("max-chars", 3800, "Max chars per section (embeddinggemma limit ~4000)")
 )
 
-// httpClient trusts self-signed certs for .lan domains behind Traefik.
+// httpClient with TLS skip for non-public TLDs (.lthn.sh has real certs, but
+// allow .lan/.local if someone has legacy config).
 var httpClient = &http.Client{
-	Timeout: 60 * time.Second,
+	Timeout: 30 * time.Second,
 	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // .lan only
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 	},
 }
 
 func main() {
 	flag.Parse()
 
-	fmt.Println("OpenBrain Seed — Claude Code Memory Import")
+	fmt.Println("OpenBrain Seed — MCP API Client")
 	fmt.Println(strings.Repeat("=", 55))
+
+	if *apiKey == "" && !*dryRun {
+		fmt.Println("ERROR: -api-key is required (or use -dry-run)")
+		fmt.Println("  Generate one at: https://lthn.sh/admin/mcp/api-keys")
+		os.Exit(1)
+	}
 
 	if *dryRun {
 		fmt.Println("[DRY RUN] — no data will be stored")
 	}
+
+	fmt.Printf("API: %s\n", *apiURL)
+	fmt.Printf("Server: %s | Agent: %s\n", *server, *agent)
 
 	// Discover memory files
 	memPath := *memoryPath
@@ -80,15 +91,28 @@ func main() {
 		// Also check nested dirs (completed/, etc.)
 		nested, _ := filepath.Glob(filepath.Join(pPath, "*", "*.md"))
 		planFiles = append(planFiles, nested...)
+
+		// Also check host-uk nested repos
+		home, _ := os.UserHomeDir()
+		hostUkPath := filepath.Join(home, "Code", "host-uk", "*", "docs", "plans")
+		hostUkFiles, _ := filepath.Glob(filepath.Join(hostUkPath, "*.md"))
+		planFiles = append(planFiles, hostUkFiles...)
+		hostUkNested, _ := filepath.Glob(filepath.Join(hostUkPath, "*", "*.md"))
+		planFiles = append(planFiles, hostUkNested...)
+
 		fmt.Printf("Found %d plan files\n", len(planFiles))
 	}
 
-	// Ensure collection exists
-	if !*dryRun {
-		if err := ensureCollection(); err != nil {
-			fmt.Printf("ERROR: %v\n", err)
-			os.Exit(1)
+	// Discover CLAUDE.md files
+	var claudeFiles []string
+	if *claudeMd {
+		cPath := *codePath
+		if cPath == "" {
+			home, _ := os.UserHomeDir()
+			cPath = filepath.Join(home, "Code")
 		}
+		claudeFiles = discoverClaudeMdFiles(cPath)
+		fmt.Printf("Found %d CLAUDE.md files\n", len(claudeFiles))
 	}
 
 	imported := 0
@@ -109,9 +133,18 @@ func main() {
 		}
 
 		for _, sec := range sections {
-			memType := inferType(sec.heading, sec.content)
 			content := sec.heading + "\n\n" + sec.content
-			tags := buildTags(filename, "memory-import")
+			if strings.TrimSpace(sec.content) == "" {
+				skipped++
+				continue
+			}
+
+			memType := inferType(sec.heading, sec.content, "memory")
+			tags := buildTags(filename, "memory", project)
+			confidence := confidenceForSource("memory")
+
+			// Truncate to embedding model limit
+			content = truncate(content, *maxChars)
 
 			if *dryRun {
 				fmt.Printf("  [DRY] %s/%s :: %s (%s) — %d chars\n",
@@ -120,7 +153,7 @@ func main() {
 				continue
 			}
 
-			if err := storeMemory(content, project, memType, tags); err != nil {
+			if err := callBrainRemember(content, memType, tags, project, confidence); err != nil {
 				fmt.Printf("  FAIL %s/%s :: %s — %v\n", project, filename, sec.heading, err)
 				errors++
 				continue
@@ -143,31 +176,71 @@ func main() {
 				continue
 			}
 
-			// Plans: take the whole doc as one memory (they're already cohesive)
-			// But cap at ~4000 chars to stay within embedding context
-			fullContent := ""
 			for _, sec := range sections {
-				fullContent += sec.heading + "\n\n" + sec.content + "\n\n"
-			}
-			if len(fullContent) > 4000 {
-				fullContent = fullContent[:4000]
-			}
+				content := sec.heading + "\n\n" + sec.content
+				if strings.TrimSpace(sec.content) == "" {
+					skipped++
+					continue
+				}
 
-			tags := buildTags(filename, "plan-import")
+				tags := buildTags(filename, "plans", project)
+				content = truncate(content, *maxChars)
 
-			if *dryRun {
-				fmt.Printf("  [DRY] %s :: %s (plan) — %d chars\n", project, filename, len(fullContent))
+				if *dryRun {
+					fmt.Printf("  [DRY] %s :: %s / %s (plan) — %d chars\n",
+						project, filename, sec.heading, len(content))
+					imported++
+					continue
+				}
+
+				if err := callBrainRemember(content, "plan", tags, project, 0.6); err != nil {
+					fmt.Printf("  FAIL %s :: %s / %s — %v\n", project, filename, sec.heading, err)
+					errors++
+					continue
+				}
+				fmt.Printf("  ok   %s :: %s / %s (plan)\n", project, filename, sec.heading)
 				imported++
+			}
+		}
+	}
+
+	// Process CLAUDE.md files
+	if *claudeMd && len(claudeFiles) > 0 {
+		fmt.Println("\n--- CLAUDE.md Files ---")
+		for _, f := range claudeFiles {
+			project := extractProjectFromClaudeMd(f)
+			sections := parseMarkdownSections(f)
+
+			if len(sections) == 0 {
+				skipped++
 				continue
 			}
 
-			if err := storeMemory(fullContent, project, "plan", tags); err != nil {
-				fmt.Printf("  FAIL %s :: %s — %v\n", project, filename, err)
-				errors++
-				continue
+			for _, sec := range sections {
+				content := sec.heading + "\n\n" + sec.content
+				if strings.TrimSpace(sec.content) == "" {
+					skipped++
+					continue
+				}
+
+				tags := buildTags("CLAUDE", "claude-md", project)
+				content = truncate(content, *maxChars)
+
+				if *dryRun {
+					fmt.Printf("  [DRY] %s :: CLAUDE.md / %s (convention) — %d chars\n",
+						project, sec.heading, len(content))
+					imported++
+					continue
+				}
+
+				if err := callBrainRemember(content, "convention", tags, project, 0.9); err != nil {
+					fmt.Printf("  FAIL %s :: CLAUDE.md / %s — %v\n", project, sec.heading, err)
+					errors++
+					continue
+				}
+				fmt.Printf("  ok   %s :: CLAUDE.md / %s (convention)\n", project, sec.heading)
+				imported++
 			}
-			fmt.Printf("  ok   %s :: %s (plan)\n", project, filename)
-			imported++
 		}
 	}
 
@@ -179,115 +252,103 @@ func main() {
 	fmt.Printf("%sImported: %d | Skipped: %d | Errors: %d\n", prefix, imported, skipped, errors)
 }
 
-// storeMemory embeds content and upserts into Qdrant.
-func storeMemory(content, project, memType string, tags []string) error {
-	vec, err := embed(content)
-	if err != nil {
-		return fmt.Errorf("embed: %w", err)
+// callBrainRemember sends a memory to the MCP API via brain_remember tool.
+func callBrainRemember(content, memType string, tags []string, project string, confidence float64) error {
+	args := map[string]any{
+		"content":    content,
+		"type":       memType,
+		"tags":       tags,
+		"confidence": confidence,
+	}
+	if project != "" && project != "unknown" {
+		args["project"] = project
 	}
 
-	id := uuid.New().String()
 	payload := map[string]any{
-		"workspace_id": *workspace,
-		"agent_id":     *agent,
-		"type":         memType,
-		"tags":         tags,
-		"project":      project,
-		"confidence":   0.7,
-		"created_at":   time.Now().UTC().Format(time.RFC3339),
+		"server":    *server,
+		"tool":      "brain_remember",
+		"arguments": args,
 	}
 
-	return qdrantUpsert(id, vec, payload)
-}
-
-// embed generates a vector via Ollama.
-func embed(text string) ([]float64, error) {
-	body, _ := json.Marshal(map[string]string{
-		"model":  *model,
-		"prompt": text,
-	})
-
-	resp, err := httpClient.Post(*ollamaURL+"/api/embeddings", "application/json", bytes.NewReader(body))
+	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(b))
+		return fmt.Errorf("marshal: %w", err)
 	}
 
-	var result struct {
-		Embedding []float64 `json:"embedding"`
+	req, err := http.NewRequest("POST", *apiURL+"/tools/call", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("request: %w", err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	if len(result.Embedding) == 0 {
-		return nil, fmt.Errorf("empty embedding")
-	}
-	return result.Embedding, nil
-}
-
-// qdrantUpsert stores a point in Qdrant.
-func qdrantUpsert(id string, vector []float64, payload map[string]any) error {
-	body, _ := json.Marshal(map[string]any{
-		"points": []map[string]any{
-			{"id": id, "vector": vector, "payload": payload},
-		},
-	})
-
-	req, _ := http.NewRequest("PUT",
-		fmt.Sprintf("%s/collections/%s/points", *qdrantURL, *collection),
-		bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+*apiKey)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("http: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Qdrant HTTP %d: %s", resp.StatusCode, string(b))
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("decode: %w", err)
+	}
+	if !result.Success {
+		return fmt.Errorf("API: %s", result.Error)
+	}
+
 	return nil
 }
 
-// ensureCollection creates the Qdrant collection if it doesn't exist.
-func ensureCollection() error {
-	resp, err := httpClient.Get(fmt.Sprintf("%s/collections/%s", *qdrantURL, *collection))
-	if err != nil {
-		return err
+// truncate caps content to maxLen chars, appending an ellipsis if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
-	resp.Body.Close()
+	// Find last space before limit to avoid splitting mid-word
+	cut := maxLen
+	if idx := strings.LastIndex(s[:maxLen], " "); idx > maxLen-200 {
+		cut = idx
+	}
+	return s[:cut] + "…"
+}
 
-	if resp.StatusCode == 404 {
-		body, _ := json.Marshal(map[string]any{
-			"vectors": map[string]any{
-				"size":     768,
-				"distance": "Cosine",
-			},
-		})
-		req, _ := http.NewRequest("PUT",
-			fmt.Sprintf("%s/collections/%s", *qdrantURL, *collection),
-			bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+// discoverClaudeMdFiles finds CLAUDE.md files across a code directory.
+func discoverClaudeMdFiles(codePath string) []string {
+	var files []string
 
-		resp, err := httpClient.Do(req)
+	// Walk up to 4 levels deep, skip node_modules/vendor/.claude
+	_ = filepath.WalkDir(codePath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return nil
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			b, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("create collection: HTTP %d: %s", resp.StatusCode, string(b))
+		if d.IsDir() {
+			name := d.Name()
+			if name == "node_modules" || name == "vendor" || name == ".claude" {
+				return filepath.SkipDir
+			}
+			// Limit depth
+			rel, _ := filepath.Rel(codePath, path)
+			if strings.Count(rel, string(os.PathSeparator)) > 3 {
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		fmt.Println("Created Qdrant collection:", *collection)
-	}
-	return nil
+		if d.Name() == "CLAUDE.md" {
+			files = append(files, path)
+		}
+		return nil
+	})
+
+	return files
 }
 
 // section is a parsed markdown section.
@@ -325,12 +386,20 @@ func parseMarkdownSections(path string) []section {
 		}
 	}
 
-	// Flush last
+	// Flush last section
 	if curHeading != "" && len(curContent) > 0 {
 		text := strings.TrimSpace(strings.Join(curContent, "\n"))
 		if text != "" {
 			sections = append(sections, section{curHeading, text})
 		}
+	}
+
+	// If no headings found, treat entire file as one section
+	if len(sections) == 0 && strings.TrimSpace(string(data)) != "" {
+		sections = append(sections, section{
+			heading: strings.TrimSuffix(filepath.Base(path), ".md"),
+			content: strings.TrimSpace(string(data)),
+		})
 	}
 
 	return sections
@@ -348,8 +417,29 @@ func extractProject(path string) string {
 
 // extractProjectFromPlan derives a project name from a plan path.
 // ~/Code/eaas/docs/plans/foo.md → "eaas"
+// ~/Code/host-uk/core/docs/plans/foo.md → "core"
 func extractProjectFromPlan(path string) string {
-	re := regexp.MustCompile(`Code/([^/]+)/docs/plans/`)
+	// Check host-uk nested repos first
+	re := regexp.MustCompile(`Code/host-uk/([^/]+)/docs/plans/`)
+	if m := re.FindStringSubmatch(path); m != nil {
+		return m[1]
+	}
+	re = regexp.MustCompile(`Code/([^/]+)/docs/plans/`)
+	if m := re.FindStringSubmatch(path); m != nil {
+		return m[1]
+	}
+	return "unknown"
+}
+
+// extractProjectFromClaudeMd derives a project name from a CLAUDE.md path.
+// ~/Code/host-uk/core/CLAUDE.md → "core"
+// ~/Code/eaas/CLAUDE.md → "eaas"
+func extractProjectFromClaudeMd(path string) string {
+	re := regexp.MustCompile(`Code/host-uk/([^/]+)/`)
+	if m := re.FindStringSubmatch(path); m != nil {
+		return m[1]
+	}
+	re = regexp.MustCompile(`Code/([^/]+)/`)
 	if m := re.FindStringSubmatch(path); m != nil {
 		return m[1]
 	}
@@ -357,14 +447,22 @@ func extractProjectFromPlan(path string) string {
 }
 
 // inferType guesses the memory type from heading + content keywords.
-func inferType(heading, content string) string {
+func inferType(heading, content, source string) string {
+	// Source-specific defaults (match PHP BrainIngestCommand behaviour)
+	if source == "plans" {
+		return "plan"
+	}
+	if source == "claude-md" {
+		return "convention"
+	}
+
 	lower := strings.ToLower(heading + " " + content)
 	patterns := map[string][]string{
 		"architecture": {"architecture", "stack", "infrastructure", "layer", "service mesh"},
 		"convention":   {"convention", "standard", "naming", "pattern", "rule", "coding"},
 		"decision":     {"decision", "chose", "strategy", "approach", "domain"},
 		"bug":          {"bug", "fix", "broken", "error", "issue", "lesson"},
-		"plan":         {"plan", "todo", "roadmap", "milestone", "phase"},
+		"plan":         {"plan", "todo", "roadmap", "milestone", "phase", "task"},
 		"research":     {"research", "finding", "discovery", "analysis", "rfc"},
 	}
 	for t, keywords := range patterns {
@@ -378,10 +476,27 @@ func inferType(heading, content string) string {
 }
 
 // buildTags creates the tag list for a memory.
-func buildTags(filename string, source string) []string {
-	tags := []string{source}
-	if filename != "MEMORY" {
+func buildTags(filename, source, project string) []string {
+	tags := []string{"source:" + source}
+	if project != "" && project != "unknown" {
+		tags = append(tags, "project:"+project)
+	}
+	if filename != "MEMORY" && filename != "CLAUDE" {
 		tags = append(tags, strings.ReplaceAll(strings.ReplaceAll(filename, "-", " "), "_", " "))
 	}
 	return tags
+}
+
+// confidenceForSource returns a default confidence level matching the PHP ingest command.
+func confidenceForSource(source string) float64 {
+	switch source {
+	case "claude-md":
+		return 0.9
+	case "memory":
+		return 0.8
+	case "plans":
+		return 0.6
+	default:
+		return 0.5
+	}
 }

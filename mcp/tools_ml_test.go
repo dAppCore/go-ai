@@ -9,7 +9,7 @@ import (
 	"forge.lthn.ai/core/go-inference"
 	"forge.lthn.ai/core/go-ml"
 	"forge.lthn.ai/core/go/pkg/framework"
-	"forge.lthn.ai/core/go/pkg/log"
+	"forge.lthn.ai/core/go-log"
 )
 
 // --- Mock backend for inference registry ---
