@@ -4,7 +4,6 @@ go 1.26.0
 
 require (
 	forge.lthn.ai/core/cli v0.1.0
-	forge.lthn.ai/core/go v0.1.0
 	forge.lthn.ai/core/go-api v0.1.0
 	forge.lthn.ai/core/go-i18n v0.0.3
 	forge.lthn.ai/core/go-inference v0.1.0
@@ -20,6 +19,7 @@ require (
 )
 
 require (
+	forge.lthn.ai/core/go v0.1.0 // indirect
 	forge.lthn.ai/core/go-crypt v0.1.0 // indirect
 	forge.lthn.ai/core/go-mlx v0.1.0 // indirect
 	github.com/99designs/gqlgen v0.17.87 // indirect
