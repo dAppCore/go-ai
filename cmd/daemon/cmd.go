@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
-	"forge.lthn.ai/core/go-ai/mcp"
+	"forge.lthn.ai/core/mcp/pkg/mcp"
 	"forge.lthn.ai/core/go-log"
 	"forge.lthn.ai/core/go-process"
 )
