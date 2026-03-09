@@ -8,8 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 )
+
+// metricsMu protects concurrent file writes in Record.
+var metricsMu sync.Mutex
 
 // Event represents a recorded AI/security metric event.
 type Event struct {
@@ -41,6 +45,9 @@ func Record(event Event) (err error) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
+
+	metricsMu.Lock()
+	defer metricsMu.Unlock()
 
 	dir, err := metricsDir()
 	if err != nil {

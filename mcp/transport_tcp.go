@@ -51,11 +51,14 @@ type TCPTransport struct {
 
 // NewTCPTransport creates a new TCP transport listener.
 // It listens on the provided address (e.g. "localhost:9100").
-// Emits a security warning when binding to 0.0.0.0 (all interfaces).
+// Defaults to 127.0.0.1 when the host component is empty (e.g. ":9100").
+// Emits a security warning when explicitly binding to 0.0.0.0 (all interfaces).
 func NewTCPTransport(addr string) (*TCPTransport, error) {
-	host, _, _ := net.SplitHostPort(addr)
-	if host == "0.0.0.0" || host == "" {
-		diagPrintf( "WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
+	host, port, _ := net.SplitHostPort(addr)
+	if host == "" {
+		addr = net.JoinHostPort("127.0.0.1", port)
+	} else if host == "0.0.0.0" {
+		diagPrintf("WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -82,7 +85,7 @@ func (s *Service) ServeTCP(ctx context.Context, addr string) error {
 	if addr == "" {
 		addr = t.listener.Addr().String()
 	}
-	diagPrintf( "MCP TCP server listening on %s\n", addr)
+	diagPrintf("MCP TCP server listening on %s\n", addr)
 
 	for {
 		conn, err := t.listener.Accept()
@@ -91,7 +94,7 @@ func (s *Service) ServeTCP(ctx context.Context, addr string) error {
 			case <-ctx.Done():
 				return nil
 			default:
-				diagPrintf( "Accept error: %v\n", err)
+				diagPrintf("Accept error: %v\n", err)
 				continue
 			}
 		}
@@ -117,7 +120,7 @@ func (s *Service) handleConnection(ctx context.Context, conn net.Conn) {
 	// Run server (blocks until connection closed)
 	// Server.Run calls Connect, then Read loop.
 	if err := server.Run(ctx, transport); err != nil {
-		diagPrintf( "Connection error: %v\n", err)
+		diagPrintf("Connection error: %v\n", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"forge.lthn.ai/core/go-rag"
@@ -16,9 +17,8 @@ type TaskInfo struct {
 
 // QueryRAGForTask queries Qdrant for documentation relevant to a task.
 // It builds a query from the task title and description, queries with
-// sensible defaults, and returns formatted context. Returns "" on any
-// error (e.g. Qdrant/Ollama not running) for graceful degradation.
-func QueryRAGForTask(task TaskInfo) string {
+// sensible defaults, and returns formatted context.
+func QueryRAGForTask(task TaskInfo) (string, error) {
 	query := task.Title + " " + task.Description
 
 	// Truncate to 500 runes to keep the embedding focused.
@@ -30,14 +30,14 @@ func QueryRAGForTask(task TaskInfo) string {
 	qdrantCfg := rag.DefaultQdrantConfig()
 	qdrantClient, err := rag.NewQdrantClient(qdrantCfg)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("rag qdrant client: %w", err)
 	}
 	defer func() { _ = qdrantClient.Close() }()
 
 	ollamaCfg := rag.DefaultOllamaConfig()
 	ollamaClient, err := rag.NewOllamaClient(ollamaCfg)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("rag ollama client: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -51,8 +51,8 @@ func QueryRAGForTask(task TaskInfo) string {
 
 	results, err := rag.Query(ctx, qdrantClient, ollamaClient, query, queryCfg)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("rag query: %w", err)
 	}
 
-	return rag.FormatResultsContext(results)
+	return rag.FormatResultsContext(results), nil
 }
