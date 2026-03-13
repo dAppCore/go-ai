@@ -1,35 +1,66 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with the go-ai repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-**go-ai** is the MCP (Model Context Protocol) hub for the Lethean AI stack. It exposes 49 tools across file operations, RAG vector search, ML inference/scoring, process management, WebSocket streaming, browser automation, metrics, and IDE integration.
+**go-ai** is a thin facade layer in the Lethean AI stack. After a March 2026 refactor, the MCP server and all 49 tools were extracted to `forge.lthn.ai/core/mcp`. What remains here is the AI metrics system, a RAG query wrapper, and CLI command wrappers that delegate to other modules.
 
 - **Module path**: `forge.lthn.ai/core/go-ai`
-- **Language**: Go 1.25
+- **Language**: Go 1.26
 - **Licence**: EUPL-1.2
-- **LOC**: ~5.6K total (~3.5K non-test)
-
-The MCP server is started by the Core CLI (`core mcp serve`) which imports `forge.lthn.ai/core/go-ai/mcp`.
-
-See `docs/` for full architecture, tool reference, development guide, and project history.
 
 ## Build & Test Commands
 
 ```bash
-go test ./...                       # Run all tests
-go test -run TestName ./mcp/...     # Run a single test
-go test -v -race ./...              # Verbose with race detector
-go build ./...                      # Build (library — no main package)
-go vet ./...                        # Vet
+go build ./...                       # Build (library — no main package)
+go test ./...                        # Run all tests
+go test -run TestName ./ai/...       # Run a single test
+go test -v -race ./...               # Verbose with race detector
+go test -bench=. ./ai/...            # Run benchmarks (metrics)
+go vet ./...                         # Vet
+golangci-lint run ./...              # Lint
 ```
+
+## Architecture
+
+### `ai/` — Core facade package
+
+Two concerns, no external service calls at import time:
+
+1. **Metrics** (`metrics.go`) — Append-only JSONL event storage at `~/.core/ai/metrics/YYYY-MM-DD.jsonl`. Thread-safe via `sync.Mutex`. Key functions: `Record(Event)`, `ReadEvents(since)`, `Summary([]Event)`.
+
+2. **RAG** (`rag.go`) — `QueryRAGForTask(TaskInfo)` wraps `go-rag` to query Qdrant for documentation context. Truncates to 500 runes, returns top-3 results above 0.5 threshold. Returns error (not empty string) on failure for graceful degradation at call sites.
+
+### `cmd/` — CLI command wrappers
+
+Each subpackage exposes an `Add*Command(root)` function that registers cobra commands. They delegate to other modules:
+
+| Subpackage | Delegates to |
+|---|---|
+| `daemon/` | `forge.lthn.ai/core/mcp/pkg/mcp` — starts MCP server (stdio/TCP/Unix) |
+| `metrics/` | `ai.ReadEvents()` / `ai.Summary()` |
+| `rag/` | `forge.lthn.ai/core/go-rag/cmd/rag` (re-export) |
+| `security/` | GitHub API via `gh` CLI (alerts, deps, secrets, scanning) |
+| `lab/` | `forge.lthn.ai/lthn/lem/pkg/lab` — homelab monitoring dashboard |
+| `embed-bench/` | Embedding benchmarking tool |
+
+### Key sibling modules
+
+The MCP server and tools live in separate modules. When working on tool registration or transport, you need `core/mcp`, not this repo.
+
+- `forge.lthn.ai/core/mcp` — MCP server, transports, tool registration, IDE bridge
+- `forge.lthn.ai/core/go-rag` — Qdrant vector DB + Ollama embeddings
+- `forge.lthn.ai/core/go-ml` — Scoring engine, heuristics, probes
+- `forge.lthn.ai/core/go-inference` — Shared ML backend interfaces
+- `forge.lthn.ai/core/cli` — CLI framework (`cli.Command`, `cli.AddDaemonCommand`)
+- `forge.lthn.ai/core/go-i18n` — Internationalisation strings
 
 ## Coding Standards
 
 - **UK English** in comments and user-facing strings (colour, organisation, centre)
 - **Conventional commits**: `type(scope): description`
 - **Co-Author**: `Co-Authored-By: Virgil <virgil@lethean.io>`
-- **Error handling**: Return wrapped errors with context, never panic
-- **Test naming**: `_Good` (happy path), `_Bad` (expected errors), `_Ugly` (panics/edge cases)
-- **Licence**: EUPL-1.2
+- **Error handling**: Return `fmt.Errorf("context: %w", err)`, never panic
+- **Test naming**: `TestFoo_Good` (happy path), `TestFoo_Bad` (expected errors), `TestFoo_Ugly` (panics/edge cases)
+- **Licence**: EUPL-1.2 (SPDX header on new files)
