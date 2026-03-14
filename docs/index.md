@@ -113,7 +113,7 @@ Tests follow the `_Good`, `_Bad`, `_Ugly` suffix convention:
 | Module | Role |
 |--------|------|
 | `forge.lthn.ai/core/cli` | CLI framework (cobra-based command registration) |
-| `forge.lthn.ai/core/go-api` | API server framework |
+| `forge.lthn.ai/core/api` | API server framework |
 | `forge.lthn.ai/core/go-i18n` | Internationalisation strings |
 | `forge.lthn.ai/core/go-inference` | Shared inference interfaces |
 | `forge.lthn.ai/core/go-io` | Filesystem abstraction |
