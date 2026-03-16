@@ -2,9 +2,9 @@ package ai
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	coreerr "forge.lthn.ai/core/go-log"
 	"forge.lthn.ai/core/go-rag"
 )
 
@@ -30,14 +30,14 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	qdrantCfg := rag.DefaultQdrantConfig()
 	qdrantClient, err := rag.NewQdrantClient(qdrantCfg)
 	if err != nil {
-		return "", fmt.Errorf("rag qdrant client: %w", err)
+		return "", coreerr.E("ai.QueryRAGForTask", "rag qdrant client", err)
 	}
 	defer func() { _ = qdrantClient.Close() }()
 
 	ollamaCfg := rag.DefaultOllamaConfig()
 	ollamaClient, err := rag.NewOllamaClient(ollamaCfg)
 	if err != nil {
-		return "", fmt.Errorf("rag ollama client: %w", err)
+		return "", coreerr.E("ai.QueryRAGForTask", "rag ollama client", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -51,7 +51,7 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 
 	results, err := rag.Query(ctx, qdrantClient, ollamaClient, query, queryCfg)
 	if err != nil {
-		return "", fmt.Errorf("rag query: %w", err)
+		return "", coreerr.E("ai.QueryRAGForTask", "rag query", err)
 	}
 
 	return rag.FormatResultsContext(results), nil

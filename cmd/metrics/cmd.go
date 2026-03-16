@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"forge.lthn.ai/core/go-ai/ai"
 	"forge.lthn.ai/core/cli/pkg/cli"
+	"forge.lthn.ai/core/go-ai/ai"
 	"forge.lthn.ai/core/go-i18n"
+	coreerr "forge.lthn.ai/core/go-log"
 )
 
 var (
@@ -103,7 +104,7 @@ func runMetrics() error {
 // parseDuration parses a human-friendly duration like "7d", "24h", "30d".
 func parseDuration(s string) (time.Duration, error) {
 	if len(s) < 2 {
-		return 0, fmt.Errorf("invalid duration: %s", s)
+		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("invalid duration: %s", s), nil)
 	}
 
 	unit := s[len(s)-1]
@@ -111,11 +112,11 @@ func parseDuration(s string) (time.Duration, error) {
 
 	var n int
 	if _, err := fmt.Sscanf(value, "%d", &n); err != nil {
-		return 0, fmt.Errorf("invalid duration: %s", s)
+		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("invalid duration: %s", s), nil)
 	}
 
 	if n <= 0 {
-		return 0, fmt.Errorf("duration must be positive: %s", s)
+		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("duration must be positive: %s", s), nil)
 	}
 
 	switch unit {
@@ -126,6 +127,6 @@ func parseDuration(s string) (time.Duration, error) {
 	case 'm':
 		return time.Duration(n) * time.Minute, nil
 	default:
-		return 0, fmt.Errorf("unknown unit %c in duration: %s", unit, s)
+		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("unknown unit %c in duration: %s", unit, s), nil)
 	}
 }

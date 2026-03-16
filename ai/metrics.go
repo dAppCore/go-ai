@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"cmp"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	coreio "forge.lthn.ai/core/go-io"
+	coreerr "forge.lthn.ai/core/go-log"
 )
 
 // metricsMu protects concurrent file writes in Record.
@@ -31,7 +31,7 @@ type Event struct {
 func metricsDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("get home directory: %w", err)
+		return "", coreerr.E("ai.metricsDir", "get home directory", err)
 	}
 	return filepath.Join(home, ".core", "ai", "metrics"), nil
 }
@@ -57,28 +57,28 @@ func Record(event Event) (err error) {
 	}
 
 	if err := coreio.Local.EnsureDir(dir); err != nil {
-		return fmt.Errorf("create metrics directory: %w", err)
+		return coreerr.E("ai.Record", "create metrics directory", err)
 	}
 
 	path := metricsFilePath(dir, event.Timestamp)
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return fmt.Errorf("open metrics file: %w", err)
+		return coreerr.E("ai.Record", "open metrics file", err)
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close metrics file: %w", cerr)
+			err = coreerr.E("ai.Record", "close metrics file", cerr)
 		}
 	}()
 
 	data, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+		return coreerr.E("ai.Record", "marshal event", err)
 	}
 
 	if _, err := f.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("write event: %w", err)
+		return coreerr.E("ai.Record", "write event", err)
 	}
 
 	return nil
@@ -115,7 +115,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("open metrics file %s: %w", path, err)
+		return nil, coreerr.E("ai.readMetricsFile", "open metrics file", err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -131,7 +131,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read metrics file %s: %w", path, err)
+		return nil, coreerr.E("ai.readMetricsFile", "read metrics file", err)
 	}
 	return events, nil
 }

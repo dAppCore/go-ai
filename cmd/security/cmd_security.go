@@ -1,7 +1,6 @@
 package security
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 	"forge.lthn.ai/core/go-i18n"
 	"forge.lthn.ai/core/go-io"
+	coreerr "forge.lthn.ai/core/go-log"
 	"forge.lthn.ai/core/go-scm/repos"
 )
 
@@ -129,7 +129,7 @@ func loadRegistry(registryPath string) (*repos.Registry, error) {
 // checkGH verifies gh CLI is available.
 func checkGH() error {
 	if _, err := exec.LookPath("gh"); err != nil {
-		return errors.New(i18n.T("error.gh_not_found"))
+		return coreerr.E("security.checkGH", i18n.T("error.gh_not_found"), nil)
 	}
 	return nil
 }
@@ -146,7 +146,7 @@ func runGHAPI(endpoint string) ([]byte, error) {
 				return []byte("[]"), nil // Return empty array for not found
 			}
 			if strings.Contains(stderr, "403") {
-				return nil, errors.New("access denied (check token permissions)")
+				return nil, coreerr.E("security.runGHAPI", "access denied (check token permissions)", nil)
 			}
 		}
 		return nil, cli.Wrap(err, "run gh api")

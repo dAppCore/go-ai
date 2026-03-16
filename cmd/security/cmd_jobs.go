@@ -1,7 +1,6 @@
 package security
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 	"forge.lthn.ai/core/go-ai/ai"
 	"forge.lthn.ai/core/go-i18n"
+	coreerr "forge.lthn.ai/core/go-log"
 )
 
 var (
@@ -69,7 +69,7 @@ func runJobs() error {
 func createJobForTarget(target string) error {
 	parts := strings.SplitN(target, "/", 2)
 	if len(parts) != 2 {
-		return errors.New("invalid target format: use owner/repo")
+		return coreerr.E("security.createJobForTarget", "invalid target format: use owner/repo", nil)
 	}
 
 	// Gather findings
@@ -134,7 +134,7 @@ func createJobForTarget(target string) error {
 	}
 
 	if fetchErrors == 3 {
-		return fmt.Errorf("failed to fetch any alerts for %s", target)
+		return coreerr.E("security.createJobForTarget", fmt.Sprintf("failed to fetch any alerts for %s", target), nil)
 	}
 
 	if summary.Total == 0 {

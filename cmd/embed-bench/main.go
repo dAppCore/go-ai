@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	coreerr "forge.lthn.ai/core/go-log"
 )
 
 var ollamaURL = flag.String("ollama", "http://localhost:11434", "Ollama base URL")
@@ -241,14 +243,14 @@ func embed(model, text string) ([]float64, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return nil, coreerr.E("embed", fmt.Sprintf("HTTP %d", resp.StatusCode), nil)
 	}
 	var result embedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 	if len(result.Embedding) == 0 {
-		return nil, fmt.Errorf("empty embedding")
+		return nil, coreerr.E("embed", "empty embedding", nil)
 	}
 	return result.Embedding, nil
 }
