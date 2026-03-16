@@ -10,6 +10,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	coreio "forge.lthn.ai/core/go-io"
 )
 
 // metricsMu protects concurrent file writes in Record.
@@ -54,7 +56,7 @@ func Record(event Event) (err error) {
 		return err
 	}
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := coreio.Local.EnsureDir(dir); err != nil {
 		return fmt.Errorf("create metrics directory: %w", err)
 	}
 
