@@ -3,10 +3,10 @@ module forge.lthn.ai/core/go-ai
 go 1.26.0
 
 require (
-	forge.lthn.ai/core/cli v0.3.0
-	forge.lthn.ai/core/go-i18n v0.1.0
-	forge.lthn.ai/core/go-io v0.1.0
-	forge.lthn.ai/core/go-log v0.0.1
+	forge.lthn.ai/core/cli v0.3.5
+	forge.lthn.ai/core/go-i18n v0.1.6
+	forge.lthn.ai/core/go-io v0.1.5
+	forge.lthn.ai/core/go-log v0.0.4
 	forge.lthn.ai/core/go-process v0.1.2
 	forge.lthn.ai/core/go-rag v0.1.0
 	forge.lthn.ai/core/go-scm v0.2.0
@@ -15,9 +15,9 @@ require (
 
 require (
 	forge.lthn.ai/core/api v0.1.0 // indirect
-	forge.lthn.ai/core/go v0.3.0 // indirect
-	forge.lthn.ai/core/go-crypt v0.1.0 // indirect
-	forge.lthn.ai/core/go-inference v0.1.0 // indirect
+	forge.lthn.ai/core/go v0.3.1 // indirect
+	forge.lthn.ai/core/go-crypt v0.1.10 // indirect
+	forge.lthn.ai/core/go-inference v0.1.4 // indirect
 	forge.lthn.ai/core/go-ml v0.1.0 // indirect
 	forge.lthn.ai/core/go-mlx v0.1.0 // indirect
 	forge.lthn.ai/core/go-webview v0.1.0 // indirect
