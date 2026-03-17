@@ -13,13 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test Commands
 
 ```bash
-go build ./...                       # Build (library — no main package)
-go test ./...                        # Run all tests
-go test -run TestName ./ai/...       # Run a single test
-go test -v -race ./...               # Verbose with race detector
-go test -bench=. ./ai/...            # Run benchmarks (metrics)
-go vet ./...                         # Vet
-golangci-lint run ./...              # Lint
+go build forge.lthn.ai/core/go-ai/...            # Build (library — no main package)
+go test forge.lthn.ai/core/go-ai/...             # Run all tests
+go test -run TestName forge.lthn.ai/core/go-ai/ai  # Run a single test
+go test -v -race forge.lthn.ai/core/go-ai/...    # Verbose with race detector
+go test -bench=. forge.lthn.ai/core/go-ai/ai     # Run benchmarks (metrics)
+go vet forge.lthn.ai/core/go-ai/...              # Vet
+golangci-lint run ./...                           # Lint (from module root)
 ```
 
 ## Architecture
@@ -38,12 +38,11 @@ Each subpackage exposes an `Add*Command(root)` function that registers cobra com
 
 | Subpackage | Delegates to |
 |---|---|
-| `daemon/` | `forge.lthn.ai/core/mcp/pkg/mcp` — starts MCP server (stdio/TCP/Unix) |
+| `embed-bench/` | Ollama API — embedding model benchmarking tool |
+| `lab/` | `forge.lthn.ai/lthn/lem/pkg/lab` — homelab monitoring dashboard |
 | `metrics/` | `ai.ReadEvents()` / `ai.Summary()` |
 | `rag/` | `forge.lthn.ai/core/go-rag/cmd/rag` (re-export) |
 | `security/` | GitHub API via `gh` CLI (alerts, deps, secrets, scanning) |
-| `lab/` | `forge.lthn.ai/lthn/lem/pkg/lab` — homelab monitoring dashboard |
-| `embed-bench/` | Embedding benchmarking tool |
 
 ### Key sibling modules
 
@@ -53,7 +52,7 @@ The MCP server and tools live in separate modules. When working on tool registra
 - `forge.lthn.ai/core/go-rag` — Qdrant vector DB + Ollama embeddings
 - `forge.lthn.ai/core/go-ml` — Scoring engine, heuristics, probes
 - `forge.lthn.ai/core/go-inference` — Shared ML backend interfaces
-- `forge.lthn.ai/core/cli` — CLI framework (`cli.Command`, `cli.AddDaemonCommand`)
+- `forge.lthn.ai/core/cli` — CLI framework (`cli.Command`, command registration)
 - `forge.lthn.ai/core/go-i18n` — Internationalisation strings
 
 ## Coding Standards
@@ -61,6 +60,6 @@ The MCP server and tools live in separate modules. When working on tool registra
 - **UK English** in comments and user-facing strings (colour, organisation, centre)
 - **Conventional commits**: `type(scope): description`
 - **Co-Author**: `Co-Authored-By: Virgil <virgil@lethean.io>`
-- **Error handling**: Return `fmt.Errorf("context: %w", err)`, never panic
+- **Error handling**: Use `coreerr.E("pkg.Func", "what failed", err)` from `go-log`, never `fmt.Errorf` or panic
 - **Test naming**: `TestFoo_Good` (happy path), `TestFoo_Bad` (expected errors), `TestFoo_Ugly` (panics/edge cases)
 - **Licence**: EUPL-1.2 (SPDX header on new files)
