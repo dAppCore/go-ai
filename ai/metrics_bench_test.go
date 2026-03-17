@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	coreio "forge.lthn.ai/core/go-io"
 )
 
 // --- Helpers ---
@@ -20,7 +22,7 @@ func setupBenchMetricsDir(b *testing.B) string {
 	tmpHome := b.TempDir()
 	// Create the metrics path under the fake HOME
 	metricsPath := filepath.Join(tmpHome, ".core", "ai", "metrics")
-	if err := os.MkdirAll(metricsPath, 0o755); err != nil {
+	if err := coreio.Local.EnsureDir(metricsPath); err != nil {
 		b.Fatalf("Failed to create metrics dir: %v", err)
 	}
 	os.Setenv("HOME", tmpHome)
@@ -194,7 +196,7 @@ func TestMetricsRecordAndRead_10K_Good(t *testing.T) {
 	origHome := os.Getenv("HOME")
 	tmpHome := t.TempDir()
 	metricsPath := filepath.Join(tmpHome, ".core", "ai", "metrics")
-	if err := os.MkdirAll(metricsPath, 0o755); err != nil {
+	if err := coreio.Local.EnsureDir(metricsPath); err != nil {
 		t.Fatalf("Failed to create metrics dir: %v", err)
 	}
 	os.Setenv("HOME", tmpHome)
