@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	coreerr "forge.lthn.ai/core/go-log"
+	coreerr "dappco.re/go/core/log"
 	"forge.lthn.ai/core/go-rag"
 )
 

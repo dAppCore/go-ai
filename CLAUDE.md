@@ -6,19 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **go-ai** is a thin facade layer in the Lethean AI stack. After a March 2026 refactor, the MCP server and all 49 tools were extracted to `forge.lthn.ai/core/mcp`. What remains here is the AI metrics system, a RAG query wrapper, and CLI command wrappers that delegate to other modules.
 
-- **Module path**: `forge.lthn.ai/core/go-ai`
+- **Module path**: `dappco.re/go/core/ai`
 - **Language**: Go 1.26
 - **Licence**: EUPL-1.2
 
 ## Build & Test Commands
 
 ```bash
-go build forge.lthn.ai/core/go-ai/...            # Build (library — no main package)
-go test forge.lthn.ai/core/go-ai/...             # Run all tests
-go test -run TestName forge.lthn.ai/core/go-ai/ai  # Run a single test
-go test -v -race forge.lthn.ai/core/go-ai/...    # Verbose with race detector
-go test -bench=. forge.lthn.ai/core/go-ai/ai     # Run benchmarks (metrics)
-go vet forge.lthn.ai/core/go-ai/...              # Vet
+go build dappco.re/go/core/ai/...            # Build (library — no main package)
+go test dappco.re/go/core/ai/...             # Run all tests
+go test -run TestName dappco.re/go/core/ai/ai  # Run a single test
+go test -v -race dappco.re/go/core/ai/...    # Verbose with race detector
+go test -bench=. dappco.re/go/core/ai/ai     # Run benchmarks (metrics)
+go vet dappco.re/go/core/ai/...              # Vet
 golangci-lint run ./...                           # Lint (from module root)
 ```
 

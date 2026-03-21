@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	coreio "forge.lthn.ai/core/go-io"
+	coreio "dappco.re/go/core/io"
 )
 
 // withTempHome overrides HOME to a temp dir for the duration of the test.

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"forge.lthn.ai/core/go-ai/ai"
+	"dappco.re/go/core/ai/ai"
 	"forge.lthn.ai/core/cli/pkg/cli"
-	"forge.lthn.ai/core/go-i18n"
+	"dappco.re/go/core/i18n"
 )
 
 var (

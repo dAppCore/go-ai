@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	coreerr "forge.lthn.ai/core/go-log"
+	coreerr "dappco.re/go/core/log"
 )
 
 var ollamaURL = flag.String("ollama", "http://localhost:11434", "Ollama base URL")

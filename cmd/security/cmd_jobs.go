@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
-	"forge.lthn.ai/core/go-ai/ai"
-	"forge.lthn.ai/core/go-i18n"
-	coreerr "forge.lthn.ai/core/go-log"
+	"dappco.re/go/core/ai/ai"
+	"dappco.re/go/core/i18n"
+	coreerr "dappco.re/go/core/log"
 )
 
 var (

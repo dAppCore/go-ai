@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	coreio "forge.lthn.ai/core/go-io"
-	coreerr "forge.lthn.ai/core/go-log"
+	coreio "dappco.re/go/core/io"
+	coreerr "dappco.re/go/core/log"
 )
 
 // metricsMu protects concurrent file writes in Record.

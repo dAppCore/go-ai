@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	coreio "forge.lthn.ai/core/go-io"
+	coreio "dappco.re/go/core/io"
 )
 
 // --- Helpers ---

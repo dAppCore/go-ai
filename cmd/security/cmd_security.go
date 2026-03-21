@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
-	"forge.lthn.ai/core/go-i18n"
-	"forge.lthn.ai/core/go-io"
-	coreerr "forge.lthn.ai/core/go-log"
+	"dappco.re/go/core/i18n"
+	"dappco.re/go/core/io"
+	coreerr "dappco.re/go/core/log"
 	"forge.lthn.ai/core/go-scm/repos"
 )
 
