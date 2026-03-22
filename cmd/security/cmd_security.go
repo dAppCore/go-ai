@@ -10,7 +10,7 @@ import (
 	"dappco.re/go/core/i18n"
 	"dappco.re/go/core/io"
 	coreerr "dappco.re/go/core/log"
-	"forge.lthn.ai/core/go-scm/repos"
+	"dappco.re/go/core/scm/repos"
 )
 
 var (

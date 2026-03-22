@@ -3,16 +3,16 @@ module dappco.re/go/core/ai
 go 1.26.0
 
 require (
-	dappco.re/go/core/i18n v0.1.7
-	dappco.re/go/core/io v0.1.7
-	dappco.re/go/core/log v0.0.4
+	dappco.re/go/core/i18n v0.2.0
+	dappco.re/go/core/io v0.2.0
+	dappco.re/go/core/log v0.1.0
+	dappco.re/go/core/scm v0.4.0
 	forge.lthn.ai/core/cli v0.3.7
 	forge.lthn.ai/core/go-rag v0.1.11
-	forge.lthn.ai/core/go-scm v0.2.0
 )
 
 require (
-	dappco.re/go/core v0.4.7 // indirect
+	dappco.re/go/core v0.5.0 // indirect
 	forge.lthn.ai/core/go v0.3.3 // indirect
 	forge.lthn.ai/core/go-i18n v0.1.7 // indirect
 	forge.lthn.ai/core/go-inference v0.1.7 // indirect
@@ -56,24 +56,4 @@ require (
 	google.golang.org/grpc v1.79.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-)
-
-replace (
-	dappco.re/go/core => ../go
-	dappco.re/go/core/i18n => ../go-i18n
-	dappco.re/go/core/io => ../go-io
-	dappco.re/go/core/log => ../go-log
-	dappco.re/go/core/webview => ../go-webview
-	dappco.re/go/core/ws => ../go-ws
-	forge.lthn.ai/core/api => ../api
-	forge.lthn.ai/core/cli => ../cli
-	forge.lthn.ai/core/go-crypt => ../go-crypt
-	forge.lthn.ai/core/go-inference => ../go-inference
-	forge.lthn.ai/core/go-ml => ../go-ml
-	forge.lthn.ai/core/go-mlx => ../go-mlx
-	forge.lthn.ai/core/go-process => ../go-process
-	forge.lthn.ai/core/go-rag => ../go-rag
-	forge.lthn.ai/core/go-scm => ../go-scm
-	forge.lthn.ai/core/mcp => ../mcp
-	forge.lthn.ai/lthn/lem => ../../lthn/LEM
 )
