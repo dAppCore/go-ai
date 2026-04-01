@@ -30,7 +30,7 @@ Two concerns, no external service calls at import time:
 
 1. **Metrics** (`metrics.go`) — Append-only JSONL event storage at `~/.core/ai/metrics/YYYY-MM-DD.jsonl`. Thread-safe via `sync.Mutex`. Key functions: `Record(Event)`, `ReadEvents(since)`, `Summary([]Event)`.
 
-2. **RAG** (`rag.go`) — `QueryRAGForTask(TaskInfo)` wraps `go-rag` to query Qdrant for documentation context. Truncates to 500 runes, returns top-3 results above 0.5 threshold. Returns error (not empty string) on failure for graceful degradation at call sites.
+2. **RAG** (`rag.go`) — `QueryRAGForTask(TaskInfo)` wraps `go-rag` to query Qdrant for documentation context. Truncates to 500 runes, returns top-3 results above 0.5 threshold. Returns an empty string on failure for graceful degradation at call sites.
 
 ### `cmd/` — CLI command wrappers
 

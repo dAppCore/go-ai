@@ -4,8 +4,13 @@ import (
 	"context"
 	"time"
 
-	coreerr "dappco.re/go/core/log"
 	"forge.lthn.ai/core/go-rag"
+)
+
+var (
+	newQdrantClient = rag.NewQdrantClient
+	newOllamaClient = rag.NewOllamaClient
+	runRAGQuery     = rag.Query
 )
 
 // TaskInfo carries the minimal task data needed for RAG queries,
@@ -17,8 +22,9 @@ type TaskInfo struct {
 
 // QueryRAGForTask queries Qdrant for documentation relevant to a task.
 // It builds a query from the task title and description, queries with
-// sensible defaults, and returns formatted context.
-func QueryRAGForTask(task TaskInfo) (string, error) {
+// sensible defaults, and returns formatted context or an empty string
+// when the backing services are unavailable.
+func QueryRAGForTask(task TaskInfo) string {
 	query := task.Title + " " + task.Description
 
 	// Truncate to 500 runes to keep the embedding focused.
@@ -28,16 +34,16 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	}
 
 	qdrantCfg := rag.DefaultQdrantConfig()
-	qdrantClient, err := rag.NewQdrantClient(qdrantCfg)
+	qdrantClient, err := newQdrantClient(qdrantCfg)
 	if err != nil {
-		return "", coreerr.E("ai.QueryRAGForTask", "rag qdrant client", err)
+		return ""
 	}
 	defer func() { _ = qdrantClient.Close() }()
 
 	ollamaCfg := rag.DefaultOllamaConfig()
-	ollamaClient, err := rag.NewOllamaClient(ollamaCfg)
+	ollamaClient, err := newOllamaClient(ollamaCfg)
 	if err != nil {
-		return "", coreerr.E("ai.QueryRAGForTask", "rag ollama client", err)
+		return ""
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -49,10 +55,10 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 		Threshold:  0.5,
 	}
 
-	results, err := rag.Query(ctx, qdrantClient, ollamaClient, query, queryCfg)
+	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, query, queryCfg)
 	if err != nil {
-		return "", coreerr.E("ai.QueryRAGForTask", "rag query", err)
+		return ""
 	}
 
-	return rag.FormatResultsContext(results), nil
+	return rag.FormatResultsContext(results)
 }

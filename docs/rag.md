@@ -62,7 +62,7 @@ type TaskInfo struct {
     Description string
 }
 
-func QueryRAGForTask(task TaskInfo) (string, error) {
+func QueryRAGForTask(task TaskInfo) string {
     query := task.Title + " " + task.Description
 
     // Truncate to 500 runes to keep the embedding focused
@@ -74,14 +74,14 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
     qdrantCfg := rag.DefaultQdrantConfig()
     qdrantClient, err := rag.NewQdrantClient(qdrantCfg)
     if err != nil {
-        return "", fmt.Errorf("rag qdrant client: %w", err)
+        return ""
     }
     defer qdrantClient.Close()
 
     ollamaCfg := rag.DefaultOllamaConfig()
     ollamaClient, err := rag.NewOllamaClient(ollamaCfg)
     if err != nil {
-        return "", fmt.Errorf("rag ollama client: %w", err)
+        return ""
     }
 
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -93,16 +93,16 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
         Threshold:  0.5,
     })
     if err != nil {
-        return "", fmt.Errorf("rag query: %w", err)
+        return ""
     }
-    return rag.FormatResultsContext(results), nil
+    return rag.FormatResultsContext(results)
 }
 ```
 
 Key design decisions:
 - The query is capped at **500 runes** to keep the embedding vector focused on the task's core intent
 - A **10-second timeout** prevents hanging when services are slow
-- The function returns an error rather than silently degrading, giving callers the choice of how to handle failures
+- The function degrades to an empty string rather than propagating errors, allowing callers to continue without RAG context
 
 ## External Service Dependencies
 
