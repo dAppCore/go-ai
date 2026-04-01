@@ -13,7 +13,7 @@ var (
 	runRAGQuery     = rag.Query
 )
 
-// TaskInfo carries the minimal task data needed for RAG queries.
+// TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"} carries the minimal task data needed for RAG queries.
 type TaskInfo struct {
 	Title       string
 	Description string

@@ -15,10 +15,10 @@ import (
 	coreerr "dappco.re/go/core/log"
 )
 
-// metricsMu protects concurrent file writes in Record.
-var metricsMu sync.Mutex
+// metricsWriteMu protects concurrent file writes in Record.
+var metricsWriteMu sync.Mutex
 
-// Event records AI and security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
+// Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
 type Event struct {
 	Type      string         `json:"type"`
 	Timestamp time.Time      `json:"timestamp"`
@@ -42,14 +42,14 @@ func metricsFilePath(dir string, t time.Time) string {
 	return filepath.Join(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
+// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
 func Record(event Event) (err error) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
 
-	metricsMu.Lock()
-	defer metricsMu.Unlock()
+	metricsWriteMu.Lock()
+	defer metricsWriteMu.Unlock()
 
 	dir, err := metricsDir()
 	if err != nil {
@@ -84,7 +84,7 @@ func Record(event Event) (err error) {
 	return nil
 }
 
-// ReadEvents(time.Now().Add(-24 * time.Hour)) reads the recent daily JSONL files and silently skips any missing days.
+// ReadEvents(time.Now().Add(-24 * time.Hour)) reads recent daily JSONL files and silently skips any missing days.
 func ReadEvents(since time.Time) ([]Event, error) {
 	dir, err := metricsDir()
 	if err != nil {
@@ -136,7 +136,8 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	return events, nil
 }
 
-// Summary(ai.ReadEvents(time.Now().Add(-24 * time.Hour))) aggregates counts by type, repo, and agent.
+// Summary(events) aggregates counts by type, repo, and agent.
+// Example: Summary([]Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}})
 func Summary(events []Event) map[string]any {
 	byTypeCounts := make(map[string]int)
 	byRepoCounts := make(map[string]int)
