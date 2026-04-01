@@ -228,9 +228,9 @@ func TestSummary_Good_Empty(t *testing.T) {
 
 func TestSummary_Good(t *testing.T) {
 	events := []Event{
-		{Type: "build", Repo: "core-php", AgentID: "agent-1"},
-		{Type: "build", Repo: "core-php", AgentID: "agent-2"},
-		{Type: "test", Repo: "core-api", AgentID: "agent-1"},
+		{Type: "build", Repo: "core-php", AgentID: "agent-1", Timestamp: time.Date(2026, 3, 15, 9, 0, 0, 0, time.UTC)},
+		{Type: "build", Repo: "core-php", AgentID: "agent-2", Timestamp: time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC)},
+		{Type: "test", Repo: "core-api", AgentID: "agent-1", Timestamp: time.Date(2026, 3, 15, 11, 0, 0, 0, time.UTC)},
 	}
 
 	s := Summary(events)
@@ -247,6 +247,39 @@ func TestSummary_Good(t *testing.T) {
 	// Sorted by count descending — "build" (2) first
 	if byType[0]["key"] != "build" || byType[0]["count"] != 2 {
 		t.Errorf("expected build:2 first, got %v:%v", byType[0]["key"], byType[0]["count"])
+	}
+
+	recent, _ := s["events"].([]map[string]any)
+	if len(recent) != 3 {
+		t.Fatalf("expected 3 recent events, got %d", len(recent))
+	}
+	if recent[0]["type"] != "test" {
+		t.Errorf("expected newest event first, got %v", recent[0]["type"])
+	}
+	if _, ok := recent[0]["timestamp"].(time.Time); !ok {
+		t.Errorf("expected timestamp to be time.Time, got %T", recent[0]["timestamp"])
+	}
+}
+
+func TestSummary_Good_RecentEventsLimit(t *testing.T) {
+	events := make([]Event, 0, 12)
+	for i := 0; i < 12; i++ {
+		events = append(events, Event{
+			Type:      "type",
+			Timestamp: time.Date(2026, 3, 15, 12, i, 0, 0, time.UTC),
+		})
+	}
+
+	s := Summary(events)
+	recent, _ := s["events"].([]map[string]any)
+	if len(recent) != 10 {
+		t.Fatalf("expected 10 recent events, got %d", len(recent))
+	}
+	if recent[0]["timestamp"].(time.Time).Minute() != 11 {
+		t.Errorf("expected newest event first, got minute %d", recent[0]["timestamp"].(time.Time).Minute())
+	}
+	if recent[9]["timestamp"].(time.Time).Minute() != 2 {
+		t.Errorf("expected tenth newest event last, got minute %d", recent[9]["timestamp"].(time.Time).Minute())
 	}
 }
 

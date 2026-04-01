@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -152,11 +153,21 @@ func Summary(events []Event) map[string]any {
 		}
 	}
 
+	recent := make([]Event, len(events))
+	copy(recent, events)
+	sort.SliceStable(recent, func(i, j int) bool {
+		return recent[i].Timestamp.After(recent[j].Timestamp)
+	})
+	if len(recent) > 10 {
+		recent = recent[:10]
+	}
+
 	return map[string]any{
 		"total":    len(events),
 		"by_type":  sortedMap(byType),
 		"by_repo":  sortedMap(byRepo),
 		"by_agent": sortedMap(byAgent),
+		"events":   briefEvents(recent),
 	}
 }
 
@@ -178,6 +189,25 @@ func sortedMap(m map[string]int) []map[string]any {
 	result := make([]map[string]any, len(entries))
 	for i, e := range entries {
 		result[i] = map[string]any{"key": e.key, "count": e.count}
+	}
+	return result
+}
+
+// briefEvents converts events into the compact shape used by metrics_query.
+func briefEvents(events []Event) []map[string]any {
+	result := make([]map[string]any, len(events))
+	for i, ev := range events {
+		item := map[string]any{
+			"type":      ev.Type,
+			"timestamp": ev.Timestamp,
+		}
+		if ev.AgentID != "" {
+			item["agent_id"] = ev.AgentID
+		}
+		if ev.Repo != "" {
+			item["repo"] = ev.Repo
+		}
+		result[i] = item
 	}
 	return result
 }

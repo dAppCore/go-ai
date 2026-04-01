@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
 	"dappco.re/go/core/ai/ai"
 	"dappco.re/go/core/i18n"
 	coreerr "dappco.re/go/core/log"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 var (
@@ -90,6 +90,23 @@ func runMetrics() error {
 		cli.Print("%s\n", cli.DimStyle.Render("By contributor:"))
 		for _, entry := range byAgent {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
+		}
+		cli.Blank()
+	}
+
+	// Recent events
+	if recent, ok := summary["events"].([]map[string]any); ok && len(recent) > 0 {
+		cli.Print("%s\n", cli.DimStyle.Render("Recent events:"))
+		for _, entry := range recent {
+			ts, _ := entry["timestamp"].(time.Time)
+			agent, _ := entry["agent_id"].(string)
+			repo, _ := entry["repo"].(string)
+			cli.Print("  %-20s %-24s %-20s %-20s\n",
+				ts.Format(time.RFC3339),
+				entry["type"],
+				agent,
+				repo,
+			)
 		}
 		cli.Blank()
 	}
