@@ -283,18 +283,18 @@ func TestSummary_Good_RecentEventsLimit(t *testing.T) {
 	}
 }
 
-// --- sortedMap ---
+// --- sortedCountPairs ---
 
-func TestSortedMap_Good_Empty(t *testing.T) {
-	result := sortedMap(map[string]int{})
+func TestSortedCountPairs_Good_Empty(t *testing.T) {
+	result := sortedCountPairs(map[string]int{})
 	if len(result) != 0 {
 		t.Errorf("expected empty slice, got %d entries", len(result))
 	}
 }
 
-func TestSortedMap_Good_Ordering(t *testing.T) {
+func TestSortedCountPairs_Good_Ordering(t *testing.T) {
 	m := map[string]int{"a": 1, "b": 3, "c": 2}
-	result := sortedMap(m)
+	result := sortedCountPairs(m)
 	if len(result) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(result))
 	}

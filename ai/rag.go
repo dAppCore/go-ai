@@ -13,35 +13,31 @@ var (
 	runRAGQuery     = rag.Query
 )
 
-// TaskInfo carries the minimal task data needed for RAG queries,
-// avoiding a direct dependency on pkg/agentic (which imports pkg/ai).
+// TaskInfo carries the minimal task data needed for RAG queries.
 type TaskInfo struct {
 	Title       string
 	Description string
 }
 
-// QueryRAGForTask queries Qdrant for documentation relevant to a task.
-// It builds a query from the task title and description, queries with
-// sensible defaults, and returns formatted context or an empty string
-// when the backing services are unavailable.
+// QueryRAGForTask(TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"}) returns formatted RAG context, or "" when dependencies are unavailable.
 func QueryRAGForTask(task TaskInfo) string {
-	query := task.Title + " " + task.Description
+	queryText := task.Title + " " + task.Description
 
 	// Truncate to 500 runes to keep the embedding focused.
-	runes := []rune(query)
+	runes := []rune(queryText)
 	if len(runes) > 500 {
-		query = string(runes[:500])
+		queryText = string(runes[:500])
 	}
 
-	qdrantCfg := rag.DefaultQdrantConfig()
-	qdrantClient, err := newQdrantClient(qdrantCfg)
+	qdrantConfig := rag.DefaultQdrantConfig()
+	qdrantClient, err := newQdrantClient(qdrantConfig)
 	if err != nil {
 		return ""
 	}
 	defer func() { _ = qdrantClient.Close() }()
 
-	ollamaCfg := rag.DefaultOllamaConfig()
-	ollamaClient, err := newOllamaClient(ollamaCfg)
+	ollamaConfig := rag.DefaultOllamaConfig()
+	ollamaClient, err := newOllamaClient(ollamaConfig)
 	if err != nil {
 		return ""
 	}
@@ -49,13 +45,13 @@ func QueryRAGForTask(task TaskInfo) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	queryCfg := rag.QueryConfig{
+	queryConfig := rag.QueryConfig{
 		Collection: "hostuk-docs",
 		Limit:      3,
 		Threshold:  0.5,
 	}
 
-	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, query, queryCfg)
+	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfig)
 	if err != nil {
 		return ""
 	}

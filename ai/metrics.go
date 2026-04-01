@@ -18,7 +18,7 @@ import (
 // metricsMu protects concurrent file writes in Record.
 var metricsMu sync.Mutex
 
-// Event represents a recorded AI/security metric event.
+// Event records AI and security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
 type Event struct {
 	Type      string         `json:"type"`
 	Timestamp time.Time      `json:"timestamp"`
@@ -42,8 +42,7 @@ func metricsFilePath(dir string, t time.Time) string {
 	return filepath.Join(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// Record appends an event to the daily JSONL file at
-// ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
+// Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
 func Record(event Event) (err error) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
@@ -85,7 +84,7 @@ func Record(event Event) (err error) {
 	return nil
 }
 
-// ReadEvents reads events from JSONL files within the given time range.
+// ReadEvents(time.Now().Add(-24 * time.Hour)) reads the recent daily JSONL files and silently skips any missing days.
 func ReadEvents(since time.Time) ([]Event, error) {
 	dir, err := metricsDir()
 	if err != nil {
@@ -137,48 +136,48 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	return events, nil
 }
 
-// Summary aggregates events into counts by type, repo, and agent.
+// Summary(ai.ReadEvents(time.Now().Add(-24 * time.Hour))) aggregates counts by type, repo, and agent.
 func Summary(events []Event) map[string]any {
-	byType := make(map[string]int)
-	byRepo := make(map[string]int)
-	byAgent := make(map[string]int)
+	byTypeCounts := make(map[string]int)
+	byRepoCounts := make(map[string]int)
+	byAgentCounts := make(map[string]int)
 
 	for _, ev := range events {
-		byType[ev.Type]++
+		byTypeCounts[ev.Type]++
 		if ev.Repo != "" {
-			byRepo[ev.Repo]++
+			byRepoCounts[ev.Repo]++
 		}
 		if ev.AgentID != "" {
-			byAgent[ev.AgentID]++
+			byAgentCounts[ev.AgentID]++
 		}
 	}
 
-	recent := make([]Event, len(events))
-	copy(recent, events)
-	sort.SliceStable(recent, func(i, j int) bool {
-		return recent[i].Timestamp.After(recent[j].Timestamp)
+	recentEvents := make([]Event, len(events))
+	copy(recentEvents, events)
+	sort.SliceStable(recentEvents, func(i, j int) bool {
+		return recentEvents[i].Timestamp.After(recentEvents[j].Timestamp)
 	})
-	if len(recent) > 10 {
-		recent = recent[:10]
+	if len(recentEvents) > 10 {
+		recentEvents = recentEvents[:10]
 	}
 
 	return map[string]any{
 		"total":    len(events),
-		"by_type":  sortedMap(byType),
-		"by_repo":  sortedMap(byRepo),
-		"by_agent": sortedMap(byAgent),
-		"events":   briefEvents(recent),
+		"by_type":  sortedCountPairs(byTypeCounts),
+		"by_repo":  sortedCountPairs(byRepoCounts),
+		"by_agent": sortedCountPairs(byAgentCounts),
+		"events":   compactEvents(recentEvents),
 	}
 }
 
-// sortedMap returns a slice of key-count pairs sorted by count descending.
-func sortedMap(m map[string]int) []map[string]any {
+// sortedCountPairs returns a slice of key-count pairs sorted by count descending.
+func sortedCountPairs(counts map[string]int) []map[string]any {
 	type entry struct {
 		key   string
 		count int
 	}
-	entries := make([]entry, 0, len(m))
-	for k, v := range m {
+	entries := make([]entry, 0, len(counts))
+	for k, v := range counts {
 		entries = append(entries, entry{k, v})
 	}
 
@@ -193,8 +192,8 @@ func sortedMap(m map[string]int) []map[string]any {
 	return result
 }
 
-// briefEvents converts events into the compact shape used by metrics_query.
-func briefEvents(events []Event) []map[string]any {
+// compactEvents converts events into the compact shape used by metrics_query.
+func compactEvents(events []Event) []map[string]any {
 	result := make([]map[string]any, len(events))
 	for i, ev := range events {
 		item := map[string]any{
