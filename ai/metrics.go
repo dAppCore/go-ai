@@ -170,7 +170,8 @@ func Summary(events []Event) map[string]any {
 	}
 }
 
-// sortedCountPairs returns a slice of key-count pairs sorted by count descending.
+// sortedCountPairs returns a slice of key-count pairs sorted by count descending,
+// with key ascending as a deterministic tie-breaker.
 func sortedCountPairs(counts map[string]int) []map[string]any {
 	type entry struct {
 		key   string
@@ -182,7 +183,10 @@ func sortedCountPairs(counts map[string]int) []map[string]any {
 	}
 
 	slices.SortFunc(entries, func(a, b entry) int {
-		return cmp.Compare(b.count, a.count)
+		if result := cmp.Compare(b.count, a.count); result != 0 {
+			return result
+		}
+		return cmp.Compare(a.key, b.key)
 	})
 
 	result := make([]map[string]any, len(entries))

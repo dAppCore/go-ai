@@ -309,3 +309,20 @@ func TestSortedCountPairs_Good_Ordering(t *testing.T) {
 		t.Errorf("expected third key 'a', got %v", result[2]["key"])
 	}
 }
+
+func TestSortedCountPairs_Good_TieBreakByKey(t *testing.T) {
+	m := map[string]int{"beta": 2, "alpha": 2, "gamma": 1}
+	result := sortedCountPairs(m)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(result))
+	}
+	if result[0]["key"] != "alpha" {
+		t.Errorf("expected tie-break to prefer alpha, got %v", result[0]["key"])
+	}
+	if result[1]["key"] != "beta" {
+		t.Errorf("expected beta second, got %v", result[1]["key"])
+	}
+	if result[2]["key"] != "gamma" {
+		t.Errorf("expected gamma last, got %v", result[2]["key"])
+	}
+}
