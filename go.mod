@@ -7,17 +7,17 @@ require (
 	dappco.re/go/core/io v0.2.0
 	dappco.re/go/core/log v0.1.0
 	dappco.re/go/core/scm v0.4.0
-	forge.lthn.ai/core/cli v0.3.7
-	forge.lthn.ai/core/go-rag v0.1.11
+	dappco.re/go/core/cli v0.3.7
+	dappco.re/go/core/rag v0.1.11
 )
 
 require (
 	dappco.re/go/core v0.5.0 // indirect
-	forge.lthn.ai/core/go v0.3.3 // indirect
-	forge.lthn.ai/core/go-i18n v0.1.7 // indirect
-	forge.lthn.ai/core/go-inference v0.1.7 // indirect
-	forge.lthn.ai/core/go-io v0.1.7 // indirect
-	forge.lthn.ai/core/go-log v0.0.4 // indirect
+	dappco.re/go/core v0.3.3 // indirect
+	dappco.re/go/core/i18n v0.1.7 // indirect
+	dappco.re/go/core/inference v0.1.7 // indirect
+	dappco.re/go/core/io v0.1.7 // indirect
+	dappco.re/go/core/log v0.0.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
