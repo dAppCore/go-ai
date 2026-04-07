@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"forge.lthn.ai/core/go-rag"
+	"dappco.re/go/core/rag"
 )
 
 var (

@@ -3,21 +3,17 @@ module dappco.re/go/core/ai
 go 1.26.0
 
 require (
-	dappco.re/go/core/i18n v0.2.0
-	dappco.re/go/core/io v0.2.0
-	dappco.re/go/core/log v0.1.0
-	dappco.re/go/core/scm v0.4.0
-	dappco.re/go/core/cli v0.3.7
-	dappco.re/go/core/rag v0.1.11
+	dappco.re/go/core/cli v0.5.2
+	dappco.re/go/core/i18n v0.2.3
+	dappco.re/go/core/io v0.4.1
+	dappco.re/go/core/log v0.1.2
+	dappco.re/go/core/rag v0.1.13
+	dappco.re/go/core/scm v0.6.1
 )
 
 require (
-	dappco.re/go/core v0.5.0 // indirect
-	dappco.re/go/core v0.3.3 // indirect
-	dappco.re/go/core/i18n v0.1.7 // indirect
-	dappco.re/go/core/inference v0.1.7 // indirect
-	dappco.re/go/core/io v0.1.7 // indirect
-	dappco.re/go/core/log v0.0.4 // indirect
+	dappco.re/go/core v0.8.0-alpha.1 // indirect
+	dappco.re/go/core/inference v0.3.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect

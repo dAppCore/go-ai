@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"forge.lthn.ai/core/go-rag"
+	"dappco.re/go/core/rag"
 )
 
 func TestQueryRAGForTask_Good_FallsBackToEmptyString(t *testing.T) {

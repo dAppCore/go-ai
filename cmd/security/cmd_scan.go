@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"dappco.re/go/core/ai/ai"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 )
 

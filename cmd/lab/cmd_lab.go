@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"time"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/core/cli/pkg/cli"
 	"forge.lthn.ai/lthn/lem/pkg/lab"
 	"forge.lthn.ai/lthn/lem/pkg/lab/collector"
 	"forge.lthn.ai/lthn/lem/pkg/lab/handler"
