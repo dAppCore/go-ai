@@ -1,10 +1,9 @@
 package security
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
+	"dappco.re/go/core"
 	"dappco.re/go/core/ai/ai"
 	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
@@ -70,7 +69,7 @@ func runScan() error {
 	summary := &AlertSummary{}
 
 	for _, repo := range repoList {
-		repoFullName := fmt.Sprintf("%s/%s", reg.Org, repo.Name)
+		repoFullName := core.Sprintf("%s/%s", reg.Org, repo.Name)
 
 		alerts, err := fetchCodeScanningAlerts(repoFullName)
 		if err != nil {
@@ -127,11 +126,7 @@ func runScan() error {
 	})
 
 	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
@@ -148,11 +143,11 @@ func runScan() error {
 	for _, alert := range allAlerts {
 		sevStyle := severityStyle(alert.Severity)
 
-		location := fmt.Sprintf("%s:%d", alert.Path, alert.Line)
+		location := core.Sprintf("%s:%d", alert.Path, alert.Line)
 
 		cli.Print("%-16s %s  %-20s %-40s %s\n",
 			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(fmt.Sprintf("%-8s", alert.Severity)),
+			sevStyle.Render(core.Sprintf("%-8s", alert.Severity)),
 			alert.RuleID,
 			location,
 			cli.DimStyle.Render(alert.Tool),
@@ -221,11 +216,7 @@ func runScanForTarget(target string) error {
 	})
 
 	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
@@ -239,10 +230,10 @@ func runScanForTarget(target string) error {
 
 	for _, alert := range allAlerts {
 		sevStyle := severityStyle(alert.Severity)
-		location := fmt.Sprintf("%s:%d", alert.Path, alert.Line)
+		location := core.Sprintf("%s:%d", alert.Path, alert.Line)
 		cli.Print("%-16s %s  %-20s %-40s %s\n",
 			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(fmt.Sprintf("%-8s", alert.Severity)),
+			sevStyle.Render(core.Sprintf("%-8s", alert.Severity)),
 			alert.RuleID,
 			location,
 			cli.DimStyle.Render(alert.Tool),

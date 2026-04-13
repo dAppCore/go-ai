@@ -1,9 +1,7 @@
 package security
 
 import (
-	"encoding/json"
-	"fmt"
-
+	"dappco.re/go/core"
 	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 )
@@ -60,7 +58,7 @@ func runSecrets() error {
 	openCount := 0
 
 	for _, repo := range repoList {
-		repoFullName := fmt.Sprintf("%s/%s", reg.Org, repo.Name)
+		repoFullName := core.Sprintf("%s/%s", reg.Org, repo.Name)
 
 		alerts, err := fetchSecretScanningAlerts(repoFullName)
 		if err != nil {
@@ -86,18 +84,14 @@ func runSecrets() error {
 	}
 
 	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
 	// Print summary
 	cli.Blank()
 	if openCount > 0 {
-		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets:"), cli.ErrorStyle.Render(fmt.Sprintf("%d open", openCount)))
+		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets:"), cli.ErrorStyle.Render(core.Sprintf("%d open", openCount)))
 	} else {
 		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets:"), cli.SuccessStyle.Render("No exposed secrets"))
 	}
@@ -157,17 +151,13 @@ func runSecretsForTarget(target string) error {
 	}
 
 	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
 	cli.Blank()
 	if openCount > 0 {
-		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets ("+fullName+"):"), cli.ErrorStyle.Render(fmt.Sprintf("%d open", openCount)))
+		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets ("+fullName+"):"), cli.ErrorStyle.Render(core.Sprintf("%d open", openCount)))
 	} else {
 		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets ("+fullName+"):"), cli.SuccessStyle.Render("No exposed secrets"))
 	}

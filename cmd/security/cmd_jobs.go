@@ -1,13 +1,12 @@
 package security
 
 import (
-	"fmt"
 	"os/exec"
-	"strings"
 	"time"
 
-	"dappco.re/go/core/cli/pkg/cli"
+	"dappco.re/go/core"
 	"dappco.re/go/core/ai/ai"
+	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 	coreerr "dappco.re/go/core/log"
 )
@@ -67,7 +66,7 @@ func runJobs() error {
 }
 
 func createJobForTarget(target string) error {
-	parts := strings.SplitN(target, "/", 2)
+	parts := core.SplitN(target, "/", 2)
 	if len(parts) != 2 {
 		return coreerr.E("security.createJobForTarget", "invalid target format: use owner/repo", nil)
 	}
@@ -93,8 +92,8 @@ func createJobForTarget(target string) error {
 				severity = "medium"
 			}
 			summary.Add(severity)
-			findings = append(findings, fmt.Sprintf("- [%s] %s: %s (%s:%d)",
-				strings.ToUpper(severity), alert.Tool.Name, alert.Rule.Description,
+			findings = append(findings, core.Sprintf("- [%s] %s: %s (%s:%d)",
+				core.Upper(severity), alert.Tool.Name, alert.Rule.Description,
 				alert.MostRecentInstance.Location.Path, alert.MostRecentInstance.Location.StartLine))
 		}
 	}
@@ -111,8 +110,8 @@ func createJobForTarget(target string) error {
 				continue
 			}
 			summary.Add(alert.Advisory.Severity)
-			findings = append(findings, fmt.Sprintf("- [%s] %s: %s (%s)",
-				strings.ToUpper(alert.Advisory.Severity), alert.Dependency.Package.Name,
+			findings = append(findings, core.Sprintf("- [%s] %s: %s (%s)",
+				core.Upper(alert.Advisory.Severity), alert.Dependency.Package.Name,
 				alert.Advisory.Summary, alert.Advisory.CVEID))
 		}
 	}
@@ -129,12 +128,12 @@ func createJobForTarget(target string) error {
 				continue
 			}
 			summary.Add("high")
-			findings = append(findings, fmt.Sprintf("- [HIGH] Secret: %s (#%d)", alert.SecretType, alert.Number))
+			findings = append(findings, core.Sprintf("- [HIGH] Secret: %s (#%d)", alert.SecretType, alert.Number))
 		}
 	}
 
 	if fetchErrors == 3 {
-		return coreerr.E("security.createJobForTarget", fmt.Sprintf("failed to fetch any alerts for %s", target), nil)
+		return coreerr.E("security.createJobForTarget", core.Sprintf("failed to fetch any alerts for %s", target), nil)
 	}
 
 	if summary.Total == 0 {
@@ -143,13 +142,13 @@ func createJobForTarget(target string) error {
 	}
 
 	// Build issue body
-	title := fmt.Sprintf("Security scan: %s", target)
+	title := core.Sprintf("Security scan: %s", target)
 	body := buildJobIssueBody(target, summary, findings)
 
 	for i := range jobsCopies {
 		issueTitle := title
 		if jobsCopies > 1 {
-			issueTitle = fmt.Sprintf("%s (#%d)", title, i+1)
+			issueTitle = core.Sprintf("%s (#%d)", title, i+1)
 		}
 
 		if jobsDryRun {
@@ -171,10 +170,10 @@ func createJobForTarget(target string) error {
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return cli.Wrap(err, fmt.Sprintf("create issue for %s: %s", target, string(output)))
+			return cli.Wrap(err, core.Sprintf("create issue for %s: %s", target, string(output)))
 		}
 
-		issueURL := strings.TrimSpace(string(output))
+		issueURL := core.Trim(string(output))
 		cli.Print("%s %s: %s\n", cli.SuccessStyle.Render(">>"), issueTitle, issueURL)
 
 		// Record metrics
@@ -196,10 +195,10 @@ func createJobForTarget(target string) error {
 }
 
 func buildJobIssueBody(target string, summary *AlertSummary, findings []string) string {
-	var sb strings.Builder
+	sb := core.NewBuilder()
 
-	fmt.Fprintf(&sb, "## Security Scan: %s\n\n", target)
-	fmt.Fprintf(&sb, "**Summary:** %s\n\n", summary.String())
+	sb.WriteString(core.Sprintf("## Security Scan: %s\n\n", target))
+	sb.WriteString(core.Sprintf("**Summary:** %s\n\n", summary.String()))
 
 	sb.WriteString("### Findings\n\n")
 	if len(findings) > 50 {
@@ -207,7 +206,7 @@ func buildJobIssueBody(target string, summary *AlertSummary, findings []string) 
 		for _, f := range findings[:50] {
 			sb.WriteString(f + "\n")
 		}
-		fmt.Fprintf(&sb, "\n... and %d more\n", len(findings)-50)
+		sb.WriteString(core.Sprintf("\n... and %d more\n", len(findings)-50))
 	} else {
 		for _, f := range findings {
 			sb.WriteString(f + "\n")
@@ -222,7 +221,7 @@ func buildJobIssueBody(target string, summary *AlertSummary, findings []string) 
 
 	sb.WriteString("\n### Instructions\n\n")
 	sb.WriteString("1. Claim this issue by assigning yourself\n")
-	fmt.Fprintf(&sb, "2. Run `core security alerts --target %s` for the latest findings\n", target)
+	sb.WriteString(core.Sprintf("2. Run `core security alerts --target %s` for the latest findings\n", target))
 	sb.WriteString("3. Work through the checklist above\n")
 	sb.WriteString("4. Close this issue when all findings are addressed\n")
 

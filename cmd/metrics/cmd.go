@@ -2,14 +2,14 @@
 package metrics
 
 import (
-	"encoding/json"
-	"fmt"
+	"strconv"
 	"time"
 
+	"dappco.re/go/core"
 	"dappco.re/go/core/ai/ai"
+	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 	coreerr "dappco.re/go/core/log"
-	"dappco.re/go/core/cli/pkg/cli"
 )
 
 var (
@@ -51,11 +51,7 @@ func runMetrics() error {
 
 	if metricsJSON {
 		summary := ai.Summary(events)
-		output, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(summary))
 		return nil
 	}
 
@@ -121,19 +117,19 @@ func runMetrics() error {
 // parseDuration parses a human-friendly duration like "7d", "24h", "30d".
 func parseDuration(s string) (time.Duration, error) {
 	if len(s) < 2 {
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("invalid duration: %s", s), nil)
+		return 0, coreerr.E("metrics.parseDuration", core.Sprintf("invalid duration: %s", s), nil)
 	}
 
 	unit := s[len(s)-1]
 	value := s[:len(s)-1]
 
-	var n int
-	if _, err := fmt.Sscanf(value, "%d", &n); err != nil {
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("invalid duration: %s", s), nil)
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, coreerr.E("metrics.parseDuration", core.Sprintf("invalid duration: %s", s), nil)
 	}
 
 	if n <= 0 {
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("duration must be positive: %s", s), nil)
+		return 0, coreerr.E("metrics.parseDuration", core.Sprintf("duration must be positive: %s", s), nil)
 	}
 
 	switch unit {
@@ -144,6 +140,6 @@ func parseDuration(s string) (time.Duration, error) {
 	case 'm':
 		return time.Duration(n) * time.Minute, nil
 	default:
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("unknown unit %c in duration: %s", unit, s), nil)
+		return 0, coreerr.E("metrics.parseDuration", core.Sprintf("unknown unit %c in duration: %s", unit, s), nil)
 	}
 }

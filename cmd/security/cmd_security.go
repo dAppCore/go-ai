@@ -1,11 +1,10 @@
 package security
 
 import (
-	"fmt"
 	"os/exec"
 	"slices"
-	"strings"
 
+	"dappco.re/go/core"
 	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 	"dappco.re/go/core/io"
@@ -142,10 +141,10 @@ func runGHAPI(endpoint string) ([]byte, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
 			// Handle common errors gracefully
-			if strings.Contains(stderr, "404") || strings.Contains(stderr, "Not Found") {
+			if core.Contains(stderr, "404") || core.Contains(stderr, "Not Found") {
 				return []byte("[]"), nil // Return empty array for not found
 			}
-			if strings.Contains(stderr, "403") {
+			if core.Contains(stderr, "403") {
 				return nil, coreerr.E("security.runGHAPI", "access denied (check token permissions)", nil)
 			}
 		}
@@ -156,7 +155,7 @@ func runGHAPI(endpoint string) ([]byte, error) {
 
 // severityStyle returns the appropriate style for a severity level.
 func severityStyle(severity string) *cli.AnsiStyle {
-	switch strings.ToLower(severity) {
+	switch core.Lower(severity) {
 	case "critical":
 		return cli.ErrorStyle
 	case "high":
@@ -174,9 +173,10 @@ func filterBySeverity(severity, filter string) bool {
 		return true
 	}
 
-	sev := strings.ToLower(severity)
-	return slices.ContainsFunc(slices.Collect(strings.SplitSeq(strings.ToLower(filter), ",")), func(s string) bool {
-		return strings.TrimSpace(s) == sev
+	sev := core.Lower(severity)
+	parts := core.Split(core.Lower(filter), ",")
+	return slices.ContainsFunc(parts, func(s string) bool {
+		return core.Trim(s) == sev
 	})
 }
 
@@ -193,7 +193,7 @@ func getReposToCheck(reg *repos.Registry, repoFilter string) []*repos.Repo {
 
 // buildTargetRepo creates a synthetic Repo entry for an external target (e.g. "wailsapp/wails").
 func buildTargetRepo(target string) (*repos.Repo, string) {
-	parts := strings.SplitN(target, "/", 2)
+	parts := core.SplitN(target, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return nil, ""
 	}
@@ -213,7 +213,7 @@ type AlertSummary struct {
 // Add increments summary counters for the provided severity.
 func (s *AlertSummary) Add(severity string) {
 	s.Total++
-	switch strings.ToLower(severity) {
+	switch core.Lower(severity) {
 	case "critical":
 		s.Critical++
 	case "high":
@@ -229,24 +229,24 @@ func (s *AlertSummary) Add(severity string) {
 
 // String renders a human-readable summary of alert counts.
 func (s *AlertSummary) String() string {
-	parts := []string{}
+	var parts []string
 	if s.Critical > 0 {
-		parts = append(parts, cli.ErrorStyle.Render(fmt.Sprintf("%d critical", s.Critical)))
+		parts = append(parts, cli.ErrorStyle.Render(core.Sprintf("%d critical", s.Critical)))
 	}
 	if s.High > 0 {
-		parts = append(parts, cli.WarningStyle.Render(fmt.Sprintf("%d high", s.High)))
+		parts = append(parts, cli.WarningStyle.Render(core.Sprintf("%d high", s.High)))
 	}
 	if s.Medium > 0 {
-		parts = append(parts, cli.ValueStyle.Render(fmt.Sprintf("%d medium", s.Medium)))
+		parts = append(parts, cli.ValueStyle.Render(core.Sprintf("%d medium", s.Medium)))
 	}
 	if s.Low > 0 {
-		parts = append(parts, cli.DimStyle.Render(fmt.Sprintf("%d low", s.Low)))
+		parts = append(parts, cli.DimStyle.Render(core.Sprintf("%d low", s.Low)))
 	}
 	if s.Unknown > 0 {
-		parts = append(parts, cli.DimStyle.Render(fmt.Sprintf("%d unknown", s.Unknown)))
+		parts = append(parts, cli.DimStyle.Render(core.Sprintf("%d unknown", s.Unknown)))
 	}
 	if len(parts) == 0 {
 		return cli.SuccessStyle.Render("No alerts")
 	}
-	return strings.Join(parts, " | ")
+	return core.Join(" | ", parts...)
 }

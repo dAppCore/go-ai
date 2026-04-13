@@ -1,9 +1,7 @@
 package security
 
 import (
-	"encoding/json"
-	"fmt"
-
+	"dappco.re/go/core"
 	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 )
@@ -64,7 +62,7 @@ func runDeps() error {
 	summary := &AlertSummary{}
 
 	for _, repo := range repoList {
-		repoFullName := fmt.Sprintf("%s/%s", reg.Org, repo.Name)
+		repoFullName := core.Sprintf("%s/%s", reg.Org, repo.Name)
 
 		alerts, err := fetchDependabotAlerts(repoFullName)
 		if err != nil {
@@ -100,11 +98,7 @@ func runDeps() error {
 	}
 
 	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
@@ -124,12 +118,12 @@ func runDeps() error {
 		// Format upgrade suggestion
 		upgrade := alert.Vulnerable
 		if alert.PatchedVersion != "" {
-			upgrade = fmt.Sprintf("%s -> %s", alert.Vulnerable, cli.SuccessStyle.Render(alert.PatchedVersion))
+			upgrade = core.Sprintf("%s -> %s", alert.Vulnerable, cli.SuccessStyle.Render(alert.PatchedVersion))
 		}
 
 		cli.Print("%-16s %s  %-16s %-30s %s\n",
 			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(fmt.Sprintf("%-8s", alert.Severity)),
+			sevStyle.Render(core.Sprintf("%-8s", alert.Severity)),
 			alert.CVE,
 			alert.Package,
 			upgrade,
@@ -178,11 +172,7 @@ func runDepsForTarget(target string) error {
 	}
 
 	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
@@ -194,11 +184,11 @@ func runDepsForTarget(target string) error {
 		sevStyle := severityStyle(alert.Severity)
 		upgrade := alert.Vulnerable
 		if alert.PatchedVersion != "" {
-			upgrade = fmt.Sprintf("%s -> %s", alert.Vulnerable, cli.SuccessStyle.Render(alert.PatchedVersion))
+			upgrade = core.Sprintf("%s -> %s", alert.Vulnerable, cli.SuccessStyle.Render(alert.PatchedVersion))
 		}
 		cli.Print("%-16s %s  %-16s %-30s %s\n",
 			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(fmt.Sprintf("%-8s", alert.Severity)),
+			sevStyle.Render(core.Sprintf("%-8s", alert.Severity)),
 			alert.CVE,
 			alert.Package,
 			upgrade,

@@ -3,14 +3,11 @@ package ai
 import (
 	"bufio"
 	"cmp"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
-	"sort"
 	"sync"
 	"time"
 
+	"dappco.re/go/core"
 	coreio "dappco.re/go/core/io"
 	coreerr "dappco.re/go/core/log"
 )
@@ -30,20 +27,20 @@ type Event struct {
 
 // metricsDir returns the base directory for metrics storage.
 func metricsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", coreerr.E("ai.metricsDir", "get home directory", err)
+	home := core.Env("DIR_HOME")
+	if home == "" {
+		return "", coreerr.E("ai.metricsDir", "get home directory", nil)
 	}
-	return filepath.Join(home, ".core", "ai", "metrics"), nil
+	return core.JoinPath(home, ".core", "ai", "metrics"), nil
 }
 
 // metricsFilePath returns the JSONL file path for the given date.
 func metricsFilePath(dir string, t time.Time) string {
-	return filepath.Join(dir, t.Format("2006-01-02")+".jsonl")
+	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
 // Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
-func Record(event Event) (err error) {
+func Record(event Event) error {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
@@ -62,22 +59,16 @@ func Record(event Event) (err error) {
 
 	path := metricsFilePath(dir, event.Timestamp)
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return coreerr.E("ai.Record", "open metrics file", err)
+	r := core.JSONMarshal(event)
+	if !r.OK {
+		return coreerr.E("ai.Record", "marshal event", r.Value.(error))
 	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = coreerr.E("ai.Record", "close metrics file", cerr)
-		}
-	}()
+	data := r.Value.([]byte)
 
-	data, err := json.Marshal(event)
-	if err != nil {
-		return coreerr.E("ai.Record", "marshal event", err)
-	}
-
-	if _, err := f.Write(append(data, '\n')); err != nil {
+	// Read existing content (if any) and append the new line.
+	existing, _ := coreio.Local.Read(path)
+	line := core.Concat(existing, string(data), "\n")
+	if err := coreio.Local.Write(path, line); err != nil {
 		return coreerr.E("ai.Record", "write event", err)
 	}
 
@@ -110,20 +101,21 @@ func ReadEvents(since time.Time) ([]Event, error) {
 
 // readMetricsFile reads events from a single JSONL file, returning only those at or after since.
 func readMetricsFile(path string, since time.Time) ([]Event, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, coreerr.E("ai.readMetricsFile", "open metrics file", err)
+	if !coreio.Local.Exists(path) {
+		return nil, nil
 	}
-	defer func() { _ = f.Close() }()
+
+	content, err := coreio.Local.Read(path)
+	if err != nil {
+		return nil, coreerr.E("ai.readMetricsFile", "read metrics file", err)
+	}
 
 	var events []Event
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(core.NewReader(content))
 	for scanner.Scan() {
 		var ev Event
-		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+		r := core.JSONUnmarshal(scanner.Bytes(), &ev)
+		if !r.OK {
 			continue // skip malformed lines
 		}
 		if !ev.Timestamp.Before(since) {
@@ -131,7 +123,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, coreerr.E("ai.readMetricsFile", "read metrics file", err)
+		return nil, coreerr.E("ai.readMetricsFile", "scan metrics file", err)
 	}
 	return events, nil
 }
@@ -155,8 +147,8 @@ func Summary(events []Event) map[string]any {
 
 	recentEvents := make([]Event, len(events))
 	copy(recentEvents, events)
-	sort.SliceStable(recentEvents, func(i, j int) bool {
-		return recentEvents[i].Timestamp.After(recentEvents[j].Timestamp)
+	slices.SortStableFunc(recentEvents, func(a, b Event) int {
+		return cmp.Compare(b.Timestamp.UnixNano(), a.Timestamp.UnixNano())
 	})
 	if len(recentEvents) > 10 {
 		recentEvents = recentEvents[:10]
