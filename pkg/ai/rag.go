@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"forge.lthn.ai/core/go-rag"
@@ -22,16 +23,7 @@ type TaskInfo struct {
 
 // QueryRAGForTask(TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"}) returns formatted RAG context.
 func QueryRAGForTask(task TaskInfo) (string, error) {
-	queryText := task.Title
-	if task.Description != "" {
-		queryText += ": " + task.Description
-	}
-
-	// Truncate to 500 runes to keep the embedding focused.
-	runes := []rune(queryText)
-	if len(runes) > 500 {
-		queryText = string(runes[:500])
-	}
+	queryText := buildTaskQuery(task)
 
 	qdrantConfig := rag.DefaultQdrantConfig()
 	qdrantClient, err := newQdrantClient(qdrantConfig)
@@ -61,4 +53,29 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	}
 
 	return rag.FormatResultsContext(results), nil
+}
+
+func buildTaskQuery(task TaskInfo) string {
+	title := strings.TrimSpace(task.Title)
+	description := truncateRunes(strings.TrimSpace(task.Description), 500)
+
+	switch {
+	case title == "":
+		return description
+	case description == "":
+		return title
+	default:
+		return title + ": " + description
+	}
+}
+
+func truncateRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }

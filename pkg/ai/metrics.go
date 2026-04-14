@@ -167,13 +167,24 @@ func Summary(events []Event) map[string]any {
 	}
 
 	return map[string]any{
-		"total":    len(events),
-		"by_type":  sortedCountPairs(byTypeCounts),
-		"by_repo":  sortedCountPairs(byRepoCounts),
-		"by_agent": sortedCountPairs(byAgentCounts),
-		"recent":   recentEvents,
-		"events":   recentEvents,
+		"total":           len(events),
+		"by_type":         cloneCounts(byTypeCounts),
+		"by_repo":         cloneCounts(byRepoCounts),
+		"by_agent":        cloneCounts(byAgentCounts),
+		"by_type_sorted":  sortedCountPairs(byTypeCounts),
+		"by_repo_sorted":  sortedCountPairs(byRepoCounts),
+		"by_agent_sorted": sortedCountPairs(byAgentCounts),
+		"recent":          recentEvents,
+		"events":          recentEvents,
 	}
+}
+
+func cloneCounts(counts map[string]int) map[string]int {
+	cloned := make(map[string]int, len(counts))
+	for key, count := range counts {
+		cloned[key] = count
+	}
+	return cloned
 }
 
 // sortedCountPairs returns a slice of key-count pairs sorted by count descending,

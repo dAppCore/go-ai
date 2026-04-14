@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"forge.lthn.ai/core/go-rag"
@@ -92,8 +93,8 @@ func TestQueryRAGForTask_Good_UsesRFCQueryShape(t *testing.T) {
 	if got == "" {
 		t.Fatal("expected formatted context, got empty string")
 	}
-	if len([]rune(capturedQuery)) != 500 {
-		t.Fatalf("expected 500-rune query, got %d", len([]rune(capturedQuery)))
+	if want := len([]rune("Investigate build failure: ")) + 500; len([]rune(capturedQuery)) != want {
+		t.Fatalf("expected title plus 500-rune description (%d runes), got %d", want, len([]rune(capturedQuery)))
 	}
 	if capturedQuery[:26] != "Investigate build failure:" {
 		t.Fatalf("expected RFC title separator, got %q", capturedQuery[:26])
@@ -133,5 +134,25 @@ func TestQueryRAGForTask_Good_GracefulDegradationWhenQueryFails(t *testing.T) {
 	}
 	if err != nil {
 		t.Fatalf("expected graceful degradation, got error: %v", err)
+	}
+}
+
+func TestBuildTaskQuery_Good_TruncatesDescriptionOnly(t *testing.T) {
+	longDescription := ""
+	for range 600 {
+		longDescription += "x"
+	}
+
+	got := buildTaskQuery(TaskInfo{
+		Title:       "Investigate build failure",
+		Description: longDescription,
+	})
+
+	wantPrefix := "Investigate build failure: "
+	if got[:len(wantPrefix)] != wantPrefix {
+		t.Fatalf("expected %q prefix, got %q", wantPrefix, got[:len(wantPrefix)])
+	}
+	if len([]rune(strings.TrimPrefix(got, wantPrefix))) != 500 {
+		t.Fatalf("expected 500-rune description, got %d", len([]rune(strings.TrimPrefix(got, wantPrefix))))
 	}
 }

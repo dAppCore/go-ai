@@ -224,6 +224,13 @@ func TestSummary_Good_Empty(t *testing.T) {
 	if !ok || total != 0 {
 		t.Errorf("expected total 0, got %v", s["total"])
 	}
+	byType, ok := s["by_type"].(map[string]int)
+	if !ok {
+		t.Fatalf("expected by_type map, got %T", s["by_type"])
+	}
+	if len(byType) != 0 {
+		t.Errorf("expected empty by_type map, got %v", byType)
+	}
 }
 
 func TestSummary_Good(t *testing.T) {
@@ -240,13 +247,20 @@ func TestSummary_Good(t *testing.T) {
 		t.Errorf("expected total 3, got %d", total)
 	}
 
-	byType, _ := s["by_type"].([]map[string]any)
-	if len(byType) != 2 {
-		t.Fatalf("expected 2 types, got %d", len(byType))
+	byType, ok := s["by_type"].(map[string]int)
+	if !ok {
+		t.Fatalf("expected by_type map, got %T", s["by_type"])
 	}
-	// Sorted by count descending — "build" (2) first
-	if byType[0]["key"] != "build" || byType[0]["count"] != 2 {
-		t.Errorf("expected build:2 first, got %v:%v", byType[0]["key"], byType[0]["count"])
+	if byType["build"] != 2 || byType["test"] != 1 {
+		t.Errorf("expected type counts build=2 and test=1, got %v", byType)
+	}
+
+	byTypeSorted, _ := s["by_type_sorted"].([]map[string]any)
+	if len(byTypeSorted) != 2 {
+		t.Fatalf("expected 2 sorted types, got %d", len(byTypeSorted))
+	}
+	if byTypeSorted[0]["key"] != "build" || byTypeSorted[0]["count"] != 2 {
+		t.Errorf("expected build:2 first, got %v:%v", byTypeSorted[0]["key"], byTypeSorted[0]["count"])
 	}
 
 	recent, _ := s["recent"].([]Event)

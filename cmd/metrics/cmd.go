@@ -82,7 +82,7 @@ func runMetrics() error {
 	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), total)
 	cli.Blank()
 
-	if byType, ok := summary["by_type"].([]map[string]any); ok && len(byType) > 0 {
+	if byType := summaryCountPairs(summary, "by_type"); len(byType) > 0 {
 		cli.Print("%s\n", cli.DimStyle.Render("By type:"))
 		for _, entry := range byType {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
@@ -90,7 +90,7 @@ func runMetrics() error {
 		cli.Blank()
 	}
 
-	if byRepo, ok := summary["by_repo"].([]map[string]any); ok && len(byRepo) > 0 {
+	if byRepo := summaryCountPairs(summary, "by_repo"); len(byRepo) > 0 {
 		cli.Print("%s\n", cli.DimStyle.Render("By repo:"))
 		for _, entry := range byRepo {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
@@ -98,7 +98,7 @@ func runMetrics() error {
 		cli.Blank()
 	}
 
-	if byAgent, ok := summary["by_agent"].([]map[string]any); ok && len(byAgent) > 0 {
+	if byAgent := summaryCountPairs(summary, "by_agent"); len(byAgent) > 0 {
 		cli.Print("%s\n", cli.DimStyle.Render("By contributor:"))
 		for _, entry := range byAgent {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
@@ -161,4 +161,14 @@ func parseSinceDuration(input string) (time.Duration, error) {
 	default:
 		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
 	}
+}
+
+func summaryCountPairs(summary map[string]any, key string) []map[string]any {
+	if sorted, ok := summary[key+"_sorted"].([]map[string]any); ok {
+		return sorted
+	}
+	if pairs, ok := summary[key].([]map[string]any); ok {
+		return pairs
+	}
+	return nil
 }
