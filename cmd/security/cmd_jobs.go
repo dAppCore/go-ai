@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"dappco.re/go/core"
-	"dappco.re/go/core/ai/pkg/ai"
+	"dappco.re/go/core/ai/ai"
 	"dappco.re/go/core/i18n"
 	coreerr "dappco.re/go/core/log"
 	"dappco.re/go/core/scm/repos"
@@ -182,10 +182,20 @@ func resolveJobTargets(targets string, reg *repos.Registry) ([]string, error) {
 		if reg == nil {
 			return nil, cli.Err("--targets=all requires a repository registry")
 		}
+		liveTargets, err := listGitHubOrgTargets(reg.Org)
+		if err == nil {
+			if len(liveTargets) == 0 {
+				return nil, cli.Err("no repositories found for GitHub org: %s", reg.Org)
+			}
+			return liveTargets, nil
+		}
 		for _, repo := range reg.List() {
 			addTarget(core.Sprintf("%s/%s", reg.Org, repo.Name))
 		}
-		return resolved, nil
+		if len(resolved) > 0 {
+			return resolved, nil
+		}
+		return nil, err
 	}
 
 	for _, part := range core.Split(trimmed, ",") {

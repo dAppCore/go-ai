@@ -1,6 +1,8 @@
 package security
 
 import (
+	"bytes"
+	"encoding/json"
 	"os/exec"
 	"slices"
 
@@ -19,6 +21,8 @@ var (
 	securitySeverity     string
 	securityJSON         bool
 	securityTarget       string // External repo target (e.g. "wailsapp/wails")
+
+	runGitHubAPIRequest = runGitHubAPI
 )
 
 // AddSecurityCommands(root) registers the top-level security alerts, deps, scan, secrets, and jobs commands.
@@ -148,7 +152,7 @@ func checkGitHubCLI() error {
 
 // runGitHubAPI("repos/core/go-ai/dependabot/alerts?state=open") returns the paginated GitHub API response body.
 func runGitHubAPI(endpoint string) ([]byte, error) {
-	cmd := exec.Command("gh", "api", endpoint, "--paginate")
+	cmd := exec.Command("gh", "api", endpoint, "--paginate", "--slurp")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -163,6 +167,121 @@ func runGitHubAPI(endpoint string) ([]byte, error) {
 		return nil, cli.Wrap(err, "run gh api")
 	}
 	return output, nil
+}
+
+type githubRepoResponse struct {
+	FullName string `json:"full_name"`
+}
+
+func decodeGitHubArrayItems(output []byte) ([]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(output)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("[]")) {
+		return nil, nil
+	}
+
+	var pages []json.RawMessage
+	if err := json.Unmarshal(trimmed, &pages); err != nil {
+		return nil, coreerr.E("security", "parse GitHub API response", err)
+	}
+
+	items := make([]json.RawMessage, 0, len(pages))
+	for _, page := range pages {
+		pageData := bytes.TrimSpace(page)
+		if len(pageData) == 0 || bytes.Equal(pageData, []byte("[]")) {
+			continue
+		}
+
+		if pageData[0] != '[' {
+			items = append(items, page)
+			continue
+		}
+
+		var pageItems []json.RawMessage
+		if err := json.Unmarshal(pageData, &pageItems); err != nil {
+			return nil, coreerr.E("security", "parse GitHub API page", err)
+		}
+		items = append(items, pageItems...)
+	}
+
+	return items, nil
+}
+
+func decodeDependabotAlerts(output []byte) ([]DependabotAlert, error) {
+	items, err := decodeGitHubArrayItems(output)
+	if err != nil {
+		return nil, err
+	}
+
+	alerts := make([]DependabotAlert, 0, len(items))
+	for _, item := range items {
+		var alert DependabotAlert
+		if err := json.Unmarshal(item, &alert); err != nil {
+			return nil, coreerr.E("security", "parse dependabot alert", err)
+		}
+		alerts = append(alerts, alert)
+	}
+	return alerts, nil
+}
+
+func decodeCodeScanningAlerts(output []byte) ([]CodeScanningAlert, error) {
+	items, err := decodeGitHubArrayItems(output)
+	if err != nil {
+		return nil, err
+	}
+
+	alerts := make([]CodeScanningAlert, 0, len(items))
+	for _, item := range items {
+		var alert CodeScanningAlert
+		if err := json.Unmarshal(item, &alert); err != nil {
+			return nil, coreerr.E("security", "parse code scanning alert", err)
+		}
+		alerts = append(alerts, alert)
+	}
+	return alerts, nil
+}
+
+func decodeSecretScanningAlerts(output []byte) ([]SecretScanningAlert, error) {
+	items, err := decodeGitHubArrayItems(output)
+	if err != nil {
+		return nil, err
+	}
+
+	alerts := make([]SecretScanningAlert, 0, len(items))
+	for _, item := range items {
+		var alert SecretScanningAlert
+		if err := json.Unmarshal(item, &alert); err != nil {
+			return nil, coreerr.E("security", "parse secret scanning alert", err)
+		}
+		alerts = append(alerts, alert)
+	}
+	return alerts, nil
+}
+
+func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
+	items, err := decodeGitHubArrayItems(output)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		var repository githubRepoResponse
+		if err := json.Unmarshal(item, &repository); err != nil {
+			return nil, coreerr.E("security", "parse GitHub repository", err)
+		}
+		if repository.FullName == "" {
+			continue
+		}
+		if _, ok := seen[repository.FullName]; ok {
+			continue
+		}
+		seen[repository.FullName] = struct{}{}
+		names = append(names, repository.FullName)
+	}
+
+	slices.Sort(names)
+	return names, nil
 }
 
 // severityStyle returns the appropriate style for a severity level.

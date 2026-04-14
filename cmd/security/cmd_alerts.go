@@ -188,45 +188,42 @@ func collectAlertOutputs(target SecurityTarget) ([]AlertOutput, error) {
 
 func fetchDependabotAlerts(repoFullName string) ([]DependabotAlert, error) {
 	endpoint := core.Sprintf("repos/%s/dependabot/alerts?state=open", repoFullName)
-	output, err := runGitHubAPI(endpoint)
+	output, err := runGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, core.Sprintf("fetch dependabot alerts for %s", repoFullName))
 	}
 
-	var alerts []DependabotAlert
-	r := core.JSONUnmarshal(output, &alerts)
-	if !r.OK {
-		return nil, cli.Wrap(r.Value.(error), core.Sprintf("parse dependabot alerts for %s", repoFullName))
+	alerts, err := decodeDependabotAlerts(output)
+	if err != nil {
+		return nil, cli.Wrap(err, core.Sprintf("parse dependabot alerts for %s", repoFullName))
 	}
 	return alerts, nil
 }
 
 func fetchCodeScanningAlerts(repoFullName string) ([]CodeScanningAlert, error) {
 	endpoint := core.Sprintf("repos/%s/code-scanning/alerts?state=open", repoFullName)
-	output, err := runGitHubAPI(endpoint)
+	output, err := runGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, core.Sprintf("fetch code-scanning alerts for %s", repoFullName))
 	}
 
-	var alerts []CodeScanningAlert
-	r := core.JSONUnmarshal(output, &alerts)
-	if !r.OK {
-		return nil, cli.Wrap(r.Value.(error), core.Sprintf("parse code-scanning alerts for %s", repoFullName))
+	alerts, err := decodeCodeScanningAlerts(output)
+	if err != nil {
+		return nil, cli.Wrap(err, core.Sprintf("parse code-scanning alerts for %s", repoFullName))
 	}
 	return alerts, nil
 }
 
 func fetchSecretScanningAlerts(repoFullName string) ([]SecretScanningAlert, error) {
 	endpoint := core.Sprintf("repos/%s/secret-scanning/alerts?state=open", repoFullName)
-	output, err := runGitHubAPI(endpoint)
+	output, err := runGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, core.Sprintf("fetch secret-scanning alerts for %s", repoFullName))
 	}
 
-	var alerts []SecretScanningAlert
-	r := core.JSONUnmarshal(output, &alerts)
-	if !r.OK {
-		return nil, cli.Wrap(r.Value.(error), core.Sprintf("parse secret-scanning alerts for %s", repoFullName))
+	alerts, err := decodeSecretScanningAlerts(output)
+	if err != nil {
+		return nil, cli.Wrap(err, core.Sprintf("parse secret-scanning alerts for %s", repoFullName))
 	}
 	return alerts, nil
 }

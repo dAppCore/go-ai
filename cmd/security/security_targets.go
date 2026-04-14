@@ -71,3 +71,18 @@ func securitySectionLabel(label, externalTarget string) string {
 	}
 	return label + " (" + externalTarget + ")"
 }
+
+func listGitHubOrgTargets(org string) ([]string, error) {
+	endpoint := core.Sprintf("orgs/%s/repos?per_page=100&type=all", org)
+	output, err := runGitHubAPIRequest(endpoint)
+	if err != nil {
+		return nil, cli.Wrap(err, "list GitHub repositories for "+org)
+	}
+
+	targets, err := decodeGitHubRepositoryNames(output)
+	if err != nil {
+		return nil, cli.Wrap(err, "parse GitHub repositories for "+org)
+	}
+
+	return targets, nil
+}
