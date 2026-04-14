@@ -8,7 +8,7 @@ import (
 	"forge.lthn.ai/core/go-rag"
 )
 
-func TestQueryRAGForTask_Bad_ReturnsError(t *testing.T) {
+func TestQueryRAGForTask_Good_GracefulDegradationWhenQdrantUnavailable(t *testing.T) {
 	origNewQdrantClient := newQdrantClient
 	origNewOllamaClient := newOllamaClient
 	origRunRAGQuery := runRAGQuery
@@ -40,8 +40,8 @@ func TestQueryRAGForTask_Bad_ReturnsError(t *testing.T) {
 	if got != "" {
 		t.Fatalf("expected empty context on failure, got %q", got)
 	}
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	if err != nil {
+		t.Fatalf("expected graceful degradation, got error: %v", err)
 	}
 }
 
@@ -97,5 +97,41 @@ func TestQueryRAGForTask_Good_UsesRFCQueryShape(t *testing.T) {
 	}
 	if capturedQuery[:26] != "Investigate build failure:" {
 		t.Fatalf("expected RFC title separator, got %q", capturedQuery[:26])
+	}
+}
+
+func TestQueryRAGForTask_Good_GracefulDegradationWhenQueryFails(t *testing.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	origCloseQdrant := closeQdrant
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+		closeQdrant = origCloseQdrant
+	})
+
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		return &rag.QdrantClient{}, nil
+	}
+	closeQdrant = func(*rag.QdrantClient) error { return nil }
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+		return &rag.OllamaClient{}, nil
+	}
+	runRAGQuery = func(_ context.Context, _ rag.VectorStore, _ rag.Embedder, _ string, _ rag.QueryConfig) ([]rag.QueryResult, error) {
+		return nil, errors.New("query failed")
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{
+		Title:       "Investigate build failure",
+		Description: "The compile step is failing in CI",
+	})
+
+	if got != "" {
+		t.Fatalf("expected empty context on query failure, got %q", got)
+	}
+	if err != nil {
+		t.Fatalf("expected graceful degradation, got error: %v", err)
 	}
 }

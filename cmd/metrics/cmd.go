@@ -4,6 +4,7 @@ package metrics
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ var metricsCmd = &cli.Command{
 
 func initMetricsFlags() {
 	metricsFlagsOnce.Do(func() {
-		metricsCmd.Flags().StringVar(&metricsSince, "since", "7d", i18n.T("cmd.ai.metrics.flag.since"))
+		metricsCmd.Flags().StringVar(&metricsSince, "since", "168h", i18n.T("cmd.ai.metrics.flag.since"))
 		metricsCmd.Flags().BoolVar(&metricsJSON, "json", false, i18n.T("common.flag.json"))
 	})
 }
@@ -55,7 +56,7 @@ func hasCommand(parent *cli.Command, name string) bool {
 }
 
 func runMetrics() error {
-	since, err := parseDuration(metricsSince)
+	since, err := parseSinceDuration(metricsSince)
 	if err != nil {
 		return cli.Err("invalid --since value %q: %v", metricsSince, err)
 	}
@@ -125,31 +126,39 @@ func runMetrics() error {
 	return nil
 }
 
-// parseDuration parses a human-friendly duration like "7d", "24h", "30d".
-func parseDuration(s string) (time.Duration, error) {
-	if len(s) < 2 {
-		return 0, coreerr.E("metrics.parseDuration", "invalid duration: "+s, nil)
+// parseSinceDuration("168h") parses the metrics window and keeps "7d" compatibility for older callers.
+func parseSinceDuration(input string) (time.Duration, error) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
 	}
 
-	unit := s[len(s)-1]
-	value := s[:len(s)-1]
+	if duration, err := time.ParseDuration(trimmed); err == nil {
+		if duration <= 0 {
+			return 0, coreerr.E("metrics.parseSinceDuration", "duration must be positive: "+input, nil)
+		}
+		return duration, nil
+	}
+
+	if len(trimmed) < 2 {
+		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
+	}
+
+	unit := trimmed[len(trimmed)-1]
+	value := trimmed[:len(trimmed)-1]
 
 	n, err := strconv.Atoi(value)
 	if err != nil {
-		return 0, coreerr.E("metrics.parseDuration", "invalid duration: "+s, nil)
+		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
 	}
 	if n <= 0 {
-		return 0, coreerr.E("metrics.parseDuration", "duration must be positive: "+s, nil)
+		return 0, coreerr.E("metrics.parseSinceDuration", "duration must be positive: "+input, nil)
 	}
 
 	switch unit {
 	case 'd':
 		return time.Duration(n) * 24 * time.Hour, nil
-	case 'h':
-		return time.Duration(n) * time.Hour, nil
-	case 'm':
-		return time.Duration(n) * time.Minute, nil
 	default:
-		return 0, coreerr.E("metrics.parseDuration", "unknown unit "+string(unit)+" in duration: "+s, nil)
+		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
 	}
 }

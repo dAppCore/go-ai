@@ -5,11 +5,12 @@ import (
 	"time"
 )
 
-func TestParseDuration_Good(t *testing.T) {
+func TestParseSinceDuration_Good(t *testing.T) {
 	tests := []struct {
 		input string
 		want  time.Duration
 	}{
+		{"168h", 168 * time.Hour},
 		{"7d", 7 * 24 * time.Hour},
 		{"1d", 24 * time.Hour},
 		{"24h", 24 * time.Hour},
@@ -18,18 +19,18 @@ func TestParseDuration_Good(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := parseDuration(tc.input)
+		got, err := parseSinceDuration(tc.input)
 		if err != nil {
-			t.Errorf("parseDuration(%q): unexpected error: %v", tc.input, err)
+			t.Errorf("parseSinceDuration(%q): unexpected error: %v", tc.input, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("parseDuration(%q) = %v, want %v", tc.input, got, tc.want)
+			t.Errorf("parseSinceDuration(%q) = %v, want %v", tc.input, got, tc.want)
 		}
 	}
 }
 
-func TestParseDuration_Bad(t *testing.T) {
+func TestParseSinceDuration_Bad(t *testing.T) {
 	bad := []string{
 		"",    // too short
 		"d",   // too short
@@ -40,9 +41,9 @@ func TestParseDuration_Bad(t *testing.T) {
 	}
 
 	for _, input := range bad {
-		_, err := parseDuration(input)
+		_, err := parseSinceDuration(input)
 		if err == nil {
-			t.Errorf("parseDuration(%q): expected error, got nil", input)
+			t.Errorf("parseSinceDuration(%q): expected error, got nil", input)
 		}
 	}
 }
