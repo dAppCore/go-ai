@@ -109,70 +109,51 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 }
 
 func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertOutput, error) {
-	var allAlerts []AlertOutput
-	var fetchErrors int
+	dependabotAlerts, dependabotError := collectDepAlerts(target, severityFilter)
+	codeScanningAlerts, codeScanningError := collectScanAlerts(target, ScanCommandOptions{
+		Selection: SecuritySelectionOptions{
+			SeverityFilter: severityFilter,
+		},
+	})
+	secretScanningAlerts, secretScanningError := collectSecretAlerts(target)
 
-	dependabotAlerts, err := fetchDependabotAlerts(target.FullName)
-	if err != nil {
-		fetchErrors++
-	} else {
-		for _, alert := range dependabotAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			severity := alert.Advisory.Severity
-			if !filterBySeverity(severity, severityFilter) {
-				continue
-			}
-			allAlerts = append(allAlerts, AlertOutput{
-				Repo:     target.DisplayName,
-				Severity: severity,
-				ID:       alert.Advisory.CVEID,
-				Package:  alert.Dependency.Package.Name,
-				Version:  alert.SecurityVulnerability.VulnerableVersionRange,
-				Type:     "dependabot",
-				Message:  alert.Advisory.Summary,
-			})
-		}
+	if dependabotError != nil && codeScanningError != nil && secretScanningError != nil {
+		return nil, cli.Err("failed to fetch any alerts for %s", target.FullName)
 	}
 
-	codeScanningAlerts, err := fetchCodeScanningAlerts(target.FullName)
-	if err != nil {
-		fetchErrors++
-	} else {
-		for _, alert := range codeScanningAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			severity := alert.Rule.Severity
-			if !filterBySeverity(severity, severityFilter) {
-				continue
-			}
-			location := core.Sprintf("%s:%d", alert.MostRecentInstance.Location.Path, alert.MostRecentInstance.Location.StartLine)
-			allAlerts = append(allAlerts, AlertOutput{
-				Repo:     target.DisplayName,
-				Severity: severity,
-				ID:       alert.Rule.ID,
-				Location: location,
-				Type:     "code-scanning",
-				Message:  alert.MostRecentInstance.Message.Text,
-			})
-		}
+	return buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, severityFilter), nil
+}
+
+func buildAlertOutputs(dependabotAlerts []DepAlert, codeScanningAlerts []ScanAlert, secretScanningAlerts []SecretAlert, severityFilter string) []AlertOutput {
+	allAlerts := make([]AlertOutput, 0, len(dependabotAlerts)+len(codeScanningAlerts)+len(secretScanningAlerts))
+
+	for _, alert := range dependabotAlerts {
+		allAlerts = append(allAlerts, AlertOutput{
+			Repo:     alert.Repo,
+			Severity: alert.Severity,
+			ID:       alert.CVE,
+			Package:  alert.Package,
+			Version:  alert.Vulnerable,
+			Type:     "dependabot",
+			Message:  alert.Summary,
+		})
 	}
 
-	secretScanningAlerts, err := fetchSecretScanningAlerts(target.FullName)
-	if err != nil {
-		fetchErrors++
-	} else {
+	for _, alert := range codeScanningAlerts {
+		allAlerts = append(allAlerts, AlertOutput{
+			Repo:     alert.Repo,
+			Severity: alert.Severity,
+			ID:       alert.RuleID,
+			Location: core.Sprintf("%s:%d", alert.Path, alert.Line),
+			Type:     "code-scanning",
+			Message:  alert.Message,
+		})
+	}
+
+	if filterBySeverity("high", severityFilter) {
 		for _, alert := range secretScanningAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			if !filterBySeverity("high", severityFilter) {
-				continue
-			}
 			allAlerts = append(allAlerts, AlertOutput{
-				Repo:     target.DisplayName,
+				Repo:     alert.Repo,
 				Severity: "high",
 				ID:       core.Sprintf("secret-%d", alert.Number),
 				Type:     "secret-scanning",
@@ -181,11 +162,7 @@ func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertO
 		}
 	}
 
-	if fetchErrors == 3 {
-		return nil, cli.Err("failed to fetch any alerts for %s", target.FullName)
-	}
-
-	return allAlerts, nil
+	return allAlerts
 }
 
 func fetchDependabotAlerts(repoFullName string) ([]DependabotAlert, error) {

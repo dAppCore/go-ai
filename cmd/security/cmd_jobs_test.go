@@ -22,6 +22,58 @@ func TestAlertSummaryPlainString_Good(t *testing.T) {
 	}
 }
 
+func TestBuildAlertOutputs_Good_CombinesSpecializedOutputs(t *testing.T) {
+	got := buildAlertOutputs(
+		[]DepAlert{{
+			Repo:       "api",
+			Severity:   "critical",
+			CVE:        "CVE-2026-0001",
+			Package:    "openssl",
+			Vulnerable: "< 1.0.0",
+			Summary:    "Upgrade OpenSSL",
+		}},
+		[]ScanAlert{{
+			Repo:     "api",
+			Severity: "medium",
+			RuleID:   "gosec/G401",
+			Path:     "main.go",
+			Line:     14,
+			Message:  "Potential weak crypto",
+		}},
+		[]SecretAlert{{
+			Repo:       "api",
+			Number:     9,
+			SecretType: "aws_access_key",
+		}},
+		"",
+	)
+
+	if len(got) != 3 {
+		t.Fatalf("buildAlertOutputs count = %d, want 3", len(got))
+	}
+	if got[0].Type != "dependabot" || got[0].ID != "CVE-2026-0001" {
+		t.Fatalf("unexpected dependabot alert: %+v", got[0])
+	}
+	if got[1].Type != "code-scanning" || got[1].Location != "main.go:14" {
+		t.Fatalf("unexpected code scanning alert: %+v", got[1])
+	}
+	if got[2].Type != "secret-scanning" || got[2].Severity != "high" {
+		t.Fatalf("unexpected secret alert: %+v", got[2])
+	}
+}
+
+func TestBuildAlertOutputs_Good_HidesSecretsWhenSeverityFilterExcludesHigh(t *testing.T) {
+	got := buildAlertOutputs(nil, nil, []SecretAlert{{
+		Repo:       "api",
+		Number:     9,
+		SecretType: "aws_access_key",
+	}}, "critical")
+
+	if len(got) != 0 {
+		t.Fatalf("buildAlertOutputs with critical filter = %d alerts, want 0", len(got))
+	}
+}
+
 func TestResolveJobTargets_Good_All(t *testing.T) {
 	originalRunGitHubAPIRequest := runGitHubAPIRequest
 	t.Cleanup(func() {
@@ -110,6 +162,133 @@ func TestResolveJobTargets_Bad_UnknownRepo(t *testing.T) {
 
 	if _, err := resolveJobTargets("missing", reg); err == nil {
 		t.Fatal("expected unknown repo error, got nil")
+	}
+}
+
+func TestCollectJobRepoResult_Good_UsesSharedCollectors(t *testing.T) {
+	originalCollectDependabotAlertsForJobs := collectDependabotAlertsForJobs
+	originalCollectCodeScanningAlertsForJobs := collectCodeScanningAlertsForJobs
+	originalCollectSecretScanningAlertsForJobs := collectSecretScanningAlertsForJobs
+	t.Cleanup(func() {
+		collectDependabotAlertsForJobs = originalCollectDependabotAlertsForJobs
+		collectCodeScanningAlertsForJobs = originalCollectCodeScanningAlertsForJobs
+		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
+	})
+
+	collectDependabotAlertsForJobs = func(target SecurityTarget, severityFilter string) ([]DepAlert, error) {
+		if target.FullName != "acme/api" || severityFilter != "" {
+			t.Fatalf("unexpected dependabot target/filter: %+v %q", target, severityFilter)
+		}
+		return []DepAlert{{
+			Repo:     "api",
+			Severity: "critical",
+			CVE:      "CVE-2026-0001",
+			Summary:  "Upgrade OpenSSL",
+		}}, nil
+	}
+	collectCodeScanningAlertsForJobs = func(target SecurityTarget, commandOptions ScanCommandOptions) ([]ScanAlert, error) {
+		if target.FullName != "acme/api" || commandOptions.Selection.SeverityFilter != "" || commandOptions.ToolName != "" {
+			t.Fatalf("unexpected code scanning target/options: %+v %+v", target, commandOptions)
+		}
+		return []ScanAlert{{
+			Repo:        "api",
+			Severity:    "medium",
+			RuleID:      "gosec/G401",
+			Path:        "main.go",
+			Line:        14,
+			Description: "Potential weak crypto",
+		}}, nil
+	}
+	collectSecretScanningAlertsForJobs = func(target SecurityTarget) ([]SecretAlert, error) {
+		if target.FullName != "acme/api" {
+			t.Fatalf("unexpected secret scanning target: %+v", target)
+		}
+		return []SecretAlert{{
+			Repo:       "api",
+			Number:     9,
+			SecretType: "aws_access_key",
+		}}, nil
+	}
+
+	got, err := collectJobRepoResult("acme/api")
+	if err != nil {
+		t.Fatalf("collectJobRepoResult: %v", err)
+	}
+
+	if got.Repo != "acme/api" {
+		t.Fatalf("repo = %q, want acme/api", got.Repo)
+	}
+	if got.Summary.Critical != 1 || got.Summary.High != 1 || got.Summary.Medium != 1 || got.Summary.Total != 3 {
+		t.Fatalf("unexpected summary: %+v", got.Summary)
+	}
+	if len(got.Findings) != 3 {
+		t.Fatalf("findings = %d, want 3", len(got.Findings))
+	}
+}
+
+func TestCollectJobRepoResult_Bad_AllCollectorsFail(t *testing.T) {
+	originalCollectDependabotAlertsForJobs := collectDependabotAlertsForJobs
+	originalCollectCodeScanningAlertsForJobs := collectCodeScanningAlertsForJobs
+	originalCollectSecretScanningAlertsForJobs := collectSecretScanningAlertsForJobs
+	t.Cleanup(func() {
+		collectDependabotAlertsForJobs = originalCollectDependabotAlertsForJobs
+		collectCodeScanningAlertsForJobs = originalCollectCodeScanningAlertsForJobs
+		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
+	})
+
+	collectDependabotAlertsForJobs = func(SecurityTarget, string) ([]DepAlert, error) {
+		return nil, assertiveError("dependabot failed")
+	}
+	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) ([]ScanAlert, error) {
+		return nil, assertiveError("code scanning failed")
+	}
+	collectSecretScanningAlertsForJobs = func(SecurityTarget) ([]SecretAlert, error) {
+		return nil, assertiveError("secret scanning failed")
+	}
+
+	if _, err := collectJobRepoResult("acme/api"); err == nil {
+		t.Fatal("expected all-collectors-failed error, got nil")
+	}
+}
+
+func TestBuildJobsMetricsEvent_Good_IssueRepoWins(t *testing.T) {
+	event := buildJobsMetricsEvent(
+		JobsCommandOptions{
+			Targets:         "all",
+			IssueRepository: "acme/security",
+		},
+		&AlertSummary{
+			Critical: 1,
+			High:     2,
+			Unknown:  1,
+			Total:    4,
+		},
+		[]jobRepoResult{
+			{Repo: "acme/api"},
+			{Repo: "acme/web"},
+		},
+		"https://github.com/acme/security/issues/1",
+	)
+
+	if event.Type != "security.jobs" {
+		t.Fatalf("event type = %q, want security.jobs", event.Type)
+	}
+	if event.Repo != "acme/security" {
+		t.Fatalf("event repo = %q, want acme/security", event.Repo)
+	}
+
+	reposValue, ok := event.Data["repos"].([]string)
+	if !ok {
+		t.Fatalf("event repos = %T, want []string", event.Data["repos"])
+	}
+	if want := []string{"acme/api", "acme/web"}; !reflect.DeepEqual(reposValue, want) {
+		t.Fatalf("event repos = %v, want %v", reposValue, want)
+	}
+	if event.Data["issue_url"] != "https://github.com/acme/security/issues/1" {
+		t.Fatalf("event issue_url = %v", event.Data["issue_url"])
+	}
+	if event.Data["unknown"] != 1 {
+		t.Fatalf("event unknown count = %v, want 1", event.Data["unknown"])
 	}
 }
 

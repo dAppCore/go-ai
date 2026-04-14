@@ -14,6 +14,12 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
+var (
+	collectDependabotAlertsForJobs     = collectDepAlerts
+	collectCodeScanningAlertsForJobs   = collectScanAlerts
+	collectSecretScanningAlertsForJobs = collectSecretAlerts
+)
+
 type jobRepoResult struct {
 	Repo     string
 	Summary  AlertSummary
@@ -110,23 +116,11 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		}
 
 		cli.Print("%s %s\n", cli.SuccessStyle.Render(">>"), issueURL)
-		_ = ai.Record(ai.Event{
-			Type:      "security.jobs",
-			Timestamp: time.Now(),
-			Repo:      commandOptions.IssueRepository,
-			Data: map[string]any{
-				"issue_repo": commandOptions.IssueRepository,
-				"issue_url":  issueURL,
-				"targets":    len(successful),
-				"total":      overall.Total,
-				"critical":   overall.Critical,
-				"high":       overall.High,
-				"medium":     overall.Medium,
-				"low":        overall.Low,
-			},
-		})
+		_ = ai.Record(buildJobsMetricsEvent(commandOptions, overall, successful, issueURL))
+		return nil
 	}
 
+	_ = ai.Record(buildJobsMetricsEvent(commandOptions, overall, successful, ""))
 	return nil
 }
 
@@ -254,67 +248,43 @@ func runJobWorkers(targets []string, workers int) []jobResult {
 }
 
 func collectJobRepoResult(target string) (jobRepoResult, error) {
-	if _, err := parseSecurityTarget(target); err != nil {
+	securityTarget, err := parseSecurityTarget(target)
+	if err != nil {
 		return jobRepoResult{}, coreerr.E("security.jobs", "invalid target format: use owner/repo", nil)
 	}
 
 	repo := jobRepoResult{Repo: target}
-	var fetchErrors int
+	dependabotAlerts, dependabotError := collectDependabotAlertsForJobs(securityTarget, "")
+	codeScanningAlerts, codeScanningError := collectCodeScanningAlertsForJobs(securityTarget, ScanCommandOptions{})
+	secretScanningAlerts, secretScanningError := collectSecretScanningAlertsForJobs(securityTarget)
 
-	codeAlerts, err := fetchCodeScanningAlerts(target)
-	if err != nil {
-		fetchErrors++
-	} else {
-		for _, alert := range codeAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			severity := alert.Rule.Severity
-			if severity == "" {
-				severity = "medium"
-			}
-			repo.Summary.Add(severity)
-			repo.Findings = append(repo.Findings, core.Sprintf("[%s] code-scanning: %s (%s:%d)",
-				core.Upper(severity),
-				alert.Rule.Description,
-				alert.MostRecentInstance.Location.Path,
-				alert.MostRecentInstance.Location.StartLine,
-			))
-		}
-	}
-
-	depAlerts, err := fetchDependabotAlerts(target)
-	if err != nil {
-		fetchErrors++
-	} else {
-		for _, alert := range depAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			repo.Summary.Add(alert.Advisory.Severity)
-			repo.Findings = append(repo.Findings, core.Sprintf("[%s] dependabot: %s (%s)",
-				core.Upper(alert.Advisory.Severity),
-				alert.Advisory.Summary,
-				alert.Advisory.CVEID,
-			))
-		}
-	}
-
-	secretAlerts, err := fetchSecretScanningAlerts(target)
-	if err != nil {
-		fetchErrors++
-	} else {
-		for _, alert := range secretAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			repo.Summary.Add("high")
-			repo.Findings = append(repo.Findings, core.Sprintf("[HIGH] secret-scanning: %s (#%d)", alert.SecretType, alert.Number))
-		}
-	}
-
-	if fetchErrors == 3 {
+	if dependabotError != nil && codeScanningError != nil && secretScanningError != nil {
 		return jobRepoResult{}, coreerr.E("security.jobs", "failed to fetch any alerts for "+target, nil)
+	}
+
+	for _, alert := range buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, "") {
+		repo.Summary.Add(alert.Severity)
+	}
+
+	for _, alert := range codeScanningAlerts {
+		repo.Findings = append(repo.Findings, core.Sprintf("[%s] code-scanning: %s (%s:%d)",
+			core.Upper(alert.Severity),
+			alert.Description,
+			alert.Path,
+			alert.Line,
+		))
+	}
+
+	for _, alert := range dependabotAlerts {
+		repo.Findings = append(repo.Findings, core.Sprintf("[%s] dependabot: %s (%s)",
+			core.Upper(alert.Severity),
+			alert.Summary,
+			alert.CVE,
+		))
+	}
+
+	for _, alert := range secretScanningAlerts {
+		repo.Findings = append(repo.Findings, core.Sprintf("[HIGH] secret-scanning: %s (#%d)", alert.SecretType, alert.Number))
 	}
 
 	return repo, nil
@@ -327,6 +297,45 @@ func mergeAlertSummary(dst, src *AlertSummary) {
 	dst.Low += src.Low
 	dst.Unknown += src.Unknown
 	dst.Total += src.Total
+}
+
+func buildJobsMetricsEvent(commandOptions JobsCommandOptions, summary *AlertSummary, repos []jobRepoResult, issueURL string) ai.Event {
+	repositoryNames := make([]string, 0, len(repos))
+	for _, repository := range repos {
+		repositoryNames = append(repositoryNames, repository.Repo)
+	}
+
+	eventRepository := ""
+	switch {
+	case commandOptions.IssueRepository != "":
+		eventRepository = commandOptions.IssueRepository
+	case len(repositoryNames) == 1:
+		eventRepository = repositoryNames[0]
+	}
+
+	data := map[string]any{
+		"target_spec": commandOptions.Targets,
+		"targets":     len(repos),
+		"repos":       repositoryNames,
+		"total":       summary.Total,
+		"critical":    summary.Critical,
+		"high":        summary.High,
+		"medium":      summary.Medium,
+		"low":         summary.Low,
+		"unknown":     summary.Unknown,
+	}
+	if commandOptions.IssueRepository != "" {
+		data["issue_repo"] = commandOptions.IssueRepository
+	}
+	if issueURL != "" {
+		data["issue_url"] = issueURL
+	}
+
+	return ai.Event{
+		Type: "security.jobs",
+		Repo: eventRepository,
+		Data: data,
+	}
 }
 
 func createJobsIssue(issueRepo, title, body string) (string, error) {
