@@ -12,6 +12,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"math"
 	"net/http"
@@ -24,8 +25,7 @@ import (
 
 var ollamaURL = flag.String("ollama", "http://localhost:11434", "Ollama base URL")
 
-// models to benchmark
-var models = []string{
+var defaultBenchmarkModels = []string{
 	"nomic-embed-text",
 	"embeddinggemma",
 }
@@ -100,36 +100,37 @@ func main() {
 	core.Println("OpenBrain Embedding Model Benchmark")
 	core.Println(repeatChar("=", 60))
 
-	for _, model := range models {
-		core.Print(nil, "\n## Model: %s", model)
+	allMemories, allTopics := flattenMemoryGroups(memoryGroups)
+
+	installedModelNames, err := listInstalledModelNames()
+	if err != nil {
+		core.Print(nil, "Warning: could not list installed Ollama models, falling back to defaults: %v", err)
+	}
+	benchmarkModelNames := buildBenchmarkModelNames(installedModelNames)
+
+	for _, modelName := range benchmarkModelNames {
+		core.Print(nil, "\n## Model: %s", modelName)
 		core.Println(repeatChar("-", 40))
 
-		// Check model is available
-		if !modelAvailable(model) {
-			core.Print(nil, "  SKIPPED — model not pulled (run: ollama pull %s)", model)
+		if len(installedModelNames) > 0 && !hasInstalledModel(installedModelNames, modelName) {
+			core.Print(nil, "  SKIPPED — model not pulled (run: ollama pull %s)", modelName)
 			continue
-		}
-
-		// 1. Embed all memories
-		allMemories := []string{}
-		allTopics := []string{}
-		for _, group := range memoryGroups {
-			for _, mem := range group.memories {
-				allMemories = append(allMemories, mem)
-				allTopics = append(allTopics, group.topic)
-			}
 		}
 
 		core.Print(nil, "  Embedding %d memories...", len(allMemories))
 		start := time.Now()
-		memVectors := make([][]float64, len(allMemories))
-		for i, mem := range allMemories {
-			vec, err := embed(model, mem)
+		memVectors := make([][]float64, 0, len(allMemories))
+		for memoryIndex, memory := range allMemories {
+			vector, err := embed(modelName, memory)
 			if err != nil {
-				core.Print(nil, "  ERROR embedding memory %d: %v", i, err)
+				core.Print(nil, "  SKIPPED — embeddings unavailable (%s, memory %d): %v", modelName, memoryIndex, err)
+				memVectors = nil
 				break
 			}
-			memVectors[i] = vec
+			memVectors = append(memVectors, vector)
+		}
+		if len(memVectors) != len(allMemories) {
+			continue
 		}
 		embedTime := time.Since(start)
 		core.Print(nil, "  Embedded in %v (%.0fms/memory)", embedTime, float64(embedTime.Milliseconds())/float64(len(allMemories)))
@@ -161,7 +162,7 @@ func main() {
 		core.Print(nil, "\n  Query recall (top-1 accuracy):")
 		correct := 0
 		for _, q := range queries {
-			qVec, err := embed(model, q.query)
+			qVec, err := embed(modelName, q.query)
 			if err != nil {
 				core.Print(nil, "    ERROR: %v", err)
 				continue
@@ -196,7 +197,11 @@ func main() {
 		// 4. Top-3 recall
 		correct3 := 0
 		for _, q := range queries {
-			qVec, _ := embed(model, q.query)
+			qVec, err := embed(modelName, q.query)
+			if err != nil {
+				core.Print(nil, "    ERROR: %v", err)
+				continue
+			}
 
 			type scored struct {
 				idx int
@@ -231,6 +236,67 @@ func main() {
 	core.Println("Done.")
 }
 
+func flattenMemoryGroups(groups []struct {
+	topic    string
+	memories []string
+}) ([]string, []string) {
+	allMemories := []string{}
+	allTopics := []string{}
+	for _, group := range groups {
+		for _, memory := range group.memories {
+			allMemories = append(allMemories, memory)
+			allTopics = append(allTopics, group.topic)
+		}
+	}
+	return allMemories, allTopics
+}
+
+func buildBenchmarkModelNames(installedModelNames []string) []string {
+	benchmarkModelNames := slices.Clone(defaultBenchmarkModels)
+	if len(installedModelNames) == 0 {
+		return benchmarkModelNames
+	}
+
+	extraModelNames := make([]string, 0, len(installedModelNames))
+	for _, installedModelName := range installedModelNames {
+		if matchesAnyDefaultModel(installedModelName) {
+			continue
+		}
+		extraModelNames = append(extraModelNames, installedModelName)
+	}
+	slices.Sort(extraModelNames)
+
+	for _, extraModelName := range extraModelNames {
+		if slices.Contains(benchmarkModelNames, extraModelName) {
+			continue
+		}
+		benchmarkModelNames = append(benchmarkModelNames, extraModelName)
+	}
+	return benchmarkModelNames
+}
+
+func matchesAnyDefaultModel(modelName string) bool {
+	for _, defaultModelName := range defaultBenchmarkModels {
+		if modelMatches(defaultModelName, modelName) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasInstalledModel(installedModelNames []string, modelName string) bool {
+	for _, installedModelName := range installedModelNames {
+		if modelMatches(modelName, installedModelName) {
+			return true
+		}
+	}
+	return false
+}
+
+func modelMatches(expectedModelName, installedModelName string) bool {
+	return installedModelName == expectedModelName || core.HasPrefix(installedModelName, expectedModelName+":")
+}
+
 // -- Ollama helpers --
 
 // httpClient trusts self-signed certs for .lan domains behind Traefik.
@@ -247,6 +313,14 @@ type embedRequest struct {
 
 type embedResponse struct {
 	Embedding []float64 `json:"embedding"`
+}
+
+type ollamaTagsResponse struct {
+	Models []ollamaTag `json:"models"`
+}
+
+type ollamaTag struct {
+	Name string `json:"name"`
 }
 
 func embed(model, text string) ([]float64, error) {
@@ -278,29 +352,36 @@ func embed(model, text string) ([]float64, error) {
 	return result.Embedding, nil
 }
 
-func modelAvailable(model string) bool {
+func listInstalledModelNames() ([]string, error) {
 	resp, err := httpClient.Get(*ollamaURL + "/api/tags")
 	if err != nil {
-		return false
+		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, coreerr.E("embed", core.Sprintf("list models HTTP %d", resp.StatusCode), nil)
+	}
 	raw := core.ReadAll(resp.Body)
 	if !raw.OK {
-		return false
+		return nil, coreerr.E("embed", "read model list", raw.Value.(error))
 	}
-	var result struct {
-		Models []struct {
-			Name string `json:"name"`
-		} `json:"models"`
+	return decodeInstalledModelNames([]byte(raw.Value.(string)))
+}
+
+func decodeInstalledModelNames(raw []byte) ([]string, error) {
+	var result ollamaTagsResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, coreerr.E("embed", "decode model list", err)
 	}
-	core.JSONUnmarshal([]byte(raw.Value.(string)), &result)
-	for _, m := range result.Models {
-		// Match "nomic-embed-text:latest" against "nomic-embed-text"
-		if m.Name == model || core.HasPrefix(m.Name, model+":") {
-			return true
+
+	modelNames := make([]string, 0, len(result.Models))
+	for _, model := range result.Models {
+		if model.Name == "" {
+			continue
 		}
+		modelNames = append(modelNames, model.Name)
 	}
-	return false
+	return modelNames, nil
 }
 
 // -- Math helpers --
@@ -349,4 +430,3 @@ func truncate(s string, n int) string {
 	}
 	return s[:n-3] + "..."
 }
-
