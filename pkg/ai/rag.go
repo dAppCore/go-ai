@@ -8,6 +8,13 @@ import (
 	"forge.lthn.ai/core/go-rag"
 )
 
+const (
+	ragTaskCollection          = "hostuk-docs"
+	ragTaskResultLimit         = 3
+	ragTaskSimilarityThreshold = 0.5
+	ragTaskQueryRuneLimit      = 500
+)
+
 var (
 	newQdrantClient = rag.NewQdrantClient
 	newOllamaClient = rag.NewOllamaClient
@@ -24,6 +31,9 @@ type TaskInfo struct {
 // QueryRAGForTask(TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"}) returns formatted RAG context.
 func QueryRAGForTask(task TaskInfo) (string, error) {
 	queryText := buildTaskQuery(task)
+	if queryText == "" {
+		return "", nil
+	}
 
 	qdrantConfig := rag.DefaultQdrantConfig()
 	qdrantClient, err := newQdrantClient(qdrantConfig)
@@ -42,13 +52,16 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	defer cancel()
 
 	queryConfig := rag.QueryConfig{
-		Collection: "hostuk-docs",
-		Limit:      3,
-		Threshold:  0.5,
+		Collection: ragTaskCollection,
+		Limit:      ragTaskResultLimit,
+		Threshold:  ragTaskSimilarityThreshold,
 	}
 
 	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfig)
 	if err != nil {
+		return "", nil
+	}
+	if len(results) == 0 {
 		return "", nil
 	}
 
@@ -57,16 +70,20 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 
 func buildTaskQuery(task TaskInfo) string {
 	title := strings.TrimSpace(task.Title)
-	description := truncateRunes(strings.TrimSpace(task.Description), 500)
+	description := strings.TrimSpace(task.Description)
+
+	var query string
 
 	switch {
 	case title == "":
-		return description
+		query = description
 	case description == "":
-		return title
+		query = title
 	default:
-		return title + ": " + description
+		query = title + ": " + description
 	}
+
+	return truncateRunes(query, ragTaskQueryRuneLimit)
 }
 
 func truncateRunes(value string, limit int) string {

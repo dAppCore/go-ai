@@ -74,7 +74,7 @@ func TestQueryRAGForTask_Good_UsesRFCQueryShape(t *testing.T) {
 	capturedQuery := ""
 	runRAGQuery = func(_ context.Context, _ rag.VectorStore, _ rag.Embedder, query string, cfg rag.QueryConfig) ([]rag.QueryResult, error) {
 		capturedQuery = query
-		if cfg.Collection != "hostuk-docs" || cfg.Limit != 3 || cfg.Threshold != 0.5 {
+		if cfg.Collection != ragTaskCollection || cfg.Limit != ragTaskResultLimit || cfg.Threshold != ragTaskSimilarityThreshold {
 			t.Fatalf("unexpected query config: %+v", cfg)
 		}
 		return []rag.QueryResult{{
@@ -93,11 +93,12 @@ func TestQueryRAGForTask_Good_UsesRFCQueryShape(t *testing.T) {
 	if got == "" {
 		t.Fatal("expected formatted context, got empty string")
 	}
-	if want := len([]rune("Investigate build failure: ")) + 500; len([]rune(capturedQuery)) != want {
-		t.Fatalf("expected title plus 500-rune description (%d runes), got %d", want, len([]rune(capturedQuery)))
+	if want := ragTaskQueryRuneLimit; len([]rune(capturedQuery)) != want {
+		t.Fatalf("expected RFC query limit of %d runes, got %d", want, len([]rune(capturedQuery)))
 	}
-	if capturedQuery[:26] != "Investigate build failure:" {
-		t.Fatalf("expected RFC title separator, got %q", capturedQuery[:26])
+	wantPrefix := "Investigate build failure:"
+	if !strings.HasPrefix(capturedQuery, wantPrefix) {
+		t.Fatalf("expected RFC title separator prefix %q, got %q", wantPrefix, capturedQuery)
 	}
 }
 
@@ -137,7 +138,42 @@ func TestQueryRAGForTask_Good_GracefulDegradationWhenQueryFails(t *testing.T) {
 	}
 }
 
-func TestBuildTaskQuery_Good_TruncatesDescriptionOnly(t *testing.T) {
+func TestQueryRAGForTask_Good_EmptyWhenNoResults(t *testing.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	origCloseQdrant := closeQdrant
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+		closeQdrant = origCloseQdrant
+	})
+
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		return &rag.QdrantClient{}, nil
+	}
+	closeQdrant = func(*rag.QdrantClient) error { return nil }
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+		return &rag.OllamaClient{}, nil
+	}
+	runRAGQuery = func(_ context.Context, _ rag.VectorStore, _ rag.Embedder, _ string, _ rag.QueryConfig) ([]rag.QueryResult, error) {
+		return nil, nil
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{
+		Title:       "Investigate build failure",
+		Description: "The compile step is failing in CI",
+	})
+	if err != nil {
+		t.Fatalf("QueryRAGForTask: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("expected empty context on no results, got %q", got)
+	}
+}
+
+func TestBuildTaskQuery_Good_TruncatesFullQueryToRuneLimit(t *testing.T) {
 	longDescription := ""
 	for range 600 {
 		longDescription += "x"
@@ -152,7 +188,10 @@ func TestBuildTaskQuery_Good_TruncatesDescriptionOnly(t *testing.T) {
 	if got[:len(wantPrefix)] != wantPrefix {
 		t.Fatalf("expected %q prefix, got %q", wantPrefix, got[:len(wantPrefix)])
 	}
-	if len([]rune(strings.TrimPrefix(got, wantPrefix))) != 500 {
-		t.Fatalf("expected 500-rune description, got %d", len([]rune(strings.TrimPrefix(got, wantPrefix))))
+	if len([]rune(got)) != ragTaskQueryRuneLimit {
+		t.Fatalf("expected %d-rune query, got %d", ragTaskQueryRuneLimit, len([]rune(got)))
+	}
+	if len([]rune(strings.TrimPrefix(got, wantPrefix))) != ragTaskQueryRuneLimit-len([]rune(wantPrefix)) {
+		t.Fatalf("expected truncated description to fill the remaining query budget, got %d runes", len([]rune(strings.TrimPrefix(got, wantPrefix))))
 	}
 }
