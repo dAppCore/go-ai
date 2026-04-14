@@ -6,11 +6,11 @@ import (
 	"slices"
 	"strings"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 	"dappco.re/go/core/io"
 	coreerr "dappco.re/go/core/log"
 	"dappco.re/go/core/scm/repos"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 var (
@@ -24,6 +24,10 @@ var (
 
 // AddSecurityCommands adds the 'security' command to the root.
 func AddSecurityCommands(root *cli.Command) {
+	if hasCommand(root, "security") {
+		return
+	}
+
 	secCmd := &cli.Command{
 		Use:   "security",
 		Short: i18n.T("cmd.security.short"),
@@ -37,6 +41,15 @@ func AddSecurityCommands(root *cli.Command) {
 	addJobsCommand(secCmd)
 
 	root.AddCommand(secCmd)
+}
+
+func hasCommand(parent *cli.Command, name string) bool {
+	for _, child := range parent.Commands() {
+		if child.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 // DependabotAlert represents a Dependabot vulnerability alert.
