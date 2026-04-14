@@ -21,7 +21,7 @@ var (
 	securityTarget       string // External repo target (e.g. "wailsapp/wails")
 )
 
-// AddSecurityCommands adds the 'security' command to the root.
+// AddSecurityCommands(root) registers the top-level security alerts, deps, scan, secrets, and jobs commands.
 func AddSecurityCommands(root *cli.Command) {
 	if hasCommand(root, "security") {
 		return
@@ -138,16 +138,16 @@ func loadRegistry(registryPath string) (*repos.Registry, error) {
 	return reg, nil
 }
 
-// checkGH verifies gh CLI is available.
-func checkGH() error {
+// checkGitHubCLI() verifies that the GitHub CLI is installed before a command tries to call the GitHub API.
+func checkGitHubCLI() error {
 	if _, err := exec.LookPath("gh"); err != nil {
-		return coreerr.E("security.checkGH", i18n.T("error.gh_not_found"), nil)
+		return coreerr.E("security.checkGitHubCLI", i18n.T("error.gh_not_found"), nil)
 	}
 	return nil
 }
 
-// runGHAPI runs a gh api command and returns the output.
-func runGHAPI(endpoint string) ([]byte, error) {
+// runGitHubAPI("repos/core/go-ai/dependabot/alerts?state=open") returns the paginated GitHub API response body.
+func runGitHubAPI(endpoint string) ([]byte, error) {
 	cmd := exec.Command("gh", "api", endpoint, "--paginate")
 	output, err := cmd.Output()
 	if err != nil {
@@ -157,7 +157,7 @@ func runGHAPI(endpoint string) ([]byte, error) {
 				return []byte("[]"), nil
 			}
 			if core.Contains(stderr, "403") {
-				return nil, coreerr.E("security.runGHAPI", "access denied (check token permissions)", nil)
+				return nil, coreerr.E("security.runGitHubAPI", "access denied (check token permissions)", nil)
 			}
 		}
 		return nil, cli.Wrap(err, "run gh api")
@@ -190,26 +190,6 @@ func filterBySeverity(severity, filter string) bool {
 	return slices.ContainsFunc(parts, func(s string) bool {
 		return core.Trim(s) == sev
 	})
-}
-
-// getReposToCheck returns the list of repos to check based on flags.
-func getReposToCheck(reg *repos.Registry, repoFilter string) []*repos.Repo {
-	if repoFilter != "" {
-		if repo, ok := reg.Get(repoFilter); ok {
-			return []*repos.Repo{repo}
-		}
-		return nil
-	}
-	return reg.List()
-}
-
-// buildTargetRepo creates a synthetic Repo entry for an external target (e.g. "wailsapp/wails").
-func buildTargetRepo(target string) (*repos.Repo, string) {
-	parts := core.SplitN(target, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return nil, ""
-	}
-	return &repos.Repo{Name: parts[1]}, target
 }
 
 // AlertSummary holds aggregated alert counts.
@@ -263,7 +243,7 @@ func (s *AlertSummary) String() string {
 	return core.Join(" | ", styled...)
 }
 
-// PlainString renders an unstyled summary suitable for logs and issue bodies.
+// PlainString() returns strings like "1 critical | 2 high" for logs and issue bodies.
 func (s *AlertSummary) PlainString() string {
 	parts := s.parts()
 	if len(parts) == 0 {

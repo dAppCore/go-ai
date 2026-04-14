@@ -52,7 +52,7 @@ func addJobsCommand(parent *cli.Command) {
 }
 
 func runJobs() error {
-	if err := checkGH(); err != nil {
+	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 	if jobsCopies < 1 {
@@ -194,10 +194,11 @@ func resolveJobTargets(targets string, reg *repos.Registry) ([]string, error) {
 			continue
 		}
 		if core.Contains(token, "/") {
-			if _, fullName := buildTargetRepo(token); fullName == "" {
+			target, err := parseSecurityTarget(token)
+			if err != nil {
 				return nil, cli.Err("invalid target format: use owner/repo")
 			}
-			addTarget(token)
+			addTarget(target.FullName)
 			continue
 		}
 		if reg == nil {
@@ -246,7 +247,7 @@ func runJobWorkers(targets []string, workers int) []jobResult {
 }
 
 func collectJobRepoResult(target string) (jobRepoResult, error) {
-	if _, fullName := buildTargetRepo(target); fullName == "" {
+	if _, err := parseSecurityTarget(target); err != nil {
 		return jobRepoResult{}, coreerr.E("security.jobs", "invalid target format: use owner/repo", nil)
 	}
 

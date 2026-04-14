@@ -39,62 +39,32 @@ type DepAlert struct {
 }
 
 func runDeps() error {
-	if err := checkGH(); err != nil {
+	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
-	// External target mode: bypass registry entirely
-	if securityTarget != "" {
-		return runDepsForTarget(securityTarget)
-	}
-
-	reg, err := loadRegistry(securityRegistryPath)
+	targets, err := resolveSecurityTargets(securityRegistryPath, securityRepo, securityTarget)
 	if err != nil {
 		return err
-	}
-
-	repoList := getReposToCheck(reg, securityRepo)
-	if len(repoList) == 0 {
-		return cli.Err("repo not found: %s", securityRepo)
 	}
 
 	var allAlerts []DepAlert
 	summary := &AlertSummary{}
 
-	for _, repo := range repoList {
-		repoFullName := core.Sprintf("%s/%s", reg.Org, repo.Name)
-
-		alerts, err := fetchDependabotAlerts(repoFullName)
+	for _, target := range targets {
+		targetAlerts, err := collectDepAlerts(target)
 		if err != nil {
-			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), repoFullName, err)
+			if securityTarget != "" {
+				return err
+			}
+			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
 			continue
 		}
 
-		for _, alert := range alerts {
-			if alert.State != "open" {
-				continue
-			}
-
-			severity := alert.Advisory.Severity
-			if !filterBySeverity(severity, securitySeverity) {
-				continue
-			}
-
-			summary.Add(severity)
-
-			depAlert := DepAlert{
-				Repo:           repo.Name,
-				Severity:       severity,
-				CVE:            alert.Advisory.CVEID,
-				Package:        alert.Dependency.Package.Name,
-				Ecosystem:      alert.Dependency.Package.Ecosystem,
-				Vulnerable:     alert.SecurityVulnerability.VulnerableVersionRange,
-				PatchedVersion: alert.SecurityVulnerability.FirstPatchedVersion.Identifier,
-				Manifest:       alert.Dependency.ManifestPath,
-				Summary:        alert.Advisory.Summary,
-			}
-			allAlerts = append(allAlerts, depAlert)
+		for _, alert := range targetAlerts {
+			summary.Add(alert.Severity)
 		}
+		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
 	if securityJSON {
@@ -104,7 +74,7 @@ func runDeps() error {
 
 	// Print summary
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Dependabot:"), summary.String())
+	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Dependabot", securityTarget)+":"), summary.String())
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
@@ -134,21 +104,13 @@ func runDeps() error {
 	return nil
 }
 
-// runDepsForTarget runs dependency checks against an external repo target.
-func runDepsForTarget(target string) error {
-	repo, fullName := buildTargetRepo(target)
-	if repo == nil {
-		return cli.Err("invalid target format: use owner/repo (e.g. wailsapp/wails)")
+func collectDepAlerts(target SecurityTarget) ([]DepAlert, error) {
+	alerts, err := fetchDependabotAlerts(target.FullName)
+	if err != nil {
+		return nil, err
 	}
 
 	var allAlerts []DepAlert
-	summary := &AlertSummary{}
-
-	alerts, err := fetchDependabotAlerts(fullName)
-	if err != nil {
-		return cli.Wrap(err, "fetch dependabot alerts for "+fullName)
-	}
-
 	for _, alert := range alerts {
 		if alert.State != "open" {
 			continue
@@ -157,9 +119,9 @@ func runDepsForTarget(target string) error {
 		if !filterBySeverity(severity, securitySeverity) {
 			continue
 		}
-		summary.Add(severity)
+
 		allAlerts = append(allAlerts, DepAlert{
-			Repo:           repo.Name,
+			Repo:           target.DisplayName,
 			Severity:       severity,
 			CVE:            alert.Advisory.CVEID,
 			Package:        alert.Dependency.Package.Name,
@@ -170,31 +132,5 @@ func runDepsForTarget(target string) error {
 			Summary:        alert.Advisory.Summary,
 		})
 	}
-
-	if securityJSON {
-		cli.Text(core.JSONMarshalString(allAlerts))
-		return nil
-	}
-
-	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Dependabot ("+fullName+"):"), summary.String())
-	cli.Blank()
-
-	for _, alert := range allAlerts {
-		sevStyle := severityStyle(alert.Severity)
-		upgrade := alert.Vulnerable
-		if alert.PatchedVersion != "" {
-			upgrade = core.Sprintf("%s -> %s", alert.Vulnerable, cli.SuccessStyle.Render(alert.PatchedVersion))
-		}
-		cli.Print("%-16s %s  %-16s %-30s %s\n",
-			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(core.Sprintf("%-8s", alert.Severity)),
-			alert.CVE,
-			alert.Package,
-			upgrade,
-		)
-	}
-	cli.Blank()
-
-	return nil
+	return allAlerts, nil
 }

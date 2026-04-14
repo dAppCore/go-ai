@@ -35,52 +35,32 @@ type SecretAlert struct {
 }
 
 func runSecrets() error {
-	if err := checkGH(); err != nil {
+	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
-	// External target mode: bypass registry entirely
-	if securityTarget != "" {
-		return runSecretsForTarget(securityTarget)
-	}
-
-	reg, err := loadRegistry(securityRegistryPath)
+	targets, err := resolveSecurityTargets(securityRegistryPath, securityRepo, securityTarget)
 	if err != nil {
 		return err
 	}
 
-	repoList := getReposToCheck(reg, securityRepo)
-	if len(repoList) == 0 {
-		return cli.Err("repo not found: %s", securityRepo)
-	}
-
 	var allAlerts []SecretAlert
-	openCount := 0
+	summary := &AlertSummary{}
 
-	for _, repo := range repoList {
-		repoFullName := core.Sprintf("%s/%s", reg.Org, repo.Name)
-
-		alerts, err := fetchSecretScanningAlerts(repoFullName)
+	for _, target := range targets {
+		targetAlerts, err := collectSecretAlerts(target)
 		if err != nil {
+			if securityTarget != "" {
+				return err
+			}
+			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
 			continue
 		}
 
-		for _, alert := range alerts {
-			if alert.State != "open" {
-				continue
-			}
-			openCount++
-
-			secretAlert := SecretAlert{
-				Repo:           repo.Name,
-				Number:         alert.Number,
-				SecretType:     alert.SecretType,
-				State:          alert.State,
-				Resolution:     alert.Resolution,
-				PushProtection: alert.PushProtection,
-			}
-			allAlerts = append(allAlerts, secretAlert)
+		for range targetAlerts {
+			summary.Add("high")
 		}
+		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
 	if securityJSON {
@@ -90,10 +70,10 @@ func runSecrets() error {
 
 	// Print summary
 	cli.Blank()
-	if openCount > 0 {
-		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets:"), cli.ErrorStyle.Render(core.Sprintf("%d open", openCount)))
+	if summary.Total > 0 {
+		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", securityTarget)+":"), cli.ErrorStyle.Render(core.Sprintf("%d open", summary.Total)))
 	} else {
-		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets:"), cli.SuccessStyle.Render("No exposed secrets"))
+		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", securityTarget)+":"), cli.SuccessStyle.Render("No exposed secrets"))
 	}
 	cli.Blank()
 
@@ -120,28 +100,20 @@ func runSecrets() error {
 	return nil
 }
 
-// runSecretsForTarget runs secret scanning checks against an external repo target.
-func runSecretsForTarget(target string) error {
-	repo, fullName := buildTargetRepo(target)
-	if repo == nil {
-		return cli.Err("invalid target format: use owner/repo (e.g. wailsapp/wails)")
+func collectSecretAlerts(target SecurityTarget) ([]SecretAlert, error) {
+	alerts, err := fetchSecretScanningAlerts(target.FullName)
+	if err != nil {
+		return nil, err
 	}
 
 	var allAlerts []SecretAlert
-	openCount := 0
-
-	alerts, err := fetchSecretScanningAlerts(fullName)
-	if err != nil {
-		return cli.Wrap(err, "fetch secret-scanning alerts for "+fullName)
-	}
-
 	for _, alert := range alerts {
 		if alert.State != "open" {
 			continue
 		}
-		openCount++
+
 		allAlerts = append(allAlerts, SecretAlert{
-			Repo:           repo.Name,
+			Repo:           target.DisplayName,
 			Number:         alert.Number,
 			SecretType:     alert.SecretType,
 			State:          alert.State,
@@ -149,33 +121,5 @@ func runSecretsForTarget(target string) error {
 			PushProtection: alert.PushProtection,
 		})
 	}
-
-	if securityJSON {
-		cli.Text(core.JSONMarshalString(allAlerts))
-		return nil
-	}
-
-	cli.Blank()
-	if openCount > 0 {
-		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets ("+fullName+"):"), cli.ErrorStyle.Render(core.Sprintf("%d open", openCount)))
-	} else {
-		cli.Print("%s %s\n", cli.DimStyle.Render("Secrets ("+fullName+"):"), cli.SuccessStyle.Render("No exposed secrets"))
-	}
-	cli.Blank()
-
-	for _, alert := range allAlerts {
-		bypassed := ""
-		if alert.PushProtection {
-			bypassed = cli.WarningStyle.Render(" (push protection bypassed)")
-		}
-		cli.Print("%-16s %-6d %-30s%s\n",
-			cli.ValueStyle.Render(alert.Repo),
-			alert.Number,
-			cli.ErrorStyle.Render(alert.SecretType),
-			bypassed,
-		)
-	}
-	cli.Blank()
-
-	return nil
+	return allAlerts, nil
 }
