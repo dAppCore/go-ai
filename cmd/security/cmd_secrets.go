@@ -7,19 +7,21 @@ import (
 )
 
 func addSecretsCommand(parent *cli.Command) {
+	selectionOptions := &SecuritySelectionOptions{}
+
 	cmd := &cli.Command{
 		Use:   "secrets",
 		Short: i18n.T("cmd.security.secrets.short"),
 		Long:  i18n.T("cmd.security.secrets.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runSecrets()
+			return runSecrets(*selectionOptions)
 		},
 	}
 
-	cmd.Flags().StringVar(&securityRegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&securityRepo, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().BoolVar(&securityJSON, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&securityTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
+	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, i18n.T("common.flag.json"))
+	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }
@@ -34,12 +36,12 @@ type SecretAlert struct {
 	PushProtection bool   `json:"push_protection_bypassed"`
 }
 
-func runSecrets() error {
+func runSecrets(selectionOptions SecuritySelectionOptions) error {
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
-	targets, err := resolveSecurityTargets(securityRegistryPath, securityRepo, securityTarget)
+	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
 		return err
 	}
@@ -50,7 +52,7 @@ func runSecrets() error {
 	for _, target := range targets {
 		targetAlerts, err := collectSecretAlerts(target)
 		if err != nil {
-			if securityTarget != "" {
+			if selectionOptions.ExternalTarget != "" {
 				return err
 			}
 			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
@@ -63,7 +65,7 @@ func runSecrets() error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if securityJSON {
+	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
@@ -71,9 +73,9 @@ func runSecrets() error {
 	// Print summary
 	cli.Blank()
 	if summary.Total > 0 {
-		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", securityTarget)+":"), cli.ErrorStyle.Render(core.Sprintf("%d open", summary.Total)))
+		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", selectionOptions.ExternalTarget)+":"), cli.ErrorStyle.Render(core.Sprintf("%d open", summary.Total)))
 	} else {
-		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", securityTarget)+":"), cli.SuccessStyle.Render("No exposed secrets"))
+		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", selectionOptions.ExternalTarget)+":"), cli.SuccessStyle.Render("No exposed secrets"))
 	}
 	cli.Blank()
 

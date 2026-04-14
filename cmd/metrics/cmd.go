@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"dappco.re/go/core/ai/ai"
@@ -14,36 +13,36 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-var (
-	metricsSince string
-	metricsJSON  bool
-
-	metricsFlagsOnce sync.Once
-)
-
-var metricsCmd = &cli.Command{
-	Use:   "metrics",
-	Short: i18n.T("cmd.ai.metrics.short"),
-	Long:  i18n.T("cmd.ai.metrics.long"),
-	RunE: func(cmd *cli.Command, args []string) error {
-		return runMetrics()
-	},
-}
-
-func initMetricsFlags() {
-	metricsFlagsOnce.Do(func() {
-		metricsCmd.Flags().StringVar(&metricsSince, "since", "168h", i18n.T("cmd.ai.metrics.flag.since"))
-		metricsCmd.Flags().BoolVar(&metricsJSON, "json", false, i18n.T("common.flag.json"))
-	})
+// MetricsCommandOptions{SinceWindow: "168h", JSONOutput: true} captures the
+// flag values for one `ai metrics` command instance.
+type MetricsCommandOptions struct {
+	SinceWindow string
+	JSONOutput  bool
 }
 
 // AddMetricsCommand adds the 'metrics' command to the parent.
 func AddMetricsCommand(parent *cli.Command) {
-	initMetricsFlags()
-	if hasCommand(parent, metricsCmd.Name()) {
+	if hasCommand(parent, "metrics") {
 		return
 	}
-	parent.AddCommand(metricsCmd)
+
+	options := &MetricsCommandOptions{
+		SinceWindow: "168h",
+	}
+
+	metricsCommand := &cli.Command{
+		Use:   "metrics",
+		Short: i18n.T("cmd.ai.metrics.short"),
+		Long:  i18n.T("cmd.ai.metrics.long"),
+		RunE: func(cmd *cli.Command, args []string) error {
+			return runMetrics(*options)
+		},
+	}
+
+	metricsCommand.Flags().StringVar(&options.SinceWindow, "since", options.SinceWindow, i18n.T("cmd.ai.metrics.flag.since"))
+	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, i18n.T("common.flag.json"))
+
+	parent.AddCommand(metricsCommand)
 }
 
 func hasCommand(parent *cli.Command, name string) bool {
@@ -55,10 +54,10 @@ func hasCommand(parent *cli.Command, name string) bool {
 	return false
 }
 
-func runMetrics() error {
-	since, err := parseSinceDuration(metricsSince)
+func runMetrics(options MetricsCommandOptions) error {
+	since, err := parseSinceDuration(options.SinceWindow)
 	if err != nil {
-		return cli.Err("invalid --since value %q: %v", metricsSince, err)
+		return cli.Err("invalid --since value %q: %v", options.SinceWindow, err)
 	}
 
 	events, err := ai.ReadEvents(time.Now().Add(-since))
@@ -67,7 +66,7 @@ func runMetrics() error {
 	}
 
 	summary := ai.Summary(events)
-	if metricsJSON {
+	if options.JSONOutput {
 		output, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
 			return cli.Wrap(err, "marshal metrics JSON")
@@ -77,7 +76,7 @@ func runMetrics() error {
 	}
 
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), metricsSince)
+	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), options.SinceWindow)
 	total, _ := summary["total"].(int)
 	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), total)
 	cli.Blank()

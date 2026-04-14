@@ -15,15 +15,33 @@ import (
 )
 
 var (
-	// Command flags
-	securityRegistryPath string
-	securityRepo         string
-	securitySeverity     string
-	securityJSON         bool
-	securityTarget       string // External repo target (e.g. "wailsapp/wails")
-
 	runGitHubAPIRequest = runGitHubAPI
 )
+
+// SecuritySelectionOptions{ExternalTarget: "wailsapp/wails", SeverityFilter: "critical,high"} captures
+// the shared repository and output flags used by the security query commands.
+type SecuritySelectionOptions struct {
+	RegistryPath   string
+	RepositoryName string
+	SeverityFilter string
+	JSONOutput     bool
+	ExternalTarget string
+}
+
+// ScanCommandOptions{Selection: SecuritySelectionOptions{ExternalTarget: "wailsapp/wails"}, ToolName: "CodeQL"} configures one `security scan` execution.
+type ScanCommandOptions struct {
+	Selection SecuritySelectionOptions
+	ToolName  string
+}
+
+// JobsCommandOptions{Targets: "all", IssueRepository: "host-uk/core", WorkerCount: 4} configures one `security jobs` execution.
+type JobsCommandOptions struct {
+	RegistryPath    string
+	Targets         string
+	IssueRepository string
+	DryRun          bool
+	WorkerCount     int
+}
 
 // AddSecurityCommands(root) registers the top-level security alerts, deps, scan, secrets, and jobs commands.
 func AddSecurityCommands(root *cli.Command) {
@@ -31,19 +49,19 @@ func AddSecurityCommands(root *cli.Command) {
 		return
 	}
 
-	secCmd := &cli.Command{
+	securityCommand := &cli.Command{
 		Use:   "security",
 		Short: i18n.T("cmd.security.short"),
 		Long:  i18n.T("cmd.security.long"),
 	}
 
-	addAlertsCommand(secCmd)
-	addDepsCommand(secCmd)
-	addScanCommand(secCmd)
-	addSecretsCommand(secCmd)
-	addJobsCommand(secCmd)
+	addAlertsCommand(securityCommand)
+	addDepsCommand(securityCommand)
+	addScanCommand(securityCommand)
+	addSecretsCommand(securityCommand)
+	addJobsCommand(securityCommand)
 
-	root.AddCommand(secCmd)
+	root.AddCommand(securityCommand)
 }
 
 func hasCommand(parent *cli.Command, name string) bool {
@@ -124,22 +142,22 @@ type SecretScanningAlert struct {
 // loadRegistry loads the repository registry.
 func loadRegistry(registryPath string) (*repos.Registry, error) {
 	if registryPath != "" {
-		reg, err := repos.LoadRegistry(io.Local, registryPath)
+		registry, err := repos.LoadRegistry(io.Local, registryPath)
 		if err != nil {
 			return nil, cli.Wrap(err, "load registry")
 		}
-		return reg, nil
+		return registry, nil
 	}
 
 	path, err := repos.FindRegistry(io.Local)
 	if err != nil {
 		return nil, cli.Wrap(err, "find registry")
 	}
-	reg, err := repos.LoadRegistry(io.Local, path)
+	registry, err := repos.LoadRegistry(io.Local, path)
 	if err != nil {
 		return nil, cli.Wrap(err, "load registry")
 	}
-	return reg, nil
+	return registry, nil
 }
 
 // checkGitHubCLI() verifies that the GitHub CLI is installed before a command tries to call the GitHub API.

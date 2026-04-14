@@ -14,13 +14,6 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-var (
-	jobsTargets   string
-	jobsIssueRepo string
-	jobsDryRun    bool
-	jobsCopies    int
-)
-
 type jobRepoResult struct {
 	Repo     string
 	Summary  AlertSummary
@@ -33,55 +26,59 @@ type jobResult struct {
 }
 
 func addJobsCommand(parent *cli.Command) {
+	commandOptions := &JobsCommandOptions{
+		WorkerCount: 1,
+	}
+
 	cmd := &cli.Command{
 		Use:   "jobs",
 		Short: i18n.T("cmd.security.jobs.short"),
 		Long:  i18n.T("cmd.security.jobs.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runJobs()
+			return runJobs(*commandOptions)
 		},
 	}
 
-	cmd.Flags().StringVar(&securityRegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&jobsTargets, "targets", "", i18n.T("cmd.security.jobs.flag.targets"))
-	cmd.Flags().StringVar(&jobsIssueRepo, "issue-repo", "", i18n.T("cmd.security.jobs.flag.issue_repo"))
-	cmd.Flags().BoolVar(&jobsDryRun, "dry-run", false, i18n.T("cmd.security.jobs.flag.dry_run"))
-	cmd.Flags().IntVar(&jobsCopies, "copies", 1, i18n.T("cmd.security.jobs.flag.copies"))
+	cmd.Flags().StringVar(&commandOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&commandOptions.Targets, "targets", "", i18n.T("cmd.security.jobs.flag.targets"))
+	cmd.Flags().StringVar(&commandOptions.IssueRepository, "issue-repo", "", i18n.T("cmd.security.jobs.flag.issue_repo"))
+	cmd.Flags().BoolVar(&commandOptions.DryRun, "dry-run", false, i18n.T("cmd.security.jobs.flag.dry_run"))
+	cmd.Flags().IntVar(&commandOptions.WorkerCount, "copies", commandOptions.WorkerCount, i18n.T("cmd.security.jobs.flag.copies"))
 
 	parent.AddCommand(cmd)
 }
 
-func runJobs() error {
+func runJobs(commandOptions JobsCommandOptions) error {
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
-	if jobsCopies < 1 {
+	if commandOptions.WorkerCount < 1 {
 		return cli.Err("--copies must be at least 1")
 	}
 
-	reg, err := loadRegistryForJobs(jobsTargets)
+	registry, err := loadRegistryForJobs(commandOptions)
 	if err != nil {
 		return err
 	}
 
-	targets, err := resolveJobTargets(jobsTargets, reg)
+	targets, err := resolveJobTargets(commandOptions.Targets, registry)
 	if err != nil {
 		return err
 	}
-	if jobsDryRun {
+	if commandOptions.DryRun {
 		cli.Blank()
-		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), jobsCopies)
+		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), commandOptions.WorkerCount)
 		for _, target := range targets {
 			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would scan:"), target)
 		}
-		if jobsIssueRepo != "" {
-			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would create summary issue in:"), jobsIssueRepo)
+		if commandOptions.IssueRepository != "" {
+			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would create summary issue in:"), commandOptions.IssueRepository)
 		}
 		cli.Blank()
 		return nil
 	}
 
-	results := runJobWorkers(targets, jobsCopies)
+	results := runJobWorkers(targets, commandOptions.WorkerCount)
 	var successful []jobRepoResult
 	overall := &AlertSummary{}
 	for _, result := range results {
@@ -104,10 +101,10 @@ func runJobs() error {
 	}
 	cli.Blank()
 
-	if jobsIssueRepo != "" {
+	if commandOptions.IssueRepository != "" {
 		title := "Security scan summary: " + time.Now().Format("2006-01-02")
 		body := buildJobsIssueBody(overall, successful)
-		issueURL, err := createJobsIssue(jobsIssueRepo, title, body)
+		issueURL, err := createJobsIssue(commandOptions.IssueRepository, title, body)
 		if err != nil {
 			return err
 		}
@@ -116,9 +113,9 @@ func runJobs() error {
 		_ = ai.Record(ai.Event{
 			Type:      "security.jobs",
 			Timestamp: time.Now(),
-			Repo:      jobsIssueRepo,
+			Repo:      commandOptions.IssueRepository,
 			Data: map[string]any{
-				"issue_repo": jobsIssueRepo,
+				"issue_repo": commandOptions.IssueRepository,
 				"issue_url":  issueURL,
 				"targets":    len(successful),
 				"total":      overall.Total,
@@ -133,15 +130,15 @@ func runJobs() error {
 	return nil
 }
 
-func loadRegistryForJobs(targets string) (*repos.Registry, error) {
-	if !jobsNeedRegistry(targets) {
+func loadRegistryForJobs(commandOptions JobsCommandOptions) (*repos.Registry, error) {
+	if !jobsNeedRegistry(commandOptions.Targets) {
 		return nil, nil
 	}
-	reg, err := loadRegistry(securityRegistryPath)
+	registry, err := loadRegistry(commandOptions.RegistryPath)
 	if err != nil {
 		return nil, err
 	}
-	return reg, nil
+	return registry, nil
 }
 
 func jobsNeedRegistry(targets string) bool {
@@ -162,7 +159,7 @@ func jobsNeedRegistry(targets string) bool {
 	return false
 }
 
-func resolveJobTargets(targets string, reg *repos.Registry) ([]string, error) {
+func resolveJobTargets(targets string, registry *repos.Registry) ([]string, error) {
 	trimmed := core.Trim(targets)
 	if trimmed == "" {
 		return nil, cli.Err("at least one --targets value required (comma-separated repo list or all)")
@@ -179,18 +176,18 @@ func resolveJobTargets(targets string, reg *repos.Registry) ([]string, error) {
 	}
 
 	if trimmed == "all" {
-		if reg == nil {
+		if registry == nil {
 			return nil, cli.Err("--targets=all requires a repository registry")
 		}
-		liveTargets, err := listGitHubOrgTargets(reg.Org)
+		liveTargets, err := listGitHubOrgTargets(registry.Org)
 		if err == nil {
 			if len(liveTargets) == 0 {
-				return nil, cli.Err("no repositories found for GitHub org: %s", reg.Org)
+				return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
 			}
 			return liveTargets, nil
 		}
-		for _, repo := range reg.List() {
-			addTarget(core.Sprintf("%s/%s", reg.Org, repo.Name))
+		for _, repo := range registry.List() {
+			addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
 		}
 		if len(resolved) > 0 {
 			return resolved, nil
@@ -211,14 +208,14 @@ func resolveJobTargets(targets string, reg *repos.Registry) ([]string, error) {
 			addTarget(target.FullName)
 			continue
 		}
-		if reg == nil {
+		if registry == nil {
 			return nil, cli.Err("registry-backed target %q requires a repository registry", token)
 		}
-		repo, ok := reg.Get(token)
+		repo, ok := registry.Get(token)
 		if !ok {
 			return nil, cli.Err("repo not found: %s", token)
 		}
-		addTarget(core.Sprintf("%s/%s", reg.Org, repo.Name))
+		addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
 	}
 
 	if len(resolved) == 0 {

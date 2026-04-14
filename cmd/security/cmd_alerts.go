@@ -7,20 +7,22 @@ import (
 )
 
 func addAlertsCommand(parent *cli.Command) {
+	selectionOptions := &SecuritySelectionOptions{}
+
 	cmd := &cli.Command{
 		Use:   "alerts",
 		Short: i18n.T("cmd.security.alerts.short"),
 		Long:  i18n.T("cmd.security.alerts.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runAlerts()
+			return runAlerts(*selectionOptions)
 		},
 	}
 
-	cmd.Flags().StringVar(&securityRegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&securityRepo, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&securitySeverity, "severity", "", i18n.T("cmd.security.flag.severity"))
-	cmd.Flags().BoolVar(&securityJSON, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&securityTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
+	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", i18n.T("cmd.security.flag.severity"))
+	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, i18n.T("common.flag.json"))
+	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }
@@ -37,12 +39,12 @@ type AlertOutput struct {
 	Message  string `json:"message"`
 }
 
-func runAlerts() error {
+func runAlerts(selectionOptions SecuritySelectionOptions) error {
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
-	targets, err := resolveSecurityTargets(securityRegistryPath, securityRepo, securityTarget)
+	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
 		return err
 	}
@@ -51,9 +53,9 @@ func runAlerts() error {
 	summary := &AlertSummary{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectAlertOutputs(target)
+		targetAlerts, err := collectAlertOutputs(target, selectionOptions.SeverityFilter)
 		if err != nil {
-			if securityTarget != "" {
+			if selectionOptions.ExternalTarget != "" {
 				return err
 			}
 			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
@@ -66,14 +68,14 @@ func runAlerts() error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if securityJSON {
+	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
 	// Print summary
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Alerts", securityTarget)+":"), summary.String())
+	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Alerts", selectionOptions.ExternalTarget)+":"), summary.String())
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
@@ -106,7 +108,7 @@ func runAlerts() error {
 	return nil
 }
 
-func collectAlertOutputs(target SecurityTarget) ([]AlertOutput, error) {
+func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertOutput, error) {
 	var allAlerts []AlertOutput
 	var fetchErrors int
 
@@ -119,7 +121,7 @@ func collectAlertOutputs(target SecurityTarget) ([]AlertOutput, error) {
 				continue
 			}
 			severity := alert.Advisory.Severity
-			if !filterBySeverity(severity, securitySeverity) {
+			if !filterBySeverity(severity, severityFilter) {
 				continue
 			}
 			allAlerts = append(allAlerts, AlertOutput{
@@ -143,7 +145,7 @@ func collectAlertOutputs(target SecurityTarget) ([]AlertOutput, error) {
 				continue
 			}
 			severity := alert.Rule.Severity
-			if !filterBySeverity(severity, securitySeverity) {
+			if !filterBySeverity(severity, severityFilter) {
 				continue
 			}
 			location := core.Sprintf("%s:%d", alert.MostRecentInstance.Location.Path, alert.MostRecentInstance.Location.StartLine)
@@ -166,7 +168,7 @@ func collectAlertOutputs(target SecurityTarget) ([]AlertOutput, error) {
 			if alert.State != "open" {
 				continue
 			}
-			if !filterBySeverity("high", securitySeverity) {
+			if !filterBySeverity("high", severityFilter) {
 				continue
 			}
 			allAlerts = append(allAlerts, AlertOutput{

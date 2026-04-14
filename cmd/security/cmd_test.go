@@ -36,3 +36,38 @@ func TestAddSecurityCommands_Good(t *testing.T) {
 		}
 	}
 }
+
+func TestAddSecurityCommands_Good_SubcommandsKeepFlagStateLocal(t *testing.T) {
+	root := &cli.Command{Use: "core"}
+
+	AddSecurityCommands(root)
+
+	alertsCommand, _, err := root.Find([]string{"security", "alerts"})
+	if err != nil {
+		t.Fatalf("find alerts command: %v", err)
+	}
+	depsCommand, _, err := root.Find([]string{"security", "deps"})
+	if err != nil {
+		t.Fatalf("find deps command: %v", err)
+	}
+
+	if err := alertsCommand.Flags().Set("severity", "critical"); err != nil {
+		t.Fatalf("set alerts --severity: %v", err)
+	}
+
+	alertsSeverity, err := alertsCommand.Flags().GetString("severity")
+	if err != nil {
+		t.Fatalf("get alerts --severity: %v", err)
+	}
+	depsSeverity, err := depsCommand.Flags().GetString("severity")
+	if err != nil {
+		t.Fatalf("get deps --severity: %v", err)
+	}
+
+	if alertsSeverity != "critical" {
+		t.Fatalf("alerts severity = %q, want %q", alertsSeverity, "critical")
+	}
+	if depsSeverity != "" {
+		t.Fatalf("deps severity leaked shared state: got %q, want empty default", depsSeverity)
+	}
+}

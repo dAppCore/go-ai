@@ -9,26 +9,24 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-var (
-	scanTool string
-)
-
 func addScanCommand(parent *cli.Command) {
+	commandOptions := &ScanCommandOptions{}
+
 	cmd := &cli.Command{
 		Use:   "scan",
 		Short: i18n.T("cmd.security.scan.short"),
 		Long:  i18n.T("cmd.security.scan.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runScan()
+			return runScan(*commandOptions)
 		},
 	}
 
-	cmd.Flags().StringVar(&securityRegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&securityRepo, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&securitySeverity, "severity", "", i18n.T("cmd.security.flag.severity"))
-	cmd.Flags().StringVar(&scanTool, "tool", "", i18n.T("cmd.security.scan.flag.tool"))
-	cmd.Flags().BoolVar(&securityJSON, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&securityTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&commandOptions.Selection.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&commandOptions.Selection.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
+	cmd.Flags().StringVar(&commandOptions.Selection.SeverityFilter, "severity", "", i18n.T("cmd.security.flag.severity"))
+	cmd.Flags().StringVar(&commandOptions.ToolName, "tool", "", i18n.T("cmd.security.scan.flag.tool"))
+	cmd.Flags().BoolVar(&commandOptions.Selection.JSONOutput, "json", false, i18n.T("common.flag.json"))
+	cmd.Flags().StringVar(&commandOptions.Selection.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }
@@ -45,12 +43,12 @@ type ScanAlert struct {
 	Message     string `json:"message"`
 }
 
-func runScan() error {
+func runScan(commandOptions ScanCommandOptions) error {
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
-	targets, err := resolveSecurityTargets(securityRegistryPath, securityRepo, securityTarget)
+	targets, err := resolveSecurityTargets(commandOptions.Selection.RegistryPath, commandOptions.Selection.RepositoryName, commandOptions.Selection.ExternalTarget)
 	if err != nil {
 		return err
 	}
@@ -59,9 +57,9 @@ func runScan() error {
 	summary := &AlertSummary{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectScanAlerts(target)
+		targetAlerts, err := collectScanAlerts(target, commandOptions)
 		if err != nil {
-			if securityTarget != "" {
+			if commandOptions.Selection.ExternalTarget != "" {
 				return err
 			}
 			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
@@ -77,9 +75,9 @@ func runScan() error {
 	// Record metrics
 	recordedRepo := ""
 	recordedTarget := ""
-	if securityTarget != "" {
-		recordedRepo = securityTarget
-		recordedTarget = securityTarget
+	if commandOptions.Selection.ExternalTarget != "" {
+		recordedRepo = commandOptions.Selection.ExternalTarget
+		recordedTarget = commandOptions.Selection.ExternalTarget
 	}
 	_ = ai.Record(ai.Event{
 		Type:      "security.scan",
@@ -95,14 +93,14 @@ func runScan() error {
 		},
 	})
 
-	if securityJSON {
+	if commandOptions.Selection.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
 	// Print summary
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Code Scanning", securityTarget)+":"), summary.String())
+	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Code Scanning", commandOptions.Selection.ExternalTarget)+":"), summary.String())
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
@@ -128,7 +126,7 @@ func runScan() error {
 	return nil
 }
 
-func collectScanAlerts(target SecurityTarget) ([]ScanAlert, error) {
+func collectScanAlerts(target SecurityTarget, commandOptions ScanCommandOptions) ([]ScanAlert, error) {
 	alerts, err := fetchCodeScanningAlerts(target.FullName)
 	if err != nil {
 		return nil, err
@@ -139,14 +137,14 @@ func collectScanAlerts(target SecurityTarget) ([]ScanAlert, error) {
 		if alert.State != "open" {
 			continue
 		}
-		if scanTool != "" && alert.Tool.Name != scanTool {
+		if commandOptions.ToolName != "" && alert.Tool.Name != commandOptions.ToolName {
 			continue
 		}
 		severity := alert.Rule.Severity
 		if severity == "" {
 			severity = "medium"
 		}
-		if !filterBySeverity(severity, securitySeverity) {
+		if !filterBySeverity(severity, commandOptions.Selection.SeverityFilter) {
 			continue
 		}
 

@@ -7,20 +7,22 @@ import (
 )
 
 func addDepsCommand(parent *cli.Command) {
+	selectionOptions := &SecuritySelectionOptions{}
+
 	cmd := &cli.Command{
 		Use:   "deps",
 		Short: i18n.T("cmd.security.deps.short"),
 		Long:  i18n.T("cmd.security.deps.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runDeps()
+			return runDeps(*selectionOptions)
 		},
 	}
 
-	cmd.Flags().StringVar(&securityRegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&securityRepo, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&securitySeverity, "severity", "", i18n.T("cmd.security.flag.severity"))
-	cmd.Flags().BoolVar(&securityJSON, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&securityTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
+	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", i18n.T("cmd.security.flag.severity"))
+	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, i18n.T("common.flag.json"))
+	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }
@@ -38,12 +40,12 @@ type DepAlert struct {
 	Summary        string `json:"summary"`
 }
 
-func runDeps() error {
+func runDeps(selectionOptions SecuritySelectionOptions) error {
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
-	targets, err := resolveSecurityTargets(securityRegistryPath, securityRepo, securityTarget)
+	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
 		return err
 	}
@@ -52,9 +54,9 @@ func runDeps() error {
 	summary := &AlertSummary{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectDepAlerts(target)
+		targetAlerts, err := collectDepAlerts(target, selectionOptions.SeverityFilter)
 		if err != nil {
-			if securityTarget != "" {
+			if selectionOptions.ExternalTarget != "" {
 				return err
 			}
 			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
@@ -67,14 +69,14 @@ func runDeps() error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if securityJSON {
+	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
 	// Print summary
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Dependabot", securityTarget)+":"), summary.String())
+	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Dependabot", selectionOptions.ExternalTarget)+":"), summary.String())
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
@@ -104,7 +106,7 @@ func runDeps() error {
 	return nil
 }
 
-func collectDepAlerts(target SecurityTarget) ([]DepAlert, error) {
+func collectDepAlerts(target SecurityTarget, severityFilter string) ([]DepAlert, error) {
 	alerts, err := fetchDependabotAlerts(target.FullName)
 	if err != nil {
 		return nil, err
@@ -116,7 +118,7 @@ func collectDepAlerts(target SecurityTarget) ([]DepAlert, error) {
 			continue
 		}
 		severity := alert.Advisory.Severity
-		if !filterBySeverity(severity, securitySeverity) {
+		if !filterBySeverity(severity, severityFilter) {
 			continue
 		}
 
