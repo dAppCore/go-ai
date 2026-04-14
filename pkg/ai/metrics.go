@@ -3,11 +3,14 @@ package ai
 import (
 	"bufio"
 	"cmp"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
-	"dappco.re/go/core"
 	coreio "dappco.re/go/core/io"
 	coreerr "dappco.re/go/core/log"
 )
@@ -27,20 +30,20 @@ type Event struct {
 
 // metricsDir returns the base directory for metrics storage.
 func metricsDir() (string, error) {
-	home := core.Env("DIR_HOME")
-	if home == "" {
-		return "", coreerr.E("ai.metricsDir", "get home directory", nil)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", coreerr.E("ai", "get metrics directory", err)
 	}
-	return core.JoinPath(home, ".core", "ai", "metrics"), nil
+	return filepath.Join(home, ".core", "ai", "metrics"), nil
 }
 
 // metricsFilePath returns the JSONL file path for the given date.
 func metricsFilePath(dir string, t time.Time) string {
-	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
+	return filepath.Join(dir, t.Format("2006-01-02")+".jsonl")
 }
 
 // Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
-func Record(event Event) error {
+func Record(event Event) (err error) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
@@ -54,22 +57,28 @@ func Record(event Event) error {
 	}
 
 	if err := coreio.Local.EnsureDir(dir); err != nil {
-		return coreerr.E("ai.Record", "create metrics directory", err)
+		return coreerr.E("ai", "record event", err)
 	}
 
 	path := metricsFilePath(dir, event.Timestamp)
 
-	r := core.JSONMarshal(event)
-	if !r.OK {
-		return coreerr.E("ai.Record", "marshal event", r.Value.(error))
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return coreerr.E("ai", "record event", err)
 	}
-	data := r.Value.([]byte)
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = coreerr.E("ai", "record event", closeErr)
+		}
+	}()
 
-	// Read existing content (if any) and append the new line.
-	existing, _ := coreio.Local.Read(path)
-	line := core.Concat(existing, string(data), "\n")
-	if err := coreio.Local.Write(path, line); err != nil {
-		return coreerr.E("ai.Record", "write event", err)
+	data, err := json.Marshal(event)
+	if err != nil {
+		return coreerr.E("ai", "record event", err)
+	}
+
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		return coreerr.E("ai", "record event", err)
 	}
 
 	return nil
@@ -96,6 +105,10 @@ func ReadEvents(since time.Time) ([]Event, error) {
 		events = append(events, dayEvents...)
 	}
 
+	slices.SortStableFunc(events, func(a, b Event) int {
+		return cmp.Compare(a.Timestamp.UnixNano(), b.Timestamp.UnixNano())
+	})
+
 	return events, nil
 }
 
@@ -107,15 +120,14 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 
 	content, err := coreio.Local.Read(path)
 	if err != nil {
-		return nil, coreerr.E("ai.readMetricsFile", "read metrics file", err)
+		return nil, coreerr.E("ai", "read metrics", err)
 	}
 
 	var events []Event
-	scanner := bufio.NewScanner(core.NewReader(content))
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		var ev Event
-		r := core.JSONUnmarshal(scanner.Bytes(), &ev)
-		if !r.OK {
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
 			continue // skip malformed lines
 		}
 		if !ev.Timestamp.Before(since) {
@@ -123,7 +135,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, coreerr.E("ai.readMetricsFile", "scan metrics file", err)
+		return nil, coreerr.E("ai", "read metrics", err)
 	}
 	return events, nil
 }
@@ -159,7 +171,8 @@ func Summary(events []Event) map[string]any {
 		"by_type":  sortedCountPairs(byTypeCounts),
 		"by_repo":  sortedCountPairs(byRepoCounts),
 		"by_agent": sortedCountPairs(byAgentCounts),
-		"events":   compactEvents(recentEvents),
+		"recent":   recentEvents,
+		"events":   recentEvents,
 	}
 }
 
@@ -185,25 +198,6 @@ func sortedCountPairs(counts map[string]int) []map[string]any {
 	result := make([]map[string]any, len(entries))
 	for i, e := range entries {
 		result[i] = map[string]any{"key": e.key, "count": e.count}
-	}
-	return result
-}
-
-// compactEvents converts events into the compact shape used by metrics_query.
-func compactEvents(events []Event) []map[string]any {
-	result := make([]map[string]any, len(events))
-	for i, ev := range events {
-		item := map[string]any{
-			"type":      ev.Type,
-			"timestamp": ev.Timestamp,
-		}
-		if ev.AgentID != "" {
-			item["agent_id"] = ev.AgentID
-		}
-		if ev.Repo != "" {
-			item["repo"] = ev.Repo
-		}
-		result[i] = item
 	}
 	return result
 }

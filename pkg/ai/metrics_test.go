@@ -249,15 +249,15 @@ func TestSummary_Good(t *testing.T) {
 		t.Errorf("expected build:2 first, got %v:%v", byType[0]["key"], byType[0]["count"])
 	}
 
-	recent, _ := s["events"].([]map[string]any)
+	recent, _ := s["recent"].([]Event)
 	if len(recent) != 3 {
 		t.Fatalf("expected 3 recent events, got %d", len(recent))
 	}
-	if recent[0]["type"] != "test" {
-		t.Errorf("expected newest event first, got %v", recent[0]["type"])
+	if recent[0].Type != "test" {
+		t.Errorf("expected newest event first, got %v", recent[0].Type)
 	}
-	if _, ok := recent[0]["timestamp"].(time.Time); !ok {
-		t.Errorf("expected timestamp to be time.Time, got %T", recent[0]["timestamp"])
+	if recent[0].Timestamp.IsZero() {
+		t.Error("expected recent event timestamp to be preserved")
 	}
 }
 
