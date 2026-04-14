@@ -4,17 +4,19 @@ go 1.26.0
 
 require (
 	dappco.re/go/core v0.8.0-alpha.1
-	dappco.re/go/core/cli v0.5.2
 	dappco.re/go/core/i18n v0.2.3
 	dappco.re/go/core/io v0.4.1
 	dappco.re/go/core/log v0.1.2
-	dappco.re/go/core/ml v0.2.0
-	dappco.re/go/core/rag v0.1.13
+	dappco.re/go/core/ml v0.0.0
 	dappco.re/go/core/scm v0.6.1
+	forge.lthn.ai/core/cli v0.3.7
+	forge.lthn.ai/core/go-inference v0.1.7
+	forge.lthn.ai/core/go-i18n v0.1.7
+	forge.lthn.ai/core/go-log v0.0.4
+	forge.lthn.ai/core/go-rag v0.1.11
 )
 
 require (
-	dappco.re/go/core/inference v0.3.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect

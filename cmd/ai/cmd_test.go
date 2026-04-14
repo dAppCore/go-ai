@@ -3,7 +3,7 @@ package ai
 import (
 	"testing"
 
-	"dappco.re/go/core/cli/pkg/cli"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 func TestAddAICommands_Good(t *testing.T) {

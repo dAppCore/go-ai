@@ -3,7 +3,7 @@ package security
 import (
 	"testing"
 
-	"dappco.re/go/core/cli/pkg/cli"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 func TestAddSecurityCommands_Good(t *testing.T) {

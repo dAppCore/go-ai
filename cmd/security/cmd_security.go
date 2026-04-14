@@ -5,11 +5,11 @@ import (
 	"slices"
 
 	"dappco.re/go/core"
-	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
 	"dappco.re/go/core/io"
 	coreerr "dappco.re/go/core/log"
 	"dappco.re/go/core/scm/repos"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 var (
@@ -153,9 +153,8 @@ func runGHAPI(endpoint string) ([]byte, error) {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
-			// Handle common errors gracefully
 			if core.Contains(stderr, "404") || core.Contains(stderr, "Not Found") {
-				return []byte("[]"), nil // Return empty array for not found
+				return []byte("[]"), nil
 			}
 			if core.Contains(stderr, "403") {
 				return nil, coreerr.E("security.runGHAPI", "access denied (check token permissions)", nil)
@@ -240,26 +239,55 @@ func (s *AlertSummary) Add(severity string) {
 	}
 }
 
-// String renders a human-readable summary of alert counts.
+// String renders a styled summary of alert counts.
 func (s *AlertSummary) String() string {
-	var parts []string
-	if s.Critical > 0 {
-		parts = append(parts, cli.ErrorStyle.Render(core.Sprintf("%d critical", s.Critical)))
-	}
-	if s.High > 0 {
-		parts = append(parts, cli.WarningStyle.Render(core.Sprintf("%d high", s.High)))
-	}
-	if s.Medium > 0 {
-		parts = append(parts, cli.ValueStyle.Render(core.Sprintf("%d medium", s.Medium)))
-	}
-	if s.Low > 0 {
-		parts = append(parts, cli.DimStyle.Render(core.Sprintf("%d low", s.Low)))
-	}
-	if s.Unknown > 0 {
-		parts = append(parts, cli.DimStyle.Render(core.Sprintf("%d unknown", s.Unknown)))
-	}
-	if len(parts) == 0 {
+	plain := s.parts()
+	if len(plain) == 0 {
 		return cli.SuccessStyle.Render("No alerts")
 	}
+
+	styled := make([]string, 0, len(plain))
+	for _, part := range plain {
+		fields := core.Split(part, " ")
+		switch fields[len(fields)-1] {
+		case "critical":
+			styled = append(styled, cli.ErrorStyle.Render(part))
+		case "high":
+			styled = append(styled, cli.WarningStyle.Render(part))
+		case "medium":
+			styled = append(styled, cli.ValueStyle.Render(part))
+		default:
+			styled = append(styled, cli.DimStyle.Render(part))
+		}
+	}
+	return core.Join(" | ", styled...)
+}
+
+// PlainString renders an unstyled summary suitable for logs and issue bodies.
+func (s *AlertSummary) PlainString() string {
+	parts := s.parts()
+	if len(parts) == 0 {
+		return "No alerts"
+	}
 	return core.Join(" | ", parts...)
+}
+
+func (s *AlertSummary) parts() []string {
+	var parts []string
+	if s.Critical > 0 {
+		parts = append(parts, core.Sprintf("%d critical", s.Critical))
+	}
+	if s.High > 0 {
+		parts = append(parts, core.Sprintf("%d high", s.High))
+	}
+	if s.Medium > 0 {
+		parts = append(parts, core.Sprintf("%d medium", s.Medium))
+	}
+	if s.Low > 0 {
+		parts = append(parts, core.Sprintf("%d low", s.Low))
+	}
+	if s.Unknown > 0 {
+		parts = append(parts, core.Sprintf("%d unknown", s.Unknown))
+	}
+	return parts
 }

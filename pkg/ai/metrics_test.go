@@ -271,15 +271,15 @@ func TestSummary_Good_RecentEventsLimit(t *testing.T) {
 	}
 
 	s := Summary(events)
-	recent, _ := s["events"].([]map[string]any)
+	recent, _ := s["recent"].([]Event)
 	if len(recent) != 10 {
 		t.Fatalf("expected 10 recent events, got %d", len(recent))
 	}
-	if recent[0]["timestamp"].(time.Time).Minute() != 11 {
-		t.Errorf("expected newest event first, got minute %d", recent[0]["timestamp"].(time.Time).Minute())
+	if recent[0].Timestamp.Minute() != 11 {
+		t.Errorf("expected newest event first, got minute %d", recent[0].Timestamp.Minute())
 	}
-	if recent[9]["timestamp"].(time.Time).Minute() != 2 {
-		t.Errorf("expected tenth newest event last, got minute %d", recent[9]["timestamp"].(time.Time).Minute())
+	if recent[9].Timestamp.Minute() != 2 {
+		t.Errorf("expected tenth newest event last, got minute %d", recent[9].Timestamp.Minute())
 	}
 }
 

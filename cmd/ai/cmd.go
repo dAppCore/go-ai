@@ -5,7 +5,7 @@ import (
 	metricscmd "dappco.re/go/core/ai/cmd/metrics"
 	ragcmd "dappco.re/go/core/ai/cmd/rag"
 	mlcmd "dappco.re/go/core/ml/cmd"
-	"dappco.re/go/core/cli/pkg/cli"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 func init() {

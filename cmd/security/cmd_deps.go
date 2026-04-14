@@ -2,8 +2,8 @@ package security
 
 import (
 	"dappco.re/go/core"
-	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 func addDepsCommand(parent *cli.Command) {

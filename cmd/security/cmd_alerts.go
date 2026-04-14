@@ -2,8 +2,8 @@ package security
 
 import (
 	"dappco.re/go/core"
-	"dappco.re/go/core/cli/pkg/cli"
 	"dappco.re/go/core/i18n"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 func addAlertsCommand(parent *cli.Command) {
@@ -105,8 +105,8 @@ func runAlerts() error {
 					Severity: severity,
 					ID:       alert.Rule.ID,
 					Location: location,
-					Type:     alert.Tool.Name,
-					Message:  alert.Rule.Description,
+					Type:     "code-scanning",
+					Message:  alert.MostRecentInstance.Message.Text,
 				})
 			}
 		}
@@ -225,8 +225,8 @@ func runAlertsForTarget(target string) error {
 				Severity: severity,
 				ID:       alert.Rule.ID,
 				Location: location,
-				Type:     alert.Tool.Name,
-				Message:  alert.Rule.Description,
+				Type:     "code-scanning",
+				Message:  alert.MostRecentInstance.Message.Text,
 			})
 		}
 	}
