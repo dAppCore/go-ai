@@ -8,6 +8,7 @@ require (
 	dappco.re/go/core/i18n v0.2.3
 	dappco.re/go/core/io v0.4.1
 	dappco.re/go/core/log v0.1.2
+	dappco.re/go/core/ml v0.2.0
 	dappco.re/go/core/rag v0.1.13
 	dappco.re/go/core/scm v0.6.1
 )

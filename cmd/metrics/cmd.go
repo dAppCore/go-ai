@@ -3,6 +3,7 @@ package metrics
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"dappco.re/go/core"
@@ -15,6 +16,8 @@ import (
 var (
 	metricsSince string
 	metricsJSON  bool
+
+	metricsFlagsOnce sync.Once
 )
 
 var metricsCmd = &cli.Command{
@@ -27,14 +30,28 @@ var metricsCmd = &cli.Command{
 }
 
 func initMetricsFlags() {
-	metricsCmd.Flags().StringVar(&metricsSince, "since", "7d", i18n.T("cmd.ai.metrics.flag.since"))
-	metricsCmd.Flags().BoolVar(&metricsJSON, "json", false, i18n.T("common.flag.json"))
+	metricsFlagsOnce.Do(func() {
+		metricsCmd.Flags().StringVar(&metricsSince, "since", "7d", i18n.T("cmd.ai.metrics.flag.since"))
+		metricsCmd.Flags().BoolVar(&metricsJSON, "json", false, i18n.T("common.flag.json"))
+	})
 }
 
 // AddMetricsCommand adds the 'metrics' command to the parent.
 func AddMetricsCommand(parent *cli.Command) {
 	initMetricsFlags()
+	if hasCommand(parent, metricsCmd.Name()) {
+		return
+	}
 	parent.AddCommand(metricsCmd)
+}
+
+func hasCommand(parent *cli.Command, name string) bool {
+	for _, child := range parent.Commands() {
+		if child.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func runMetrics() error {
