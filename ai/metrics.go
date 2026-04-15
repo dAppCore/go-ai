@@ -29,12 +29,12 @@ type Event struct {
 
 // metricsDir returns the base directory for metrics storage.
 func metricsDir() (string, error) {
-	home := core.Env("CORE_HOME")
+	home := os.Getenv("CORE_HOME")
 	if home == "" {
-		home = core.Env("DIR_HOME")
+		home = os.Getenv("DIR_HOME")
 	}
 	if home == "" {
-		home = core.Env("HOME")
+		home = os.Getenv("HOME")
 	}
 	if home == "" {
 		userHome, err := os.UserHomeDir()

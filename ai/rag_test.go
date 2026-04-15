@@ -21,6 +21,17 @@ func TestBuildTaskQuery_Good_CombinesAndTruncates(t *testing.T) {
 	}
 }
 
+func TestBuildTaskQuery_Good_TruncatesCombinedQuery(t *testing.T) {
+	got := buildTaskQuery(TaskInfo{
+		Title:       strings.Repeat("t", ragTaskQueryRuneLimit),
+		Description: "extra",
+	})
+
+	if gotRuneLen := len([]rune(got)); gotRuneLen != ragTaskQueryRuneLimit {
+		t.Fatalf("buildTaskQuery() rune length = %d, want %d", gotRuneLen, ragTaskQueryRuneLimit)
+	}
+}
+
 func TestBuildTaskQuery_Good_TruncatesToLimit(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{
 		Title:       "",

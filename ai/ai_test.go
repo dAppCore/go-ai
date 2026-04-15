@@ -13,6 +13,8 @@ func withTempHome(t *testing.T) {
 	t.Helper()
 
 	originalHome := os.Getenv("HOME")
+	originalCoreHome := os.Getenv("CORE_HOME")
+	originalDirHome := os.Getenv("DIR_HOME")
 	tempHome := t.TempDir()
 
 	metricsPath := filepath.Join(tempHome, ".core", "ai", "metrics")
@@ -20,11 +22,31 @@ func withTempHome(t *testing.T) {
 		t.Fatalf("create metrics dir: %v", err)
 	}
 
+	if err := os.Unsetenv("CORE_HOME"); err != nil {
+		t.Fatalf("unset CORE_HOME: %v", err)
+	}
+	if err := os.Unsetenv("DIR_HOME"); err != nil {
+		t.Fatalf("unset DIR_HOME: %v", err)
+	}
 	if err := os.Setenv("HOME", tempHome); err != nil {
 		t.Fatalf("set HOME: %v", err)
 	}
 
 	t.Cleanup(func() {
+		if originalCoreHome == "" {
+			if err := os.Unsetenv("CORE_HOME"); err != nil {
+				t.Fatalf("restore CORE_HOME: %v", err)
+			}
+		} else if err := os.Setenv("CORE_HOME", originalCoreHome); err != nil {
+			t.Fatalf("restore CORE_HOME: %v", err)
+		}
+		if originalDirHome == "" {
+			if err := os.Unsetenv("DIR_HOME"); err != nil {
+				t.Fatalf("restore DIR_HOME: %v", err)
+			}
+		} else if err := os.Setenv("DIR_HOME", originalDirHome); err != nil {
+			t.Fatalf("restore DIR_HOME: %v", err)
+		}
 		if err := os.Setenv("HOME", originalHome); err != nil {
 			t.Fatalf("restore HOME: %v", err)
 		}
