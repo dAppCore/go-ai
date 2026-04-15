@@ -46,6 +46,20 @@ func TestBuildTaskQuery_Good_TruncatesToLimit(t *testing.T) {
 	}
 }
 
+func TestBuildTaskQuery_Good_TruncatesDescriptionBeforeComposition(t *testing.T) {
+	got := buildTaskQuery(TaskInfo{
+		Title:       "Investigate",
+		Description: strings.Repeat("y", ragTaskQueryRuneLimit+25),
+	})
+
+	if gotRuneLen := len([]rune(got)); gotRuneLen != ragTaskQueryRuneLimit {
+		t.Fatalf("buildTaskQuery() rune length = %d, want %d", gotRuneLen, ragTaskQueryRuneLimit)
+	}
+	if !strings.HasPrefix(got, "Investigate: ") {
+		t.Fatalf("buildTaskQuery() = %q, want title prefix preserved", got)
+	}
+}
+
 func TestBuildTaskQuery_Good_BlankTaskReturnsEmpty(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{})
 	if got != "" {
