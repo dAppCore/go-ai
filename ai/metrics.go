@@ -167,9 +167,6 @@ func Summary(events []Event) map[string]any {
 	}
 	recentCopy := make([]Event, len(recentEvents))
 	copy(recentCopy, recentEvents)
-	for i, j := 0, len(recentCopy)-1; i < j; i, j = i+1, j-1 {
-		recentCopy[i], recentCopy[j] = recentCopy[j], recentCopy[i]
-	}
 
 	return map[string]any{
 		"total":    len(events),

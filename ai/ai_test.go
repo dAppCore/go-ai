@@ -74,4 +74,15 @@ func TestSummary_Good(t *testing.T) {
 	if byType["scan"] != 2 || byType["deps"] != 1 {
 		t.Fatalf("unexpected type counts: %v", byType)
 	}
+
+	recent, ok := summary["recent"].([]Event)
+	if !ok {
+		t.Fatalf("expected recent slice, got %T", summary["recent"])
+	}
+	if len(recent) != 3 {
+		t.Fatalf("expected 3 recent events, got %d", len(recent))
+	}
+	if recent[0].Type != "scan" || recent[1].AgentID != "agent-2" || recent[2].Repo != "core/go-rag" {
+		t.Fatalf("recent events preserve input order: %+v", recent)
+	}
 }
