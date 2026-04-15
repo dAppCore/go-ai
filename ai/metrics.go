@@ -308,8 +308,27 @@ func cloneEvent(event Event) Event {
 	if len(event.Data) > 0 {
 		cloned.Data = make(map[string]any, len(event.Data))
 		for key, value := range event.Data {
-			cloned.Data[key] = value
+			cloned.Data[key] = cloneMetricValue(value)
 		}
 	}
 	return cloned
+}
+
+func cloneMetricValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneMetricValue(item)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = cloneMetricValue(item)
+		}
+		return cloned
+	default:
+		return value
+	}
 }
