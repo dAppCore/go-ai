@@ -3,6 +3,7 @@ package ai
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,6 +193,33 @@ not-json
 	}
 	if len(events) != 2 {
 		t.Errorf("expected 2 valid events (skipping malformed), got %d", len(events))
+	}
+}
+
+func TestReadMetricsFile_Good_LargeJSONLine(t *testing.T) {
+	withTempHome(t)
+
+	dir, err := metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir: %v", err)
+	}
+
+	path := metricsFilePath(dir, time.Now())
+	largeData := strings.Repeat("x", 256*1024)
+	content := `{"type":"large","timestamp":"2026-03-15T10:00:00Z","data":{"payload":"` + largeData + `"}}`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	events, err := readMetricsFile(path, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("readMetricsFile: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 valid event, got %d", len(events))
+	}
+	if got := events[0].Data["payload"]; got != largeData {
+		t.Fatalf("expected large payload to round-trip, got %T", got)
 	}
 }
 

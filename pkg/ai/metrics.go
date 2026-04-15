@@ -126,6 +126,9 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 
 	var events []Event
 	scanner := bufio.NewScanner(strings.NewReader(content))
+	// Metrics payloads are small in practice, but the default scanner token limit
+	// is too low for larger JSON events with rich Data payloads.
+	scanner.Buffer(make([]byte, 1024), 1<<20)
 	for scanner.Scan() {
 		var ev Event
 		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
