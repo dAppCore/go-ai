@@ -73,16 +73,17 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		return err
 	}
 
-	targets, err := resolveJobTargets(commandOptions.Targets, registry)
-	if err != nil {
-		return err
-	}
-	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
 	if commandOptions.DryRun {
-		// Dry-run only needs target resolution; it should not require `gh` to be installed.
+		plannedTargets, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry)
+		if err != nil {
+			return err
+		}
+		workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(plannedTargets))
+
+		// Dry-run only needs target resolution; it should not require `gh` to be installed or call the GitHub API.
 		cli.Blank()
 		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), workerCount)
-		for _, target := range targets {
+		for _, target := range plannedTargets {
 			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would scan:"), target)
 		}
 		if issueRepoTarget.FullName != "" {
@@ -91,6 +92,12 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		cli.Blank()
 		return nil
 	}
+
+	targets, err := resolveJobTargets(commandOptions.Targets, registry)
+	if err != nil {
+		return err
+	}
+	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
 
 	if err := checkGitHubCLI(); err != nil {
 		return err
@@ -182,6 +189,64 @@ func loadRegistryForJobs(commandOptions JobsCommandOptions) (*repos.Registry, er
 		return nil, err
 	}
 	return registry, nil
+}
+
+func resolveJobTargetsForDryRun(targets string, registry *repos.Registry) ([]string, error) {
+	trimmed := core.Trim(targets)
+	if trimmed == "" {
+		return nil, cli.Err("at least one --targets value required (comma-separated repo list or all)")
+	}
+
+	seen := map[string]struct{}{}
+	var resolved []string
+	addTarget := func(target string) {
+		if _, ok := seen[target]; ok {
+			return
+		}
+		seen[target] = struct{}{}
+		resolved = append(resolved, target)
+	}
+
+	if trimmed == "all" {
+		if registry == nil {
+			return nil, cli.Err("--targets=all requires a repository registry for dry-run")
+		}
+		if len(registry.List()) == 0 {
+			return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
+		}
+		for _, repo := range registry.List() {
+			addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
+		}
+		return resolved, nil
+	}
+
+	for _, part := range core.Split(trimmed, ",") {
+		token := core.Trim(part)
+		if token == "" {
+			continue
+		}
+		if core.Contains(token, "/") {
+			target, err := parseSecurityTarget(token)
+			if err != nil {
+				return nil, cli.Err("invalid target format: use owner/repo")
+			}
+			addTarget(target.FullName)
+			continue
+		}
+		if registry == nil {
+			return nil, cli.Err("registry-backed target %q requires a repository registry", token)
+		}
+		repo, ok := registry.Get(token)
+		if !ok {
+			return nil, cli.Err("repo not found: %s", token)
+		}
+		addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
+	}
+
+	if len(resolved) == 0 {
+		return nil, cli.Err("no targets resolved from --targets")
+	}
+	return resolved, nil
 }
 
 func jobsNeedRegistry(targets string) bool {
