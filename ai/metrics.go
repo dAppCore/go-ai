@@ -1,8 +1,4 @@
-// Package ai gives you `ai.Record(...)`, `ai.ReadEvents(...)`, and `ai.Summary(...)`.
-//
-//	_ = ai.Record(ai.Event{Type: "security.scan", Repo: "core/go-ai"})
-//	events, err := ai.ReadEvents(time.Now().Add(-7 * 24 * time.Hour))
-//	summary := ai.Summary(events)
+// Metrics helpers for recording and summarising AI and security events.
 package ai
 
 import (
@@ -25,8 +21,8 @@ var metricsWriteMu sync.Mutex
 const recentEventLimit = 10
 const (
 	maxMetricsReadWindowDays = 365
-	metricsFileMode         = 0o600
-	metricsDirMode          = 0o700
+	metricsFileMode          = 0o600
+	metricsDirMode           = 0o700
 )
 
 // ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
@@ -125,12 +121,7 @@ func ReadEvents(since time.Time) ([]Event, error) {
 
 	var events []Event
 	now := time.Now()
-	if since.IsZero() {
-		since = now.AddDate(0, 0, -maxMetricsReadWindowDays)
-	}
-	if since.After(now) {
-		since = now
-	}
+	since = clampMetricsSince(since, now)
 
 	// Iterate each day from the caller's `since` timestamp to now in the caller's location.
 	loc := since.Location()
