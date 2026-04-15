@@ -20,7 +20,7 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-var callGitHubAPIRequest = runGitHubAPI
+var callGitHubAPIRequest = runGitHubAPIStrict
 
 const (
 	githubAPITimeout      = 25 * time.Second
@@ -188,6 +188,14 @@ func checkGitHubCLI() error {
 }
 
 func runGitHubAPI(endpoint string) ([]byte, error) {
+	return runGitHubAPIWithMode(endpoint, true)
+}
+
+func runGitHubAPIStrict(endpoint string) ([]byte, error) {
+	return runGitHubAPIWithMode(endpoint, false)
+}
+
+func runGitHubAPIWithMode(endpoint string, allowMissingEndpoint bool) ([]byte, error) {
 	var lastErr error
 	for attempt := 0; attempt < githubAPIMaxAttempts; attempt++ {
 		output, err := runGitHubAPIRequest(endpoint)
@@ -196,7 +204,7 @@ func runGitHubAPI(endpoint string) ([]byte, error) {
 		}
 
 		lastErr = err
-		if errors.Is(err, errGitHubAPIEndpointNotFound) {
+		if allowMissingEndpoint && errors.Is(err, errGitHubAPIEndpointNotFound) {
 			return []byte("[]"), nil
 		}
 
