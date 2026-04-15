@@ -44,7 +44,9 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	if err != nil {
 		return "", nil
 	}
-	defer func() { _ = closeQdrant(qdrantClient) }()
+	if qdrantClient != nil {
+		defer func() { _ = closeQdrant(qdrantClient) }()
+	}
 
 	ollamaConfiguration := rag.DefaultOllamaConfig()
 	ollamaClient, err := newOllamaClient(ollamaConfiguration)
