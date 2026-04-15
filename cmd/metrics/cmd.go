@@ -1,4 +1,4 @@
-// Package metrics implements the metrics viewing command.
+// Package metrics exposes `core ai metrics`.
 package metrics
 
 import (
@@ -16,16 +16,16 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-// MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures the
-// flag values for one `ai metrics` command instance.
+// MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures one
+// `core ai metrics` invocation.
 type MetricsCommandOptions struct {
 	SinceWindow time.Duration
 	JSONOutput  bool
 }
 
-// AddMetricsCommand adds the 'metrics' command to the parent.
+// core ai metrics --since 7d
 func AddMetricsCommand(parent *cli.Command) {
-	if hasCommand(parent, "metrics") {
+	if commandExists(parent, "metrics") {
 		return
 	}
 
@@ -48,7 +48,7 @@ func AddMetricsCommand(parent *cli.Command) {
 	parent.AddCommand(metricsCommand)
 }
 
-func hasCommand(parent *cli.Command, name string) bool {
+func commandExists(parent *cli.Command, name string) bool {
 	for _, child := range parent.Commands() {
 		if child.Name() == name {
 			return true

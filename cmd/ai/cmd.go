@@ -11,7 +11,8 @@ func init() {
 	cli.RegisterCommands(AddAICommands)
 }
 
-// AddAICommands registers the 'ai' command and delegated subcommands.
+// core ai metrics --since 24h
+// core ai rag query --question "What changed?"
 func AddAICommands(root *cli.Command) {
 	if hasCommand(root, "ai") {
 		return

@@ -73,7 +73,7 @@ func runScan(commandOptions ScanCommandOptions) error {
 	}
 
 	// Record metrics
-	recordedRepo := metricRepoForTargets(targets)
+	recordedRepo := metricRepositoryForTargets(targets)
 	recordedTarget := recordedRepo
 	_ = ai.Record(ai.Event{
 		Type:      "security.scan",

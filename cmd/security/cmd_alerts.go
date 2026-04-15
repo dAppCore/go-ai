@@ -167,7 +167,7 @@ func buildAlertOutputs(dependabotAlerts []DepAlert, codeScanningAlerts []ScanAle
 
 func fetchDependabotAlerts(repoFullName string) ([]DependabotAlert, error) {
 	endpoint := core.Sprintf("repos/%s/dependabot/alerts?state=open", repoFullName)
-	output, err := runGitHubAPIRequest(endpoint)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, core.Sprintf("fetch dependabot alerts for %s", repoFullName))
 	}
@@ -181,7 +181,7 @@ func fetchDependabotAlerts(repoFullName string) ([]DependabotAlert, error) {
 
 func fetchCodeScanningAlerts(repoFullName string) ([]CodeScanningAlert, error) {
 	endpoint := core.Sprintf("repos/%s/code-scanning/alerts?state=open", repoFullName)
-	output, err := runGitHubAPIRequest(endpoint)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, core.Sprintf("fetch code-scanning alerts for %s", repoFullName))
 	}
@@ -195,7 +195,7 @@ func fetchCodeScanningAlerts(repoFullName string) ([]CodeScanningAlert, error) {
 
 func fetchSecretScanningAlerts(repoFullName string) ([]SecretScanningAlert, error) {
 	endpoint := core.Sprintf("repos/%s/secret-scanning/alerts?state=open", repoFullName)
-	output, err := runGitHubAPIRequest(endpoint)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, core.Sprintf("fetch secret-scanning alerts for %s", repoFullName))
 	}

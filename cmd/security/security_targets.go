@@ -42,9 +42,9 @@ func resolveSecurityTargets(registryPath, repoFilter, externalTarget string) ([]
 	return targets, nil
 }
 
-// metricRepoForTargets returns the repository name to record in metrics when a
+// metricRepositoryForTargets returns the repository name to record in metrics when a
 // security command is scoped to exactly one repository.
-func metricRepoForTargets(targets []SecurityTarget) string {
+func metricRepositoryForTargets(targets []SecurityTarget) string {
 	if len(targets) != 1 {
 		return ""
 	}
@@ -83,7 +83,7 @@ func securitySectionLabel(label, externalTarget string) string {
 
 func listGitHubOrgTargets(org string) ([]string, error) {
 	endpoint := core.Sprintf("orgs/%s/repos?per_page=100&type=all", org)
-	output, err := runGitHubAPIRequest(endpoint)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
 		return nil, cli.Wrap(err, "list GitHub repositories for "+org)
 	}

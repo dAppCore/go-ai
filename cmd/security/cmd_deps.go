@@ -72,7 +72,7 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	recordedRepo := metricRepoForTargets(targets)
+	recordedRepo := metricRepositoryForTargets(targets)
 	recordedTarget := recordedRepo
 	_ = ai.Record(ai.Event{
 		Type:      "security.deps",

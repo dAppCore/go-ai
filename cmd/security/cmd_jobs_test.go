@@ -76,12 +76,12 @@ func TestBuildAlertOutputs_Good_HidesSecretsWhenSeverityFilterExcludesHigh(t *te
 }
 
 func TestResolveJobTargets_Good_All(t *testing.T) {
-	originalRunGitHubAPIRequest := runGitHubAPIRequest
+	originalCallGitHubAPIRequest := callGitHubAPIRequest
 	t.Cleanup(func() {
-		runGitHubAPIRequest = originalRunGitHubAPIRequest
+		callGitHubAPIRequest = originalCallGitHubAPIRequest
 	})
 
-	runGitHubAPIRequest = func(endpoint string) ([]byte, error) {
+	callGitHubAPIRequest = func(endpoint string) ([]byte, error) {
 		if endpoint != "orgs/acme/repos?per_page=100&type=all" {
 			t.Fatalf("unexpected endpoint: %s", endpoint)
 		}
@@ -108,12 +108,12 @@ func TestResolveJobTargets_Good_All(t *testing.T) {
 }
 
 func TestResolveJobTargets_Good_AllFallsBackToRegistryWhenGitHubUnavailable(t *testing.T) {
-	originalRunGitHubAPIRequest := runGitHubAPIRequest
+	originalCallGitHubAPIRequest := callGitHubAPIRequest
 	t.Cleanup(func() {
-		runGitHubAPIRequest = originalRunGitHubAPIRequest
+		callGitHubAPIRequest = originalCallGitHubAPIRequest
 	})
 
-	runGitHubAPIRequest = func(string) ([]byte, error) {
+	callGitHubAPIRequest = func(string) ([]byte, error) {
 		return nil, assertiveError("github unavailable")
 	}
 
@@ -294,12 +294,12 @@ func TestBuildJobsMetricsEvent_Good_IssueRepoWins(t *testing.T) {
 }
 
 func TestRunJobs_Good_DryRunDoesNotRequireGitHubCLI(t *testing.T) {
-	originalRunGitHubAPIRequest := runGitHubAPIRequest
+	originalCallGitHubAPIRequest := callGitHubAPIRequest
 	t.Cleanup(func() {
-		runGitHubAPIRequest = originalRunGitHubAPIRequest
+		callGitHubAPIRequest = originalCallGitHubAPIRequest
 	})
 
-	runGitHubAPIRequest = func(string) ([]byte, error) {
+	callGitHubAPIRequest = func(string) ([]byte, error) {
 		t.Fatal("dry-run should not invoke GitHub API helpers")
 		return nil, nil
 	}

@@ -14,9 +14,7 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-var (
-	runGitHubAPIRequest = runGitHubAPI
-)
+var callGitHubAPIRequest = runGitHubAPI
 
 // SecuritySelectionOptions{ExternalTarget: "wailsapp/wails", SeverityFilter: "critical,high"} captures
 // the shared repository and output flags used by the security query commands.
@@ -43,7 +41,7 @@ type JobsCommandOptions struct {
 	WorkerCount     int
 }
 
-// AddSecurityCommands(root) registers the top-level security alerts, deps, scan, secrets, and jobs commands.
+// core security jobs --targets all --copies 4
 func AddSecurityCommands(root *cli.Command) {
 	if hasCommand(root, "security") {
 		return
@@ -168,7 +166,7 @@ func checkGitHubCLI() error {
 	return nil
 }
 
-// runGitHubAPI("repos/core/go-ai/dependabot/alerts?state=open") returns the paginated GitHub API response body.
+// callGitHubAPIRequest("repos/core/go-ai/dependabot/alerts?state=open") returns the paginated GitHub API response body.
 func runGitHubAPI(endpoint string) ([]byte, error) {
 	cmd := exec.Command("gh", "api", endpoint, "--paginate", "--slurp")
 	output, err := cmd.Output()

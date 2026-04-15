@@ -55,14 +55,14 @@ func TestSecuritySectionLabel_Good(t *testing.T) {
 	}
 }
 
-func TestMetricRepoForTargets_Good(t *testing.T) {
-	if got := metricRepoForTargets(nil); got != "" {
-		t.Fatalf("metricRepoForTargets(nil) = %q, want empty string", got)
+func TestMetricRepositoryForTargets_Good(t *testing.T) {
+	if got := metricRepositoryForTargets(nil); got != "" {
+		t.Fatalf("metricRepositoryForTargets(nil) = %q, want empty string", got)
 	}
-	if got := metricRepoForTargets([]SecurityTarget{{FullName: "acme/api"}}); got != "acme/api" {
-		t.Fatalf("metricRepoForTargets(one) = %q, want acme/api", got)
+	if got := metricRepositoryForTargets([]SecurityTarget{{FullName: "acme/api"}}); got != "acme/api" {
+		t.Fatalf("metricRepositoryForTargets(one) = %q, want acme/api", got)
 	}
-	if got := metricRepoForTargets([]SecurityTarget{{FullName: "acme/api"}, {FullName: "acme/web"}}); got != "" {
-		t.Fatalf("metricRepoForTargets(many) = %q, want empty string", got)
+	if got := metricRepositoryForTargets([]SecurityTarget{{FullName: "acme/api"}, {FullName: "acme/web"}}); got != "" {
+		t.Fatalf("metricRepositoryForTargets(many) = %q, want empty string", got)
 	}
 }
