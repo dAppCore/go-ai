@@ -239,15 +239,14 @@ func TestMetricsRecordAndRead_10K_Good(t *testing.T) {
 	}
 
 	// Verify aggregation counts
-	byType, ok := summary["by_type"].([]map[string]any)
+	byType, ok := summary["by_type"].(map[string]int)
 	if !ok || len(byType) == 0 {
 		t.Fatal("Expected non-empty by_type")
 	}
 	// Each of 10 types should have n/10 = 1000 events
-	for _, entry := range byType {
-		count, _ := entry["count"].(int)
+	for key, count := range byType {
 		if count != 1000 {
-			t.Errorf("Expected count 1000 for type %v, got %d", entry["key"], count)
+			t.Errorf("Expected count 1000 for type %s, got %d", key, count)
 		}
 	}
 }

@@ -175,7 +175,6 @@ func Summary(events []Event) map[string]any {
 		"by_repo_sorted":  sortedCountPairs(byRepoCounts),
 		"by_agent_sorted": sortedCountPairs(byAgentCounts),
 		"recent":          recentEvents,
-		"events":          recentEvents,
 	}
 }
 

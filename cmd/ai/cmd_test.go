@@ -23,7 +23,6 @@ func TestAddAICommands_Good(t *testing.T) {
 	for _, path := range [][]string{
 		{"ai", "metrics"},
 		{"ai", "rag"},
-		{"ai", "ml"},
 	} {
 		cmd, _, err := root.Find(path)
 		if err != nil {
