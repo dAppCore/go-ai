@@ -235,7 +235,7 @@ func runGitHubAPIRequest(endpoint string) ([]byte, error) {
 		}
 		return nil, err
 	}
-	return output, nil
+	return bytes.TrimSpace(output), nil
 }
 
 func isRetryableGitHubAPIError(err error) bool {

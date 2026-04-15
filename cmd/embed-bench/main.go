@@ -444,12 +444,16 @@ func avg(vals []float64) float64 {
 }
 
 func qualityLabel(gap float64) string {
+	if math.IsNaN(gap) {
+		return "(poor)"
+	}
+
 	switch {
 	case gap > 0.15:
 		return "(excellent)"
-	case gap > 0.10:
+	case gap >= 0.10:
 		return "(good)"
-	case gap > 0.05:
+	case gap >= 0.05:
 		return "(fair)"
 	default:
 		return "(poor)"
