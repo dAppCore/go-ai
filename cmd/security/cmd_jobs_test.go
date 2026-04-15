@@ -140,7 +140,7 @@ func TestResolveJobTargets_Good_All(t *testing.T) {
 	}
 }
 
-func TestResolveJobTargets_Good_AllFallsBackToRegistryWhenGitHubUnavailable(t *testing.T) {
+func TestResolveJobTargets_Bad_AllFailsClosedWhenGitHubUnavailable(t *testing.T) {
 	originalCallGitHubAPIRequest := callGitHubAPIRequest
 	t.Cleanup(func() {
 		callGitHubAPIRequest = originalCallGitHubAPIRequest
@@ -158,14 +158,8 @@ func TestResolveJobTargets_Good_AllFallsBackToRegistryWhenGitHubUnavailable(t *t
 		},
 	}
 
-	got, err := resolveJobTargets("all", reg)
-	if err != nil {
-		t.Fatalf("resolveJobTargets(all) fallback: %v", err)
-	}
-
-	want := []string{"acme/api", "acme/web"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("resolveJobTargets(all) fallback = %v, want %v", got, want)
+	if _, err := resolveJobTargets("all", reg); err == nil {
+		t.Fatal("expected resolveJobTargets(all) to fail closed when GitHub enumeration is unavailable")
 	}
 }
 

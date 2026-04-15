@@ -293,19 +293,13 @@ func resolveJobTargets(targets string, registry *repos.Registry) ([]string, erro
 			return nil, cli.Err("--targets=all requires a repository registry")
 		}
 		liveTargets, err := listGitHubOrgTargets(registry.Org)
-		if err == nil {
-			if len(liveTargets) == 0 {
-				return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
-			}
-			return liveTargets, nil
+		if err != nil {
+			return nil, err
 		}
-		for _, repo := range registry.List() {
-			addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
+		if len(liveTargets) == 0 {
+			return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
 		}
-		if len(resolved) > 0 {
-			return resolved, nil
-		}
-		return nil, err
+		return liveTargets, nil
 	}
 
 	for _, part := range core.Split(trimmed, ",") {
