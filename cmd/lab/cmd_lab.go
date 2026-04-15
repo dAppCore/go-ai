@@ -5,10 +5,13 @@ package lab
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
@@ -22,8 +25,11 @@ func init() {
 }
 
 type LabCommandOptions struct {
-	Bind string
+	Bind        string
+	AllowRemote bool
 }
+
+const defaultLabBindAddr = "127.0.0.1:8080"
 
 // core lab serve --bind :8080
 func AddLabCommands(root *cli.Command) {
@@ -35,7 +41,9 @@ func AddLabCommands(root *cli.Command) {
 }
 
 func newLabCommand() *cli.Command {
-	options := &LabCommandOptions{Bind: ":8080"}
+	options := &LabCommandOptions{
+		Bind: defaultLabBindAddr,
+	}
 
 	labCmd := &cli.Command{
 		Use:   "lab",
@@ -52,6 +60,7 @@ func newLabCommand() *cli.Command {
 		},
 	}
 	serveCmd.Flags().StringVar(&options.Bind, "bind", options.Bind, "HTTP listen address")
+	serveCmd.Flags().BoolVar(&options.AllowRemote, "allow-remote", false, "Allow binding to non-loopback interfaces")
 
 	labCmd.AddCommand(serveCmd)
 	return labCmd
@@ -67,6 +76,10 @@ func hasCommand(parent *cli.Command, name string) bool {
 }
 
 func runServe(options LabCommandOptions) error {
+	if err := validateLabBindAddress(options.Bind, options.AllowRemote); err != nil {
+		return err
+	}
+
 	cfg := lab.LoadConfig()
 	cfg.Addr = options.Bind
 
@@ -103,33 +116,37 @@ func runServe(options LabCommandOptions) error {
 
 	web := handler.NewWebHandler(store)
 	api := handler.NewAPIHandler(store)
+	authToken := strings.TrimSpace(os.Getenv("CORE_LAB_API_TOKEN"))
+	authWrapper := func(handler http.HandlerFunc) http.HandlerFunc {
+		return requireLabAuth(handler, authToken)
+	}
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /", web.Dashboard)
-	mux.HandleFunc("GET /models", web.Models)
-	mux.HandleFunc("GET /training", web.Training)
-	mux.HandleFunc("GET /dataset", web.Dataset)
-	mux.HandleFunc("GET /golden-set", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /", authWrapper(web.Dashboard))
+	mux.HandleFunc("GET /models", authWrapper(web.Models))
+	mux.HandleFunc("GET /training", authWrapper(web.Training))
+	mux.HandleFunc("GET /dataset", authWrapper(web.Dataset))
+	mux.HandleFunc("GET /golden-set", authWrapper(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dataset", http.StatusMovedPermanently)
-	})
-	mux.HandleFunc("GET /runs", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	mux.HandleFunc("GET /runs", authWrapper(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/training", http.StatusMovedPermanently)
-	})
-	mux.HandleFunc("GET /agents", web.Agents)
-	mux.HandleFunc("GET /services", web.Services)
+	}))
+	mux.HandleFunc("GET /agents", authWrapper(web.Agents))
+	mux.HandleFunc("GET /services", authWrapper(web.Services))
 
-	mux.HandleFunc("GET /events", web.Events)
+	mux.HandleFunc("GET /events", authWrapper(web.Events))
 
-	mux.HandleFunc("GET /api/status", api.Status)
-	mux.HandleFunc("GET /api/models", api.Models)
-	mux.HandleFunc("GET /api/training", api.Training)
-	mux.HandleFunc("GET /api/dataset", api.GoldenSet)
-	mux.HandleFunc("GET /api/golden-set", api.GoldenSet)
-	mux.HandleFunc("GET /api/runs", api.Runs)
-	mux.HandleFunc("GET /api/agents", api.Agents)
-	mux.HandleFunc("GET /api/services", api.Services)
-	mux.HandleFunc("GET /health", api.Health)
+	mux.HandleFunc("GET /api/status", authWrapper(api.Status))
+	mux.HandleFunc("GET /api/models", authWrapper(api.Models))
+	mux.HandleFunc("GET /api/training", authWrapper(api.Training))
+	mux.HandleFunc("GET /api/dataset", authWrapper(api.GoldenSet))
+	mux.HandleFunc("GET /api/golden-set", authWrapper(api.GoldenSet))
+	mux.HandleFunc("GET /api/runs", authWrapper(api.Runs))
+	mux.HandleFunc("GET /api/agents", authWrapper(api.Agents))
+	mux.HandleFunc("GET /api/services", authWrapper(api.Services))
+	mux.HandleFunc("GET /health", authWrapper(api.Health))
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -151,4 +168,56 @@ func runServe(options LabCommandOptions) error {
 		return err
 	}
 	return nil
+}
+
+func validateLabBindAddress(addr string, allowRemote bool) error {
+	if allowRemote {
+		return nil
+	}
+
+	if isLoopbackBindAddress(addr) {
+		return nil
+	}
+
+	return fmt.Errorf("refusing to bind lab dashboard to non-loopback address %q without --allow-remote", addr)
+}
+
+func isLoopbackBindAddress(addr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		if strings.HasPrefix(addr, ":") {
+			host = "127.0.0.1"
+		} else if err.Error() == "missing port in address" {
+			return false
+		} else {
+			return false
+		}
+	}
+
+	if host == "" || host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
+}
+
+func requireLabAuth(handler http.HandlerFunc, token string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if token == "" {
+			handler(w, r)
+			return
+		}
+
+		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+		if authHeader != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		handler(w, r)
+	}
 }

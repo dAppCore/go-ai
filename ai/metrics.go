@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,11 @@ import (
 var metricsWriteMu sync.Mutex
 
 const recentEventLimit = 10
+const (
+	maxMetricsReadWindowDays = 365
+	metricsFileMode         = 0o600
+	metricsDirMode          = 0o700
+)
 
 // ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
 type Event struct {
@@ -67,6 +73,8 @@ func Record(event Event) (err error) {
 		event.Timestamp = recordedAt
 	}
 
+	event.Data = sanitizeMetricsData(event.Data)
+
 	metricsWriteMu.Lock()
 	defer metricsWriteMu.Unlock()
 
@@ -78,10 +86,12 @@ func Record(event Event) (err error) {
 	if err := coreio.Local.EnsureDir(dir); err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
+	if err := os.Chmod(dir, metricsDirMode); err != nil {
+		return coreerr.E("ai", "record event", err)
+	}
 
 	path := metricsFilePath(dir, recordedAt)
-
-	file, err := coreio.Local.Append(path)
+	file, err := openMetricsEventFile(path)
 	if err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
@@ -115,13 +125,16 @@ func ReadEvents(since time.Time) ([]Event, error) {
 
 	var events []Event
 	now := time.Now()
+	cappedSince := clampMetricsSince(since, now)
 
-	// Iterate each day from since to now in the caller's location.
-	loc := since.Location()
-	for day := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc); !day.After(now.In(loc)); day = day.AddDate(0, 0, 1) {
+	// Iterate each day from capped since to now in the caller's location.
+	loc := cappedSince.Location()
+	scanStart := time.Date(cappedSince.Year(), cappedSince.Month(), cappedSince.Day(), 0, 0, 0, 0, loc)
+	today := now.In(loc)
+	for day, scannedDays := scanStart, 0; !day.After(today) && scannedDays < maxMetricsReadWindowDays; day, scannedDays = day.AddDate(0, 0, 1), scannedDays+1 {
 		path := metricsFilePath(dir, day)
 
-		dayEvents, err := readMetricsFile(path, since)
+		dayEvents, err := readMetricsFile(path, cappedSince)
 		if err != nil {
 			return nil, err
 		}
@@ -133,6 +146,28 @@ func ReadEvents(since time.Time) ([]Event, error) {
 	})
 
 	return events, nil
+}
+
+func clampMetricsSince(since, now time.Time) time.Time {
+	if since.IsZero() {
+		return now.AddDate(0, 0, -maxMetricsReadWindowDays)
+	}
+
+	cutoff := now.AddDate(0, 0, -maxMetricsReadWindowDays)
+	if since.Before(cutoff) {
+		return cutoff
+	}
+	if since.After(now) {
+		return now
+	}
+	return since
+}
+
+func daysScannedFromDate(start, current time.Time) int {
+	if current.Before(start) {
+		return 0
+	}
+	return int(current.Sub(start).Hours() / 24)
 }
 
 func readMetricsFile(path string, since time.Time) ([]Event, error) {
@@ -163,6 +198,68 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 		return nil, coreerr.E("ai", "read events", err)
 	}
 	return events, nil
+}
+
+func openMetricsEventFile(path string) (*os.File, error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, metricsFileMode)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.Chmod(path, metricsFileMode); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+var sensitiveMetricKeys = []string{
+	"password",
+	"secret",
+	"token",
+	"api_key",
+	"apikey",
+	"bearer",
+}
+
+func sanitizeMetricsData(data map[string]any) map[string]any {
+	if len(data) == 0 {
+		return data
+	}
+
+	sanitized := make(map[string]any, len(data))
+	for key, value := range data {
+		if isSensitiveMetricKey(key) {
+			continue
+		}
+		sanitized[key] = sanitizeMetricsValue(value)
+	}
+	return sanitized
+}
+
+func sanitizeMetricsValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeMetricsData(typed)
+	case []any:
+		sanitized := make([]any, 0, len(typed))
+		for _, item := range typed {
+			sanitized = append(sanitized, sanitizeMetricsValue(item))
+		}
+		return sanitized
+	default:
+		return value
+	}
+}
+
+func isSensitiveMetricKey(key string) bool {
+	lowerKey := strings.ToLower(key)
+	for _, sensitive := range sensitiveMetricKeys {
+		if strings.Contains(lowerKey, sensitive) {
+			return true
+		}
+	}
+	return false
 }
 
 // summary := ai.Summary([]ai.Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}})

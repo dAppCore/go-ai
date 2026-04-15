@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"context"
+	"errors"
 	"os/exec"
 	"slices"
 	"strings"
@@ -19,6 +21,18 @@ import (
 )
 
 var callGitHubAPIRequest = runGitHubAPI
+
+const (
+	githubAPITimeout      = 25 * time.Second
+	githubAPIMaxAttempts  = 3
+	githubAPIBaseBackoff  = 500 * time.Millisecond
+)
+
+var (
+	errGitHubAPITimeout        = errors.New("GitHub API request timed out")
+	errGitHubAPIEndpointNotFound = errors.New("GitHub API endpoint not found")
+	errGitHubAPIAccessDenied   = errors.New("GitHub API access denied")
+)
 
 func recordSecurityMetricsEvent(event ai.Event) {
 	_ = ai.Record(event)
@@ -174,21 +188,59 @@ func checkGitHubCLI() error {
 }
 
 func runGitHubAPI(endpoint string) ([]byte, error) {
-	cmd := exec.Command("gh", "api", endpoint, "--paginate", "--slurp")
+	var lastErr error
+	for attempt := 0; attempt < githubAPIMaxAttempts; attempt++ {
+		output, err := runGitHubAPIRequest(endpoint)
+		if err == nil {
+			return output, nil
+		}
+
+		lastErr = err
+		if errors.Is(err, errGitHubAPIEndpointNotFound) {
+			return []byte("[]"), nil
+		}
+
+		if errors.Is(err, errGitHubAPIAccessDenied) {
+			return nil, err
+		}
+
+		if attempt == githubAPIMaxAttempts-1 || !isRetryableGitHubAPIError(err) {
+			return nil, cli.Wrap(lastErr, "run gh api")
+		}
+
+		time.Sleep(githubAPIBaseBackoff << attempt)
+	}
+
+	return nil, cli.Wrap(lastErr, "run gh api")
+}
+
+func runGitHubAPIRequest(endpoint string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), githubAPITimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gh", "api", endpoint, "--paginate", "--slurp")
 	output, err := cmd.Output()
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, fmt.Errorf("%w: GitHub API request timed out", errGitHubAPITimeout)
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
 			if core.Contains(stderr, "404") || core.Contains(stderr, "Not Found") {
-				return []byte("[]"), nil
+				return nil, errGitHubAPIEndpointNotFound
 			}
-			if core.Contains(stderr, "403") {
-				return nil, coreerr.E("security", "access denied (check token permissions)", nil)
+			if core.Contains(stderr, "403") || core.Contains(stderr, "Forbidden") {
+				return nil, fmt.Errorf("%w: check token permissions", errGitHubAPIAccessDenied)
 			}
 		}
-		return nil, cli.Wrap(err, "run gh api")
+		return nil, err
 	}
 	return output, nil
+}
+
+func isRetryableGitHubAPIError(err error) bool {
+	return !errors.Is(err, errGitHubAPIEndpointNotFound) &&
+		!errors.Is(err, errGitHubAPIAccessDenied)
 }
 
 type githubRepoResponse struct {

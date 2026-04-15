@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -24,6 +25,7 @@ import (
 )
 
 var ollamaURL = flag.String("ollama", "http://localhost:11434", "Ollama base URL")
+var allowInsecureOllamaTLS = flag.Bool("insecure-ssl", false, "Allow insecure Ollama TLS certificates (self-signed). Use only for trusted local endpoints.")
 
 var defaultBenchmarkModels = []string{
 	"nomic-embed-text",
@@ -96,6 +98,7 @@ func repeatChar(ch string, n int) string {
 
 func main() {
 	flag.Parse()
+	httpClient = buildHTTPClient(*allowInsecureOllamaTLS)
 
 	core.Println("OpenBrain Embedding Model Benchmark")
 	core.Println(repeatChar("=", 60))
@@ -301,9 +304,22 @@ func modelMatches(expectedModelName, installedModelName string) bool {
 
 // httpClient trusts self-signed certs for .lan domains behind Traefik.
 var httpClient = &http.Client{
-	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // .lan only
-	},
+	Transport: http.DefaultTransport,
+}
+
+func buildHTTPClient(allowInsecureTLS bool) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if allowInsecureTLS {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		}
+		transport.TLSClientConfig.InsecureSkipVerify = true
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   ollamaHTTPTimeout,
+	}
 }
 
 type embedRequest struct {
@@ -329,7 +345,16 @@ func embed(model, text string) ([]float64, error) {
 		return nil, coreerr.E("embed", "marshal request", r.Value.(error))
 	}
 	body := r.Value.([]byte)
-	resp, err := httpClient.Post(*ollamaURL+"/api/embeddings", "application/json", bytes.NewReader(body))
+
+	ctx, cancel := context.WithTimeout(context.Background(), ollamaEmbedTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, *ollamaURL+"/api/embeddings", bytes.NewReader(body))
+	if err != nil {
+		return nil, coreerr.E("embed", "create embeddings request", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +378,14 @@ func embed(model, text string) ([]float64, error) {
 }
 
 func listInstalledModelNames() ([]string, error) {
-	resp, err := httpClient.Get(*ollamaURL + "/api/tags")
+	ctx, cancel := context.WithTimeout(context.Background(), ollamaListModelsTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, *ollamaURL+"/api/tags", nil)
+	if err != nil {
+		return nil, coreerr.E("embed", "create model list request", err)
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -430,3 +462,8 @@ func truncate(s string, n int) string {
 	}
 	return s[:n-3] + "..."
 }
+const (
+	ollamaHTTPTimeout      = 45 * time.Second
+	ollamaEmbedTimeout     = 20 * time.Second
+	ollamaListModelsTimeout = 15 * time.Second
+)

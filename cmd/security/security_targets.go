@@ -103,6 +103,10 @@ func securitySectionLabel(label, externalTarget string) string {
 }
 
 func listGitHubOrgTargets(org string) ([]string, error) {
+	if !isSafeGitHubPathComponent(org) {
+		return nil, cli.Err("invalid org value: %q", org)
+	}
+
 	endpoint := core.Sprintf("orgs/%s/repos?per_page=100&type=all", org)
 	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
