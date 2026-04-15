@@ -208,6 +208,17 @@ func TestBuildTaskQuery_Good_UsesDirectTitleDescriptionShape(t *testing.T) {
 	}
 }
 
+func TestBuildTaskQuery_Good_TitleOnlyReturnsTitleOnly(t *testing.T) {
+	got := buildTaskQuery(TaskInfo{
+		Title: "Investigate build failure",
+	})
+
+	want := "Investigate build failure"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
 func TestBuildTaskQuery_Good_EmptyTaskReturnsEmptyQuery(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{})
 	if got != "" {
