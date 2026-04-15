@@ -187,7 +187,9 @@ func Summary(events []Event) map[string]any {
 		recentEvents = recentEvents[len(recentEvents)-recentEventLimit:]
 	}
 	recentCopy := make([]Event, len(recentEvents))
-	copy(recentCopy, recentEvents)
+	for i, event := range recentEvents {
+		recentCopy[i] = cloneEvent(event)
+	}
 
 	return map[string]any{
 		"by_type":  cloneCounts(byTypeCounts),
@@ -201,6 +203,17 @@ func cloneCounts(counts map[string]int) map[string]int {
 	cloned := make(map[string]int, len(counts))
 	for key, count := range counts {
 		cloned[key] = count
+	}
+	return cloned
+}
+
+func cloneEvent(event Event) Event {
+	cloned := event
+	if len(event.Data) > 0 {
+		cloned.Data = make(map[string]any, len(event.Data))
+		for key, value := range event.Data {
+			cloned.Data[key] = value
+		}
 	}
 	return cloned
 }
