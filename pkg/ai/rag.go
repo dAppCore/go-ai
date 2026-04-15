@@ -39,14 +39,14 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	qdrantConfig := rag.DefaultQdrantConfig()
 	qdrantClient, err := newQdrantClient(qdrantConfig)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	defer func() { _ = closeQdrant(qdrantClient) }()
 
 	ollamaConfig := rag.DefaultOllamaConfig()
 	ollamaClient, err := newOllamaClient(ollamaConfig)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -60,7 +60,7 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 
 	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfig)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	if len(results) == 0 {
 		return "", nil

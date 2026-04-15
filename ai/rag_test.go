@@ -35,7 +35,7 @@ func TestBuildTaskQuery_Good_TruncatesToLimit(t *testing.T) {
 	}
 }
 
-func TestQueryRAGForTask_Bad_PropagatesClientErrors(t *testing.T) {
+func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 	origNewQdrantClient := newQdrantClient
 	origNewOllamaClient := newOllamaClient
 	origRunRAGQuery := runRAGQuery
@@ -49,8 +49,8 @@ func TestQueryRAGForTask_Bad_PropagatesClientErrors(t *testing.T) {
 		return nil, errors.New("qdrant unavailable")
 	}
 
-	if _, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err == nil {
-		t.Fatal("QueryRAGForTask() expected qdrant error, got nil")
+	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil || got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, %v; want empty string and nil error", got, err)
 	}
 
 	newQdrantClient = origNewQdrantClient
@@ -58,8 +58,8 @@ func TestQueryRAGForTask_Bad_PropagatesClientErrors(t *testing.T) {
 		return nil, errors.New("ollama unavailable")
 	}
 
-	if _, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err == nil {
-		t.Fatal("QueryRAGForTask() expected ollama error, got nil")
+	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil || got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, %v; want empty string and nil error", got, err)
 	}
 
 	newOllamaClient = origNewOllamaClient
@@ -73,7 +73,7 @@ func TestQueryRAGForTask_Bad_PropagatesClientErrors(t *testing.T) {
 		return nil, errors.New("query failed")
 	}
 
-	if _, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err == nil {
-		t.Fatal("QueryRAGForTask() expected query error, got nil")
+	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil || got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, %v; want empty string and nil error", got, err)
 	}
 }
