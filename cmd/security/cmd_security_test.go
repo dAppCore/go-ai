@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -248,5 +249,156 @@ func TestCmdSecurity_runGitHubAPI_Bad_404ReturnsEmptyArray(t *testing.T) {
 	}
 	if !bytes.Equal(got, []byte("[]")) {
 		t.Fatalf("runGitHubAPI 404 = %s, want []", string(got))
+	}
+}
+
+func TestCmdSecurity_checkGitHubCLI_Good_Found(t *testing.T) {
+	withFakeGitHubCLI(t)
+
+	if err := checkGitHubCLI(); err != nil {
+		t.Fatalf("checkGitHubCLI() = %v, want nil", err)
+	}
+}
+
+func TestCmdSecurity_checkGitHubCLI_Bad_MissingBinary(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	if err := checkGitHubCLI(); err == nil {
+		t.Fatal("checkGitHubCLI should fail when gh is unavailable")
+	}
+}
+
+func TestCmdSecurity_runGitHubAPIRequest_Good(t *testing.T) {
+	withFakeGitHubScript(t, "#!/bin/sh\nprintf '{\"ok\":true}\\n'\n")
+
+	got, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
+	if err != nil {
+		t.Fatalf("runGitHubAPIRequest: %v", err)
+	}
+	if !bytes.Equal(got, []byte(`{"ok":true}`)) {
+		t.Fatalf("runGitHubAPIRequest() = %s, want payload", string(got))
+	}
+}
+
+func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps404(t *testing.T) {
+	withFakeGitHubScript(t, "#!/bin/sh\nprintf '404 Not Found' >&2\nexit 1\n")
+
+	_, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
+	if !errors.Is(err, errGitHubAPIEndpointNotFound) {
+		t.Fatalf("runGitHubAPIRequest() = %v, expected errGitHubAPIEndpointNotFound", err)
+	}
+}
+
+func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps403(t *testing.T) {
+	withFakeGitHubScript(t, "#!/bin/sh\nprintf '403 Forbidden' >&2\nexit 1\n")
+
+	_, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
+	if !errors.Is(err, errGitHubAPIAccessDenied) {
+		t.Fatalf("runGitHubAPIRequest() = %v, expected errGitHubAPIAccessDenied", err)
+	}
+}
+
+func TestCmdSecurity_runGitHubAPIRequest_Ugly_PreservesUnknownExitError(t *testing.T) {
+	withFakeGitHubScript(t, "#!/bin/sh\nprintf 'auth failed' >&2\nexit 2\n")
+
+	if _, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open"); err == nil {
+		t.Fatal("expected generic command error to be propagated")
+	}
+}
+
+func TestCmdSecurity_isRetryableGitHubAPIError_Good(t *testing.T) {
+	if !isRetryableGitHubAPIError(assertiveError("temporary")) {
+		t.Fatal("expected unknown errors to be retryable")
+	}
+}
+
+func TestCmdSecurity_isRetryableGitHubAPIError_Bad_NonRetryableErrors(t *testing.T) {
+	if isRetryableGitHubAPIError(errGitHubAPIEndpointNotFound) {
+		t.Fatal("expected endpoint-not-found errors to be non-retryable")
+	}
+	if isRetryableGitHubAPIError(errGitHubAPIAccessDenied) {
+		t.Fatal("expected access-denied errors to be non-retryable")
+	}
+}
+
+func TestCmdSecurity_isRetryableGitHubAPIError_Ugly_NilError(t *testing.T) {
+	if !isRetryableGitHubAPIError(nil) {
+		t.Fatal("expected nil error to be retryable by default")
+	}
+}
+
+func TestCmdSecurity_combineSecurityCollectorErrors_Good_Empty(t *testing.T) {
+	if err := combineSecurityCollectorErrors("acme/api", map[string]error{}); err != nil {
+		t.Fatalf("combineSecurityCollectorErrors empty map = %v", err)
+	}
+}
+
+func TestCmdSecurity_combineSecurityCollectorErrors_Bad_ReportsFailures(t *testing.T) {
+	err := combineSecurityCollectorErrors("acme/api", map[string]error{
+		"dependabot": errors.New("dependabot failed"),
+	})
+	if err == nil {
+		t.Fatal("expected error for failed collector")
+	}
+	if !strings.Contains(err.Error(), "dependabot") || !strings.Contains(err.Error(), "acme/api") {
+		t.Fatalf("unexpected combined error: %v", err)
+	}
+}
+
+func TestCmdSecurity_combineSecurityCollectorErrors_Ugly_SortsCollectorsAlphabetically(t *testing.T) {
+	err := combineSecurityCollectorErrors("acme/api", map[string]error{
+		"code-scanning": errors.New("code failed"),
+		"dependabot":    errors.New("dep failed"),
+	})
+	if err == nil {
+		t.Fatal("expected collector combination error")
+	}
+
+	got := err.Error()
+	dependabotPos := strings.Index(got, "dependabot")
+	codeScanningPos := strings.Index(got, "code-scanning")
+	if dependabotPos == -1 || codeScanningPos == -1 {
+		t.Fatalf("combined error missing expected collector names: %v", got)
+	}
+	if codeScanningPos > dependabotPos {
+		t.Fatalf("combined collector names are not sorted: %v", got)
+	}
+}
+
+func TestCmdSecurity_combineSecurityTargetErrors_Good_Empty(t *testing.T) {
+	if err := combineSecurityTargetErrors("security scan", map[string]error{}); err != nil {
+		t.Fatalf("combineSecurityTargetErrors empty map = %v", err)
+	}
+}
+
+func TestCmdSecurity_combineSecurityTargetErrors_Bad_ReportsTargetList(t *testing.T) {
+	err := combineSecurityTargetErrors("security scan", map[string]error{
+		"acme/api": assertiveError("api failed"),
+		"acme/web": assertiveError("web failed"),
+	})
+	if err == nil {
+		t.Fatal("expected target errors to be reported")
+	}
+	if !strings.Contains(err.Error(), "security scan") ||
+		!strings.Contains(err.Error(), "acme/api") ||
+		!strings.Contains(err.Error(), "acme/web") {
+		t.Fatalf("unexpected combined target error: %v", err)
+	}
+}
+
+func TestCmdSecurity_combineSecurityTargetErrors_Ugly_SortsTargetsAlphabetically(t *testing.T) {
+	err := combineSecurityTargetErrors("security scan", map[string]error{
+		"acme/web":  assertiveError("web failed"),
+		"acme/api":  assertiveError("api failed"),
+		"acme/docs": assertiveError("docs failed"),
+	})
+	if err == nil {
+		t.Fatal("expected target errors")
+	}
+
+	got := err.Error()
+	if strings.Index(got, "acme/api") > strings.Index(got, "acme/docs") ||
+		strings.Index(got, "acme/docs") > strings.Index(got, "acme/web") {
+		t.Fatalf("combined target errors are not sorted: %v", got)
 	}
 }
