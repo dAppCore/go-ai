@@ -3,8 +3,8 @@ package security
 import (
 	"time"
 
+	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
-	"dappco.re/go/core/ai/ai"
 	"dappco.re/go/core/i18n"
 	"forge.lthn.ai/core/cli/pkg/cli"
 )

@@ -2,8 +2,8 @@
 package ai
 
 import (
-	metricscmd "dappco.re/go/core/ai/cmd/metrics"
-	ragcmd "dappco.re/go/core/ai/cmd/rag"
+	metricscmd "dappco.re/go/ai/cmd/metrics"
+	ragcmd "dappco.re/go/ai/cmd/rag"
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 

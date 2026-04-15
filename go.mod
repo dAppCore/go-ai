@@ -1,4 +1,4 @@
-module dappco.re/go/core/ai
+module dappco.re/go/ai
 
 go 1.26.0
 

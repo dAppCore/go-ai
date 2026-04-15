@@ -3,7 +3,7 @@ package ai
 import (
 	"time"
 
-	pkgai "dappco.re/go/core/ai/pkg/ai"
+	pkgai "dappco.re/go/ai/pkg/ai"
 )
 
 // Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.

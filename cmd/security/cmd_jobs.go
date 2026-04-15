@@ -6,8 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
-	"dappco.re/go/core/ai/ai"
 	"dappco.re/go/core/i18n"
 	coreerr "dappco.re/go/core/log"
 	"dappco.re/go/core/scm/repos"
