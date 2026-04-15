@@ -216,8 +216,8 @@ func TestCmdJobs_resolveJobTargetsForDryRun_Good_ExpandsAndDedupesRegistryTarget
 
 func TestCmdJobs_resolveJobTargetsForDryRun_Bad_RequiresRegistryForAllAndShortNames(t *testing.T) {
 	tests := []struct {
-		name    string
-		targets string
+		name     string
+		targets  string
 		registry *repos.Registry
 	}{
 		{name: "all without registry", targets: "all", registry: nil},
@@ -664,6 +664,22 @@ func TestLoadRegistryForJobs_Ugly_SkipsRegistryForFullyQualifiedTargets(t *testi
 	}
 	if registry != nil {
 		t.Fatalf("loadRegistryForJobs returned %+v, want nil for fully-qualified targets", registry)
+	}
+}
+
+func TestRunJobs_Ugly_InvalidIssueRepoRejectsBeforeGitHubCLI(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	err := runJobs(JobsCommandOptions{
+		Targets:         "acme/api",
+		IssueRepository: "bad repo",
+		WorkerCount:     1,
+	})
+	if err == nil {
+		t.Fatal("expected invalid issue repository to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid --issue-repo format") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

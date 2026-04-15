@@ -206,6 +206,14 @@ func TestCmdAlerts_runAlerts_Bad_MultiTargetPartialFailureFailsClosed(t *testing
 	}
 }
 
+func TestCmdAlerts_runAlerts_Ugly_InvalidExternalTargetRejectsBeforeGitHubCLI(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	if err := runAlerts(SecuritySelectionOptions{ExternalTarget: "bad repo"}); err == nil {
+		t.Fatal("expected invalid external target to fail")
+	}
+}
+
 func TestCmdAlerts_addAlertsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
 	firstRoot := &cli.Command{Use: "core"}
 	secondRoot := &cli.Command{Use: "core"}

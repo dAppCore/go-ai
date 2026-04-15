@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -285,6 +286,34 @@ printf '[]'
 	}
 	if string(got) != "[]" {
 		t.Fatalf("runGitHubAPIWithMode retry path = %q, want []", string(got))
+	}
+}
+
+func TestCmdSecurity_runGitHubAPIWithMode_Bad_DoesNotRetryAccessDenied(t *testing.T) {
+	counterFile := filepath.Join(t.TempDir(), "attempts")
+	script := fmt.Sprintf(`#!/bin/sh
+count=0
+if [ -f %[1]q ]; then
+  count=$(cat %[1]q)
+fi
+count=$((count + 1))
+printf '%%s' "$count" > %[1]q
+printf '403 Forbidden' >&2
+exit 1
+`, counterFile)
+	withFakeGitHubScript(t, script)
+
+	_, err := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
+	if !errors.Is(err, errGitHubAPIAccessDenied) {
+		t.Fatalf("runGitHubAPIWithMode() = %v, expected access denied error", err)
+	}
+
+	attempts, readErr := os.ReadFile(counterFile)
+	if readErr != nil {
+		t.Fatalf("read attempts: %v", readErr)
+	}
+	if strings.TrimSpace(string(attempts)) != "1" {
+		t.Fatalf("runGitHubAPIWithMode retried access denied error: %s", attempts)
 	}
 }
 

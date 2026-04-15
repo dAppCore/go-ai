@@ -210,6 +210,57 @@ func TestRag_QueryRAGForTask_Good_ReturnsFormattedContext(t *testing.T) {
 	}
 }
 
+func TestRag_QueryRAGForTask_Good_ClosesOpenedQdrantClient(t *testing.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	origCloseQdrant := closeQdrant
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+		closeQdrant = origCloseQdrant
+	})
+
+	var closed bool
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		return &rag.QdrantClient{}, nil
+	}
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+		return &rag.OllamaClient{}, nil
+	}
+	closeQdrant = func(client *rag.QdrantClient) error {
+		if client == nil {
+			t.Fatal("expected closeQdrant to receive a client")
+		}
+		closed = true
+		return nil
+	}
+	runRAGQuery = func(
+		_ context.Context,
+		_ rag.VectorStore,
+		_ rag.Embedder,
+		_ string,
+		_ rag.QueryConfig,
+	) ([]rag.QueryResult, error) {
+		return []rag.QueryResult{{Text: "Doc", Source: "docs.md"}}, nil
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{
+		Title:       "Investigate",
+		Description: "failure",
+	})
+	if err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	}
+	if got == "" {
+		t.Fatal("QueryRAGForTask() returned empty context for a populated result set")
+	}
+	if !closed {
+		t.Fatal("expected QueryRAGForTask to close the opened Qdrant client")
+	}
+}
+
 func TestRag_QueryRAGForTask_Bad_ReturnsEmptyStringWhenNoResults(t *testing.T) {
 	origNewQdrantClient := newQdrantClient
 	origNewOllamaClient := newOllamaClient
@@ -308,5 +359,12 @@ func TestRag_truncateRunes_Ugly_NonPositiveLimitReturnsEmpty(t *testing.T) {
 				t.Fatalf("truncateRunes(%q, %d) = %q, want empty string", "hello", tc.limit, got)
 			}
 		})
+	}
+}
+
+func TestRag_truncateRunes_Good_PreservesRuneBoundaries(t *testing.T) {
+	got := truncateRunes("a😀bé文", 4)
+	if got != "a😀bé" {
+		t.Fatalf("truncateRunes() = %q, want %q", got, "a😀bé")
 	}
 }

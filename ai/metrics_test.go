@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -89,6 +90,78 @@ func TestMetrics_Record_Bad_ReturnsErrorForUnsupportedPayload(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected Record to fail for unsupported JSON payloads")
+	}
+}
+
+func TestMetrics_Record_Good_SerializesConcurrentWrites(t *testing.T) {
+	withTempMetricsHome(t)
+
+	base := time.Now().Add(-time.Minute)
+	const workers = 16
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errCh <- Record(Event{
+				Type:      "scan",
+				AgentID:   "agent-1",
+				Repo:      "core/go-ai",
+				Timestamp: base.Add(time.Duration(i) * time.Millisecond),
+				Data: map[string]any{
+					"sequence": i,
+				},
+			})
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("Record concurrent write failed: %v", err)
+		}
+	}
+
+	events, err := ReadEvents(base.Add(-time.Second))
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events) != workers {
+		t.Fatalf("expected %d events, got %d", workers, len(events))
+	}
+
+	seen := make(map[int]struct{}, workers)
+	for _, event := range events {
+		sequence, ok := event.Data["sequence"].(float64)
+		if !ok {
+			t.Fatalf("unexpected sequence payload: %#v", event.Data["sequence"])
+		}
+		seen[int(sequence)] = struct{}{}
+	}
+	if len(seen) != workers {
+		t.Fatalf("expected %d distinct events, got %d", workers, len(seen))
+	}
+}
+
+func TestMetrics_Record_Bad_ReturnsErrorWhenDailyPathIsDirectory(t *testing.T) {
+	withTempMetricsHome(t)
+
+	dir, err := metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir: %v", err)
+	}
+
+	todayDir := metricsFilePath(dir, time.Now())
+	if err := os.MkdirAll(todayDir, 0o700); err != nil {
+		t.Fatalf("mkdir daily path: %v", err)
+	}
+
+	if err := Record(Event{Type: "scan"}); err == nil {
+		t.Fatal("expected Record to fail when the daily JSONL path is a directory")
 	}
 }
 
@@ -263,10 +336,10 @@ func TestMetrics_daysScannedFromDate_Ugly_SameDate(t *testing.T) {
 
 func TestMetrics_sanitizeMetricsData_Good_RemovesSensitiveKeys(t *testing.T) {
 	input := map[string]any{
-		"api_key":      "keepme",
-		"token":        "sensitive",
-		"count":        12,
-		"nested":       map[string]any{"secret": "x", "safe": "ok", "bearer_token": "shh"},
+		"api_key":     "keepme",
+		"token":       "sensitive",
+		"count":       12,
+		"nested":      map[string]any{"secret": "x", "safe": "ok", "bearer_token": "shh"},
 		"credentials": []any{"a", map[string]any{"Password": "zzz", "role": "svc"}, map[string]any{"not_sensitive": true}},
 	}
 

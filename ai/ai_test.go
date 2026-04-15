@@ -157,8 +157,9 @@ func TestMetricsDir_Good_HonoursEnvPrecedence(t *testing.T) {
 func TestReadEvents_Good_SkipsMissingDays(t *testing.T) {
 	withTempHome(t)
 
-	dayOne := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
-	dayThree := time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC)
+	loc := time.Now().Location()
+	dayOne := time.Date(2026, 4, 1, 10, 0, 0, 0, loc)
+	dayThree := time.Date(2026, 4, 3, 10, 0, 0, 0, loc)
 
 	if err := Record(Event{Type: "scan", Timestamp: dayOne, Repo: "core/go-ai"}); err != nil {
 		t.Fatalf("Record day one: %v", err)
@@ -167,7 +168,7 @@ func TestReadEvents_Good_SkipsMissingDays(t *testing.T) {
 		t.Fatalf("Record day three: %v", err)
 	}
 
-	events, err := ReadEvents(time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC))
+	events, err := ReadEvents(time.Date(2026, 4, 1, 0, 0, 0, 0, loc))
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"dappco.re/go/ai/ai"
+	"dappco.re/go/core/i18n"
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
@@ -230,6 +231,23 @@ func TestRunMetrics_Bad_PrintsJSONSummary(t *testing.T) {
 	}
 	if !strings.Contains(output, `"by_type"`) || !strings.Contains(output, `"recent"`) {
 		t.Fatalf("JSON output missing expected fields: %q", output)
+	}
+}
+
+func TestCmdMetrics_runMetrics_Good_PrintsNoEventsMessage(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("CORE_HOME", "")
+	t.Setenv("DIR_HOME", "")
+	t.Setenv("HOME", tempHome)
+
+	output := captureStdout(t, func() {
+		if err := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour}); err != nil {
+			t.Fatalf("runMetrics empty: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, i18n.T("cmd.ai.metrics.none_found")) {
+		t.Fatalf("empty metrics output %q missing none-found message", output)
 	}
 }
 
