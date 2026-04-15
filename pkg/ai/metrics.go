@@ -53,7 +53,7 @@ func Record(event Event) (err error) {
 
 	dir, err := metricsDir()
 	if err != nil {
-		return err
+		return coreerr.E("ai", "record event", err)
 	}
 
 	if err := coreio.Local.EnsureDir(dir); err != nil {
@@ -88,7 +88,7 @@ func Record(event Event) (err error) {
 func ReadEvents(since time.Time) ([]Event, error) {
 	dir, err := metricsDir()
 	if err != nil {
-		return nil, err
+		return nil, coreerr.E("ai", "read events", err)
 	}
 
 	var events []Event
@@ -120,7 +120,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 
 	content, err := coreio.Local.Read(path)
 	if err != nil {
-		return nil, coreerr.E("ai", "read metrics", err)
+		return nil, coreerr.E("ai", "read events", err)
 	}
 
 	var events []Event
@@ -135,7 +135,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, coreerr.E("ai", "read metrics", err)
+		return nil, coreerr.E("ai", "read events", err)
 	}
 	return events, nil
 }
