@@ -78,13 +78,13 @@ func TestRecordAndReadEvents_Good(t *testing.T) {
 	}
 }
 
-func TestRecord_Good_UsesEventTimestampForDailyFile(t *testing.T) {
+func TestRecord_Good_UsesCurrentDayForDailyFile(t *testing.T) {
 	withTempHome(t)
 
-	recordedAt := time.Date(2026, 4, 12, 9, 30, 0, 0, time.UTC)
+	now := time.Now()
 	if err := Record(Event{
 		Type:      "scan",
-		Timestamp: recordedAt,
+		Timestamp: now.Add(-time.Hour),
 		Repo:      "core/go-ai",
 	}); err != nil {
 		t.Fatalf("Record: %v", err)
@@ -95,20 +95,20 @@ func TestRecord_Good_UsesEventTimestampForDailyFile(t *testing.T) {
 		t.Fatalf("metricsDir: %v", err)
 	}
 
-	path := metricsFilePath(dir, recordedAt)
+	path := metricsFilePath(dir, now)
 	if !coreio.Local.Exists(path) {
 		t.Fatalf("expected metrics file %s to exist", path)
 	}
 
-	events, err := ReadEvents(recordedAt.Add(-time.Hour))
+	events, err := ReadEvents(now.Add(-2 * time.Hour))
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
 	}
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if !events[0].Timestamp.Equal(recordedAt) {
-		t.Fatalf("expected timestamp %v, got %v", recordedAt, events[0].Timestamp)
+	if !events[0].Timestamp.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("expected timestamp %v, got %v", now.Add(-time.Hour), events[0].Timestamp)
 	}
 }
 

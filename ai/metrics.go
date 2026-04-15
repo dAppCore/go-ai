@@ -62,9 +62,8 @@ func metricsFilePath(dir string, t time.Time) string {
 
 // ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
 func Record(event Event) (err error) {
-	recordedAt := event.Timestamp
-	if recordedAt.IsZero() {
-		recordedAt = time.Now()
+	recordedAt := time.Now()
+	if event.Timestamp.IsZero() {
 		event.Timestamp = recordedAt
 	}
 
