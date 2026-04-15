@@ -53,7 +53,7 @@ func metricsFilePath(dir string, t time.Time) string {
 	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
+// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to today's JSONL log.
 func Record(event Event) (err error) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
@@ -71,7 +71,7 @@ func Record(event Event) (err error) {
 		return coreerr.E("ai", "record event", err)
 	}
 
-	path := metricsFilePath(dir, event.Timestamp)
+	path := metricsFilePath(dir, time.Now())
 
 	file, err := coreio.Local.Append(path)
 	if err != nil {
