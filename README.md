@@ -1,33 +1,30 @@
-[![Go Reference](https://pkg.go.dev/badge/forge.lthn.ai/core/go-ai.svg)](https://pkg.go.dev/forge.lthn.ai/core/go-ai)
+[![Go Reference](https://pkg.go.dev/badge/dappco.re/go/ai.svg)](https://pkg.go.dev/dappco.re/go/ai)
 [![License: EUPL-1.2](https://img.shields.io/badge/License-EUPL--1.2-blue.svg)](LICENSE.md)
 [![Go Version](https://img.shields.io/badge/Go-1.26-00ADD8?style=flat&logo=go)](go.mod)
 
 # go-ai
 
-MCP (Model Context Protocol) hub for the Lethean AI stack. Exposes 49 tools across file operations, directory management, language detection, RAG vector search, ML inference and scoring, process management, WebSocket streaming, browser automation via Chrome DevTools Protocol, JSONL metrics, and an IDE bridge to the Laravel core-agentic backend. The package is a pure library — the Core CLI (`core mcp serve`) imports it and handles transport selection (stdio, TCP, or Unix socket).
+Unified AI surface for the Core CLI. The library composes a thin AI facade, JSONL metrics logging, and a RAG query wrapper, while the CLI command packages expose metrics reporting, GitHub security scanning, RAG subcommands, a local lab dashboard, and the embedding benchmark binary.
 
-**Module**: `forge.lthn.ai/core/go-ai`
+**Module**: `dappco.re/go/ai`
 **Licence**: EUPL-1.2
-**Language**: Go 1.25
+**Language**: Go 1.26
 
 ## Quick Start
 
 ```go
-import "forge.lthn.ai/core/go-ai/mcp"
+import "dappco.re/go/ai/ai"
 
-svc, err := mcp.New(
-    mcp.WithWorkspaceRoot("/path/to/project"),
-    mcp.WithProcessService(ps),
-)
-// Run as stdio server (default for AI client subprocess integration)
-err = svc.Run(ctx)
-// Or TCP: MCP_ADDR=127.0.0.1:9100 triggers ServeTCP automatically
+ctx, err := ai.QueryRAGForTask(ai.TaskInfo{
+    Title:       "Investigate build failure",
+    Description: "CI compile step fails",
+})
 ```
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — MCP server, subsystem plugin model, tool inventory, IDE bridge, transports
-- [Development Guide](docs/development.md) — building, testing, adding tools
+- [Architecture](docs/architecture.md) — package layout, metrics flow, RAG facade, security commands
+- [Development Guide](docs/development.md) — building, testing, and extending the command surface
 - [Project History](docs/history.md) — completed phases and known limitations
 
 ## Build & Test
