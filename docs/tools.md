@@ -625,27 +625,10 @@ Supported duration formats: `Nd` (days), `Nh` (hours), `Nm` (minutes). Examples:
 
 | Field | Type | JSON key | Description |
 |---|---|---|---|
-| Total | `int` | `total` | Total events in window |
-| ByType | `[]MetricCount` | `by_type` | Event counts grouped by type |
-| ByRepo | `[]MetricCount` | `by_repo` | Event counts grouped by repository |
-| ByAgent | `[]MetricCount` | `by_agent` | Event counts grouped by agent ID |
-| Events | `[]MetricEventBrief` | `events` | The 10 most recent events, newest first |
-
-**MetricCount fields**
-
-| Field | Type | JSON key | Description |
-|---|---|---|---|
-| Key | `string` | `key` | Group key (type name, repo name, or agent ID) |
-| Count | `int` | `count` | Number of events in this group |
-
-**MetricEventBrief fields**
-
-| Field | Type | JSON key | Description |
-|---|---|---|---|
-| Type | `string` | `type` | Event type |
-| Timestamp | `time.Time` | `timestamp` | Event timestamp |
-| AgentID | `string` | `agent_id` | Agent identifier (if set) |
-| Repo | `string` | `repo` | Repository name (if set) |
+| ByType | `map[string]int` | `by_type` | Event counts grouped by type |
+| ByRepo | `map[string]int` | `by_repo` | Event counts grouped by repository |
+| ByAgent | `map[string]int` | `by_agent` | Event counts grouped by agent ID |
+| Recent | `[]Event` | `recent` | The 10 most recent events in chronological order |
 
 **Notes**
 
