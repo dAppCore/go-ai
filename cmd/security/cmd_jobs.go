@@ -55,6 +55,8 @@ func addJobsCommand(parent *cli.Command) {
 }
 
 func runJobs(commandOptions JobsCommandOptions) error {
+	startedAt := time.Now()
+
 	if commandOptions.WorkerCount < 1 {
 		return cli.Err("--copies must be at least 1")
 	}
@@ -118,11 +120,15 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		}
 
 		cli.Print("%s %s\n", cli.SuccessStyle.Render(">>"), issueURL)
-		recordSecurityMetricsEvent(buildJobsMetricsEvent(commandOptions, overall, successful, issueURL))
+		event := buildJobsMetricsEvent(commandOptions, overall, successful, issueURL)
+		event.Duration = time.Since(startedAt)
+		recordSecurityMetricsEvent(event)
 		return nil
 	}
 
-	recordSecurityMetricsEvent(buildJobsMetricsEvent(commandOptions, overall, successful, ""))
+	event := buildJobsMetricsEvent(commandOptions, overall, successful, "")
+	event.Duration = time.Since(startedAt)
+	recordSecurityMetricsEvent(event)
 	return nil
 }
 

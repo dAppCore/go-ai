@@ -3,7 +3,6 @@ package security
 import (
 	"time"
 
-	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
 	"dappco.re/go/core/i18n"
 	"forge.lthn.ai/core/cli/pkg/cli"
@@ -40,6 +39,8 @@ type SecretAlert struct {
 }
 
 func runSecrets(selectionOptions SecuritySelectionOptions) error {
+	startedAt := time.Now()
+
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
@@ -70,15 +71,10 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 
 	recordedRepo := metricRepositoryForTargets(targets)
 	recordedTarget := recordedRepo
-	recordSecurityMetricsEvent(ai.Event{
-		Type:      "security.secrets",
-		Timestamp: time.Now(),
-		Repo:      recordedRepo,
-		Data: map[string]any{
-			"target": recordedTarget,
-			"total":  summary.Total,
-		},
-	})
+	recordSecurityMetricsEvent(buildSecurityMetricsEvent("security.secrets", startedAt, recordedRepo, map[string]any{
+		"target": recordedTarget,
+		"total":  summary.Total,
+	}))
 
 	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))

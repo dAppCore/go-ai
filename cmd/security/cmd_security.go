@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"slices"
+	"time"
 
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
@@ -301,6 +302,16 @@ func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
 
 	slices.Sort(names)
 	return names, nil
+}
+
+func buildSecurityMetricsEvent(eventType string, startedAt time.Time, repository string, data map[string]any) ai.Event {
+	return ai.Event{
+		Type:      eventType,
+		Timestamp: time.Now(),
+		Repo:      repository,
+		Duration:  time.Since(startedAt),
+		Data:      data,
+	}
 }
 
 func severityStyle(severity string) *cli.AnsiStyle {

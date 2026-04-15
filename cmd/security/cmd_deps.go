@@ -3,7 +3,6 @@ package security
 import (
 	"time"
 
-	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
 	"dappco.re/go/core/i18n"
 	"forge.lthn.ai/core/cli/pkg/cli"
@@ -44,6 +43,8 @@ type DepAlert struct {
 }
 
 func runDeps(selectionOptions SecuritySelectionOptions) error {
+	startedAt := time.Now()
+
 	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
@@ -74,20 +75,15 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 
 	recordedRepo := metricRepositoryForTargets(targets)
 	recordedTarget := recordedRepo
-	recordSecurityMetricsEvent(ai.Event{
-		Type:      "security.deps",
-		Timestamp: time.Now(),
-		Repo:      recordedRepo,
-		Data: map[string]any{
-			"target":   recordedTarget,
-			"total":    summary.Total,
-			"critical": summary.Critical,
-			"high":     summary.High,
-			"medium":   summary.Medium,
-			"low":      summary.Low,
-			"unknown":  summary.Unknown,
-		},
-	})
+	recordSecurityMetricsEvent(buildSecurityMetricsEvent("security.deps", startedAt, recordedRepo, map[string]any{
+		"target":   recordedTarget,
+		"total":    summary.Total,
+		"critical": summary.Critical,
+		"high":     summary.High,
+		"medium":   summary.Medium,
+		"low":      summary.Low,
+		"unknown":  summary.Unknown,
+	}))
 
 	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
