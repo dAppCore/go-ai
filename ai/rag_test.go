@@ -60,6 +60,21 @@ func TestBuildTaskQuery_Good_TruncatesDescriptionBeforeComposition(t *testing.T)
 	}
 }
 
+func TestBuildTaskQuery_Good_TruncatesCombinedQueryExactly(t *testing.T) {
+	title := strings.Repeat("t", 320)
+	description := strings.Repeat("d", 320)
+
+	got := buildTaskQuery(TaskInfo{
+		Title:       title,
+		Description: description,
+	})
+
+	want := truncateRunes(title+": "+description, ragTaskQueryRuneLimit)
+	if got != want {
+		t.Fatalf("buildTaskQuery() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildTaskQuery_Good_BlankTaskReturnsEmpty(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{})
 	if got != "" {
