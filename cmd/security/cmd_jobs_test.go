@@ -3,11 +3,14 @@ package security
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"dappco.re/go/core/scm/repos"
+	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
 func TestAlertSummaryPlainString_Good(t *testing.T) {
@@ -22,6 +25,34 @@ func TestAlertSummaryPlainString_Good(t *testing.T) {
 	want := "1 critical | 1 high | 1 medium | 1 low | 1 unknown"
 	if got != want {
 		t.Fatalf("PlainString = %q, want %q", got, want)
+	}
+}
+
+func TestAlertSummaryString_Good(t *testing.T) {
+	summary := &AlertSummary{
+		Critical: 1,
+		High:     2,
+		Medium:   3,
+		Low:      4,
+		Unknown:  5,
+	}
+
+	got := summary.String()
+	want := strings.Join([]string{
+		cli.ErrorStyle.Render("1 critical"),
+		cli.WarningStyle.Render("2 high"),
+		cli.ValueStyle.Render("3 medium"),
+		cli.DimStyle.Render("4 low"),
+		cli.DimStyle.Render("5 unknown"),
+	}, " | ")
+	if got != want {
+		t.Fatalf("String = %q, want %q", got, want)
+	}
+}
+
+func TestAlertSummaryString_Bad_EmptySummaryReturnsNoAlerts(t *testing.T) {
+	if got := (&AlertSummary{}).String(); got != cli.SuccessStyle.Render("No alerts") {
+		t.Fatalf("String() on empty summary = %q, want no-alerts indicator", got)
 	}
 }
 
@@ -397,12 +428,6 @@ func TestRunJobWorkers_Good_SortsResults(t *testing.T) {
 	}
 }
 
-func TestValidateJobsIssueRepository_Bad(t *testing.T) {
-	if _, err := validateJobsIssueRepository("bad repo"); err == nil {
-		t.Fatal("expected invalid issue repo error")
-	}
-}
-
 func TestRunJobs_Good_DryRunPrintsPlannedTargets(t *testing.T) {
 	withSecurityTempHome(t)
 
@@ -470,6 +495,95 @@ func TestRunJobs_Bad_EmptyTargetsFailsBeforeRegistryLookup(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--targets") {
 		t.Fatalf("expected --targets validation error, got %v", err)
+	}
+}
+
+func TestValidateJobsIssueRepository_Good(t *testing.T) {
+	got, err := validateJobsIssueRepository("acme/security")
+	if err != nil {
+		t.Fatalf("validateJobsIssueRepository: %v", err)
+	}
+
+	want := SecurityTarget{DisplayName: "security", FullName: "acme/security"}
+	if got != want {
+		t.Fatalf("validateJobsIssueRepository = %+v, want %+v", got, want)
+	}
+}
+
+func TestValidateJobsIssueRepository_Bad(t *testing.T) {
+	if _, err := validateJobsIssueRepository("bad repo"); err == nil {
+		t.Fatal("expected invalid issue repo error")
+	}
+}
+
+func TestValidateJobsIssueRepository_Ugly_BlankInputReturnsZeroTarget(t *testing.T) {
+	got, err := validateJobsIssueRepository("")
+	if err != nil {
+		t.Fatalf("validateJobsIssueRepository blank: %v", err)
+	}
+	if got != (SecurityTarget{}) {
+		t.Fatalf("validateJobsIssueRepository blank = %+v, want zero target", got)
+	}
+}
+
+func TestJobsNeedRegistry_Good(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets string
+		want    bool
+	}{
+		{name: "empty", targets: "", want: true},
+		{name: "all", targets: "all", want: true},
+		{name: "short-name", targets: "api, acme/web", want: true},
+		{name: "fully-qualified", targets: "acme/api, acme/web", want: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := jobsNeedRegistry(tc.targets); got != tc.want {
+				t.Fatalf("jobsNeedRegistry(%q) = %v, want %v", tc.targets, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadRegistryForJobs_Good_LoadsRegistryWhenNeeded(t *testing.T) {
+	dir := t.TempDir()
+	registryPath := filepath.Join(dir, "repos.yaml")
+	if err := os.WriteFile(registryPath, []byte(`
+version: 1
+org: acme
+base_path: `+dir+`
+repos:
+  api:
+    type: module
+    description: API
+`), 0o644); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	registry, err := loadRegistryForJobs(JobsCommandOptions{
+		RegistryPath: registryPath,
+		Targets:      "api",
+	})
+	if err != nil {
+		t.Fatalf("loadRegistryForJobs: %v", err)
+	}
+	if registry == nil || registry.Org != "acme" {
+		t.Fatalf("loadRegistryForJobs returned %+v, want acme registry", registry)
+	}
+}
+
+func TestLoadRegistryForJobs_Ugly_SkipsRegistryForFullyQualifiedTargets(t *testing.T) {
+	registry, err := loadRegistryForJobs(JobsCommandOptions{
+		RegistryPath: "ignored.yaml",
+		Targets:      "acme/api, acme/web",
+	})
+	if err != nil {
+		t.Fatalf("loadRegistryForJobs: %v", err)
+	}
+	if registry != nil {
+		t.Fatalf("loadRegistryForJobs returned %+v, want nil for fully-qualified targets", registry)
 	}
 }
 

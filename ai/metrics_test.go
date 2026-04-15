@@ -111,3 +111,29 @@ func TestMetrics_Summary_Good_ClonesReturnedMapsAndEvents(t *testing.T) {
 		t.Fatalf("summary event data leaked mutation, got %+v", freshRecent[0].Data)
 	}
 }
+
+func TestMetrics_Summary_Good_CountsByRepoAndAgent(t *testing.T) {
+	events := []Event{
+		{Type: "scan", Repo: "core/go-ai", AgentID: "agent-1", Timestamp: time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)},
+		{Type: "scan", Repo: "core/go-ai", AgentID: "agent-2", Timestamp: time.Date(2026, 4, 15, 10, 5, 0, 0, time.UTC)},
+		{Type: "deps", Repo: "core/go-rag", AgentID: "agent-1", Timestamp: time.Date(2026, 4, 15, 10, 10, 0, 0, time.UTC)},
+	}
+
+	summary := Summary(events)
+
+	byRepo, ok := summary["by_repo"].(map[string]int)
+	if !ok {
+		t.Fatalf("expected by_repo map, got %T", summary["by_repo"])
+	}
+	if byRepo["core/go-ai"] != 2 || byRepo["core/go-rag"] != 1 {
+		t.Fatalf("unexpected repo counts: %+v", byRepo)
+	}
+
+	byAgent, ok := summary["by_agent"].(map[string]int)
+	if !ok {
+		t.Fatalf("expected by_agent map, got %T", summary["by_agent"])
+	}
+	if byAgent["agent-1"] != 2 || byAgent["agent-2"] != 1 {
+		t.Fatalf("unexpected agent counts: %+v", byAgent)
+	}
+}
