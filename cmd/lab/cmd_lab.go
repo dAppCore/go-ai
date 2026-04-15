@@ -11,10 +11,10 @@ import (
 	"os/signal"
 	"time"
 
-	"dappco.re/go/core/cli/pkg/cli"
-	"dappco.re/lthn/lem/pkg/lab"
-	"dappco.re/lthn/lem/pkg/lab/collector"
-	"dappco.re/lthn/lem/pkg/lab/handler"
+	"forge.lthn.ai/core/cli/pkg/cli"
+	"forge.lthn.ai/lthn/lem/pkg/lab"
+	"forge.lthn.ai/lthn/lem/pkg/lab/collector"
+	"forge.lthn.ai/lthn/lem/pkg/lab/handler"
 )
 
 func init() {
