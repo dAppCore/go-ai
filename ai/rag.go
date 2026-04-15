@@ -22,14 +22,16 @@ var (
 	closeQdrant     = func(client *rag.QdrantClient) error { return client.Close() }
 )
 
-// TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"} carries the minimal task data needed for RAG queries.
+// ai.TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"} carries the minimal task data needed for RAG queries.
 type TaskInfo struct {
 	Title       string
 	Description string
 }
 
-// QueryRAGForTask(TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"}) returns formatted RAG context,
-// or an empty string when retrieval is unavailable or yields no matches.
+//	contextText, err := ai.QueryRAGForTask(ai.TaskInfo{
+//		Title:       "Investigate build failure",
+//		Description: "CI compile step fails",
+//	})
 func QueryRAGForTask(task TaskInfo) (string, error) {
 	queryText := buildTaskQuery(task)
 	if queryText == "" {

@@ -1,3 +1,4 @@
+// Package ai provides JSONL metrics storage and aggregation for Core AI events.
 package ai
 
 import (
@@ -14,12 +15,11 @@ import (
 	coreerr "dappco.re/go/core/log"
 )
 
-// metricsWriteMu protects concurrent file writes in Record.
 var metricsWriteMu sync.Mutex
 
 const recentEventLimit = 10
 
-// Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
+// ai.Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
 type Event struct {
 	Type      string         `json:"type"`
 	Timestamp time.Time      `json:"timestamp"`
@@ -29,7 +29,6 @@ type Event struct {
 	Data      map[string]any `json:"data,omitempty"`
 }
 
-// metricsDir returns the base directory for metrics storage.
 func metricsDir() (string, error) {
 	home := os.Getenv("CORE_HOME")
 	if home == "" {
@@ -53,12 +52,11 @@ func metricsDir() (string, error) {
 	return core.JoinPath(home, ".core", "ai", "metrics"), nil
 }
 
-// metricsFilePath returns the JSONL file path for the given date.
 func metricsFilePath(dir string, t time.Time) string {
 	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to today's JSONL file.
+// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the matching daily JSONL file.
 func Record(event Event) (err error) {
 	recordedAt := event.Timestamp
 	if recordedAt.IsZero() {
@@ -105,7 +103,7 @@ func Record(event Event) (err error) {
 	return nil
 }
 
-// ReadEvents(time.Now().Add(-24 * time.Hour)) reads recent daily JSONL files and silently skips any missing days.
+// events, err := ai.ReadEvents(time.Now().Add(-24 * time.Hour))
 func ReadEvents(since time.Time) ([]Event, error) {
 	dir, err := metricsDir()
 	if err != nil {
@@ -134,7 +132,6 @@ func ReadEvents(since time.Time) ([]Event, error) {
 	return events, nil
 }
 
-// readMetricsFile reads events from a single JSONL file, returning only those at or after since.
 func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	if !coreio.Local.Exists(path) {
 		return nil, nil
@@ -165,7 +162,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	return events, nil
 }
 
-// Summary([]Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}}) aggregates counts by type, repo, and agent.
+// summary := ai.Summary([]ai.Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}})
 func Summary(events []Event) map[string]any {
 	byTypeCounts := make(map[string]int)
 	byRepoCounts := make(map[string]int)

@@ -14,7 +14,7 @@ func init() {
 // core ai metrics --since 24h
 // core ai rag query --question "What changed?"
 func AddAICommands(root *cli.Command) {
-	if hasCommand(root, "ai") {
+	if commandExists(root, "ai") {
 		return
 	}
 
@@ -30,7 +30,7 @@ func AddAICommands(root *cli.Command) {
 	root.AddCommand(aiCmd)
 }
 
-func hasCommand(parent *cli.Command, name string) bool {
+func commandExists(parent *cli.Command, name string) bool {
 	for _, child := range parent.Commands() {
 		if child.Name() == name {
 			return true

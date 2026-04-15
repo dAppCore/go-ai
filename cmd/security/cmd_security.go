@@ -21,8 +21,8 @@ func recordSecurityMetricsEvent(event ai.Event) {
 	_ = ai.Record(event)
 }
 
-// SecuritySelectionOptions{ExternalTarget: "wailsapp/wails", SeverityFilter: "critical,high"} captures
-// the shared repository and output flags used by the security query commands.
+// core security alerts --target wailsapp/wails
+// core security jobs --targets all --copies 4
 type SecuritySelectionOptions struct {
 	RegistryPath   string
 	RepositoryName string
@@ -46,9 +46,10 @@ type JobsCommandOptions struct {
 	WorkerCount     int
 }
 
+// core security alerts --repo core-php
 // core security jobs --targets all --copies 4
 func AddSecurityCommands(root *cli.Command) {
-	if hasCommand(root, "security") {
+	if commandExists(root, "security") {
 		return
 	}
 
@@ -67,7 +68,7 @@ func AddSecurityCommands(root *cli.Command) {
 	root.AddCommand(securityCommand)
 }
 
-func hasCommand(parent *cli.Command, name string) bool {
+func commandExists(parent *cli.Command, name string) bool {
 	for _, child := range parent.Commands() {
 		if child.Name() == name {
 			return true
