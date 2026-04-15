@@ -292,6 +292,26 @@ func TestBuildJobsMetricsEvent_Good_IssueRepoWins(t *testing.T) {
 	}
 }
 
+func TestRunJobs_Good_DryRunDoesNotRequireGitHubCLI(t *testing.T) {
+	originalRunGitHubAPIRequest := runGitHubAPIRequest
+	t.Cleanup(func() {
+		runGitHubAPIRequest = originalRunGitHubAPIRequest
+	})
+
+	runGitHubAPIRequest = func(string) ([]byte, error) {
+		t.Fatal("dry-run should not invoke GitHub API helpers")
+		return nil, nil
+	}
+
+	if err := runJobs(JobsCommandOptions{
+		Targets:     "acme/api",
+		DryRun:      true,
+		WorkerCount: 1,
+	}); err != nil {
+		t.Fatalf("runJobs dry-run: %v", err)
+	}
+}
+
 type assertiveError string
 
 func (e assertiveError) Error() string {

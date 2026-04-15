@@ -55,9 +55,6 @@ func addJobsCommand(parent *cli.Command) {
 }
 
 func runJobs(commandOptions JobsCommandOptions) error {
-	if err := checkGitHubCLI(); err != nil {
-		return err
-	}
 	if commandOptions.WorkerCount < 1 {
 		return cli.Err("--copies must be at least 1")
 	}
@@ -72,6 +69,7 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		return err
 	}
 	if commandOptions.DryRun {
+		// Dry-run only needs target resolution; it should not require `gh` to be installed.
 		cli.Blank()
 		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), commandOptions.WorkerCount)
 		for _, target := range targets {
@@ -82,6 +80,10 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		}
 		cli.Blank()
 		return nil
+	}
+
+	if err := checkGitHubCLI(); err != nil {
+		return err
 	}
 
 	results := runJobWorkers(targets, commandOptions.WorkerCount)
