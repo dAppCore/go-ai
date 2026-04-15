@@ -2,6 +2,7 @@ package security
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"dappco.re/go/core/scm/repos"
@@ -309,6 +310,20 @@ func TestRunJobs_Good_DryRunDoesNotRequireGitHubCLI(t *testing.T) {
 		WorkerCount: 1,
 	}); err != nil {
 		t.Fatalf("runJobs dry-run: %v", err)
+	}
+}
+
+func TestRunJobs_Bad_EmptyTargetsFailsBeforeRegistryLookup(t *testing.T) {
+	err := runJobs(JobsCommandOptions{
+		Targets:     "",
+		DryRun:      true,
+		WorkerCount: 1,
+	})
+	if err == nil {
+		t.Fatal("expected empty --targets error, got nil")
+	}
+	if !strings.Contains(err.Error(), "--targets") {
+		t.Fatalf("expected --targets validation error, got %v", err)
 	}
 }
 

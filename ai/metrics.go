@@ -31,10 +31,13 @@ type Event struct {
 func metricsDir() (string, error) {
 	home := os.Getenv("CORE_HOME")
 	if home == "" {
-		home = os.Getenv("DIR_HOME")
+		home = os.Getenv("HOME")
 	}
 	if home == "" {
-		home = os.Getenv("HOME")
+		home = os.Getenv("USERPROFILE")
+	}
+	if home == "" {
+		home = os.Getenv("DIR_HOME")
 	}
 	if home == "" {
 		userHome, err := os.UserHomeDir()

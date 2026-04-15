@@ -163,7 +163,7 @@ func loadRegistry(registryPath string) (*repos.Registry, error) {
 // checkGitHubCLI() verifies that the GitHub CLI is installed before a command tries to call the GitHub API.
 func checkGitHubCLI() error {
 	if _, err := exec.LookPath("gh"); err != nil {
-		return coreerr.E("security.checkGitHubCLI", i18n.T("error.gh_not_found"), nil)
+		return coreerr.E("security", i18n.T("error.gh_not_found"), nil)
 	}
 	return nil
 }
@@ -179,7 +179,7 @@ func runGitHubAPI(endpoint string) ([]byte, error) {
 				return []byte("[]"), nil
 			}
 			if core.Contains(stderr, "403") {
-				return nil, coreerr.E("security.runGitHubAPI", "access denied (check token permissions)", nil)
+				return nil, coreerr.E("security", "access denied (check token permissions)", nil)
 			}
 		}
 		return nil, cli.Wrap(err, "run gh api")

@@ -126,18 +126,18 @@ func runMetrics(options MetricsCommandOptions) error {
 func parseSinceDuration(input string) (time.Duration, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
-		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
 
 	if duration, err := time.ParseDuration(trimmed); err == nil {
 		if duration <= 0 {
-			return 0, coreerr.E("metrics.parseSinceDuration", "duration must be positive: "+input, nil)
+			return 0, coreerr.E("metrics", "duration must be positive: "+input, nil)
 		}
 		return duration, nil
 	}
 
 	if len(trimmed) < 2 {
-		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
 
 	unit := trimmed[len(trimmed)-1]
@@ -145,17 +145,17 @@ func parseSinceDuration(input string) (time.Duration, error) {
 
 	n, err := strconv.Atoi(value)
 	if err != nil {
-		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
 	if n <= 0 {
-		return 0, coreerr.E("metrics.parseSinceDuration", "duration must be positive: "+input, nil)
+		return 0, coreerr.E("metrics", "duration must be positive: "+input, nil)
 	}
 
 	switch unit {
 	case 'd':
 		return time.Duration(n) * 24 * time.Hour, nil
 	default:
-		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
 }
 

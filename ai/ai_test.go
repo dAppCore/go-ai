@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"dappco.re/go/core"
 	coreio "dappco.re/go/core/io"
 )
 
@@ -108,6 +109,48 @@ func TestRecord_Good_UsesEventTimestampForDailyFile(t *testing.T) {
 	}
 	if !events[0].Timestamp.Equal(recordedAt) {
 		t.Fatalf("expected timestamp %v, got %v", recordedAt, events[0].Timestamp)
+	}
+}
+
+func TestMetricsDir_Good_HonoursEnvPrecedence(t *testing.T) {
+	t.Setenv("CORE_HOME", "/core-home")
+	t.Setenv("HOME", "/home")
+	t.Setenv("USERPROFILE", "/userprofile")
+	t.Setenv("DIR_HOME", "/dir-home")
+
+	got, err := metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir: %v", err)
+	}
+	if want := core.JoinPath("/core-home", ".core", "ai", "metrics"); got != want {
+		t.Fatalf("metricsDir() = %q, want %q", got, want)
+	}
+
+	t.Setenv("CORE_HOME", "")
+	got, err = metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir with HOME: %v", err)
+	}
+	if want := core.JoinPath("/home", ".core", "ai", "metrics"); got != want {
+		t.Fatalf("metricsDir() with HOME = %q, want %q", got, want)
+	}
+
+	t.Setenv("HOME", "")
+	got, err = metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir with USERPROFILE: %v", err)
+	}
+	if want := core.JoinPath("/userprofile", ".core", "ai", "metrics"); got != want {
+		t.Fatalf("metricsDir() with USERPROFILE = %q, want %q", got, want)
+	}
+
+	t.Setenv("USERPROFILE", "")
+	got, err = metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir with DIR_HOME: %v", err)
+	}
+	if want := core.JoinPath("/dir-home", ".core", "ai", "metrics"); got != want {
+		t.Fatalf("metricsDir() with DIR_HOME = %q, want %q", got, want)
 	}
 }
 

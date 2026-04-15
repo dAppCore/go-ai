@@ -127,6 +127,9 @@ func runJobs(commandOptions JobsCommandOptions) error {
 }
 
 func loadRegistryForJobs(commandOptions JobsCommandOptions) (*repos.Registry, error) {
+	if core.Trim(commandOptions.Targets) == "" {
+		return nil, nil
+	}
 	if !jobsNeedRegistry(commandOptions.Targets) {
 		return nil, nil
 	}
@@ -252,7 +255,7 @@ func runJobWorkers(targets []string, workers int) []jobResult {
 func collectJobRepoResult(target string) (jobRepoResult, error) {
 	securityTarget, err := parseSecurityTarget(target)
 	if err != nil {
-		return jobRepoResult{}, coreerr.E("security.jobs", "invalid target format: use owner/repo", nil)
+		return jobRepoResult{}, coreerr.E("security", "invalid target format: use owner/repo", nil)
 	}
 
 	repo := jobRepoResult{Repo: target}
@@ -261,7 +264,7 @@ func collectJobRepoResult(target string) (jobRepoResult, error) {
 	secretScanningAlerts, secretScanningError := collectSecretScanningAlertsForJobs(securityTarget)
 
 	if dependabotError != nil && codeScanningError != nil && secretScanningError != nil {
-		return jobRepoResult{}, coreerr.E("security.jobs", "failed to fetch any alerts for "+target, nil)
+		return jobRepoResult{}, coreerr.E("security", "failed to fetch any alerts for "+target, nil)
 	}
 
 	for _, alert := range buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, "") {
