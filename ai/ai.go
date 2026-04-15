@@ -4,6 +4,11 @@
 //		Title:       "Investigate build failure",
 //		Description: "CI compile step fails",
 //	})
+//	if err != nil {
+//		return err
+//	}
 //
-// err := ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
+//	if err := ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}); err != nil {
+//		return err
+//	}
 package ai
