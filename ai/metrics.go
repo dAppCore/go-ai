@@ -125,22 +125,21 @@ func ReadEvents(since time.Time) ([]Event, error) {
 
 	var events []Event
 	now := time.Now()
-	cappedSince := since
-	if cappedSince.IsZero() {
-		cappedSince = now.AddDate(0, 0, -maxMetricsReadWindowDays)
+	if since.IsZero() {
+		since = now.AddDate(0, 0, -maxMetricsReadWindowDays)
 	}
-	if cappedSince.After(now) {
-		cappedSince = now
+	if since.After(now) {
+		since = now
 	}
 
-	// Iterate each day from capped since to now in the caller's location.
-	loc := cappedSince.Location()
-	scanStart := time.Date(cappedSince.Year(), cappedSince.Month(), cappedSince.Day(), 0, 0, 0, 0, loc)
+	// Iterate each day from the caller's `since` timestamp to now in the caller's location.
+	loc := since.Location()
+	scanStart := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc)
 	today := now.In(loc)
-	for day, scannedDays := scanStart, 0; !day.After(today) && scannedDays < maxMetricsReadWindowDays; day, scannedDays = day.AddDate(0, 0, 1), scannedDays+1 {
+	for day := scanStart; !day.After(today); day = day.AddDate(0, 0, 1) {
 		path := metricsFilePath(dir, day)
 
-		dayEvents, err := readMetricsFile(path, cappedSince)
+		dayEvents, err := readMetricsFile(path, since)
 		if err != nil {
 			return nil, err
 		}
