@@ -84,3 +84,26 @@ func stubGitHubAPI(t *testing.T, fn func(endpoint string) ([]byte, error)) {
 func normalizeWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+func writeSecurityRegistry(t *testing.T, org string, repoNames ...string) string {
+	t.Helper()
+
+	registryDir := t.TempDir()
+	registryPath := filepath.Join(registryDir, "repos.yaml")
+
+	var builder strings.Builder
+	builder.WriteString("version: 1\n")
+	builder.WriteString("org: " + org + "\n")
+	builder.WriteString("base_path: " + registryDir + "\n")
+	builder.WriteString("repos:\n")
+	for _, repoName := range repoNames {
+		builder.WriteString("  " + repoName + ":\n")
+		builder.WriteString("    type: module\n")
+	}
+
+	if err := os.WriteFile(registryPath, []byte(builder.String()), 0o644); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	return registryPath
+}

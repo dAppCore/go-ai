@@ -342,6 +342,29 @@ func combineSecurityCollectorErrors(target string, collectorErrors map[string]er
 	), nil)
 }
 
+func combineSecurityTargetErrors(commandName string, targetErrors map[string]error) error {
+	if len(targetErrors) == 0 {
+		return nil
+	}
+
+	targetNames := make([]string, 0, len(targetErrors))
+	for targetName := range targetErrors {
+		targetNames = append(targetNames, targetName)
+	}
+	slices.Sort(targetNames)
+
+	messages := make([]string, 0, len(targetNames))
+	for _, targetName := range targetNames {
+		messages = append(messages, fmt.Sprintf("%s: %v", targetName, targetErrors[targetName]))
+	}
+
+	return coreerr.E("security", core.Sprintf("%s failed for %d target(s): %s",
+		commandName,
+		len(targetNames),
+		core.Join("; ", messages...),
+	), nil)
+}
+
 func buildSecurityMetricsEvent(eventType string, startedAt time.Time, repository string, data map[string]any) ai.Event {
 	return ai.Event{
 		Type:      eventType,

@@ -99,14 +99,18 @@ func runJobs(commandOptions JobsCommandOptions) error {
 	results := runJobWorkers(targets, workerCount)
 	var successful []jobRepoResult
 	overall := &AlertSummary{}
+	targetErrors := map[string]error{}
 	for _, result := range results {
 		if result.err != nil {
-			cli.Print("%s %v\n", cli.WarningStyle.Render(">>"), result.err)
+			targetErrors[result.repo.Repo] = result.err
 			continue
 		}
 
 		successful = append(successful, result.repo)
 		mergeAlertSummary(overall, &result.repo.Summary)
+	}
+	if err := combineSecurityTargetErrors("security jobs", targetErrors); err != nil {
+		return err
 	}
 	if len(successful) == 0 {
 		return cli.Err("all targets failed to process")

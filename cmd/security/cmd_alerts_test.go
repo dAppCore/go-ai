@@ -172,6 +172,40 @@ func TestCmdAlerts_runAlerts_Good_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestCmdAlerts_runAlerts_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) {
+	withSecurityTempHome(t)
+	withFakeGitHubCLI(t)
+	registryPath := writeSecurityRegistry(t, "acme", "api", "web")
+
+	stubGitHubAPI(t, func(endpoint string) ([]byte, error) {
+		switch endpoint {
+		case "repos/acme/api/dependabot/alerts?state=open":
+			return []byte(`[]`), nil
+		case "repos/acme/api/code-scanning/alerts?state=open":
+			return []byte(`[]`), nil
+		case "repos/acme/api/secret-scanning/alerts?state=open":
+			return []byte(`[]`), nil
+		case "repos/acme/web/dependabot/alerts?state=open":
+			return []byte(`[]`), nil
+		case "repos/acme/web/code-scanning/alerts?state=open":
+			return nil, assertiveError("code scanning unavailable")
+		case "repos/acme/web/secret-scanning/alerts?state=open":
+			return []byte(`[]`), nil
+		default:
+			t.Fatalf("unexpected endpoint: %s", endpoint)
+			return nil, nil
+		}
+	})
+
+	err := runAlerts(SecuritySelectionOptions{RegistryPath: registryPath})
+	if err == nil {
+		t.Fatal("expected multi-target partial failure to fail closed")
+	}
+	if !strings.Contains(err.Error(), "security alerts failed") || !strings.Contains(err.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCmdAlerts_addAlertsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
 	firstRoot := &cli.Command{Use: "core"}
 	secondRoot := &cli.Command{Use: "core"}

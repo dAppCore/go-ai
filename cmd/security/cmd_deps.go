@@ -56,14 +56,12 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 
 	var allAlerts []DepAlert
 	summary := &AlertSummary{}
+	targetErrors := map[string]error{}
 
 	for _, target := range targets {
 		targetAlerts, err := collectDepAlerts(target, selectionOptions.SeverityFilter)
 		if err != nil {
-			if selectionOptions.ExternalTarget != "" {
-				return err
-			}
-			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
+			targetErrors[target.FullName] = err
 			continue
 		}
 
@@ -71,6 +69,10 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 			summary.Add(alert.Severity)
 		}
 		allAlerts = append(allAlerts, targetAlerts...)
+	}
+
+	if err := combineSecurityTargetErrors("security deps", targetErrors); err != nil {
+		return err
 	}
 
 	recordedRepo := metricRepositoryForTargets(targets)

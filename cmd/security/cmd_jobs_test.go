@@ -452,6 +452,45 @@ func TestRunJobs_Bad_InvalidWorkerCount(t *testing.T) {
 	}
 }
 
+func TestRunJobs_Bad_PartialFailureFailsClosedBeforeIssueCreation(t *testing.T) {
+	withSecurityTempHome(t)
+	withFakeGitHubScript(t, "#!/bin/sh\nif [ \"$1\" = issue ]; then\n  echo unexpected issue create >&2\n  exit 99\nfi\nexit 0\n")
+
+	originalCollectDependabotAlertsForJobs := collectDependabotAlertsForJobs
+	originalCollectCodeScanningAlertsForJobs := collectCodeScanningAlertsForJobs
+	originalCollectSecretScanningAlertsForJobs := collectSecretScanningAlertsForJobs
+	t.Cleanup(func() {
+		collectDependabotAlertsForJobs = originalCollectDependabotAlertsForJobs
+		collectCodeScanningAlertsForJobs = originalCollectCodeScanningAlertsForJobs
+		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
+	})
+
+	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) ([]DepAlert, error) {
+		if target.FullName == "acme/web" {
+			return nil, errors.New("dependabot unavailable")
+		}
+		return []DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}}, nil
+	}
+	collectCodeScanningAlertsForJobs = func(target SecurityTarget, _ ScanCommandOptions) ([]ScanAlert, error) {
+		return []ScanAlert{{Repo: target.DisplayName, Severity: "medium", RuleID: "R-1", Description: "scan"}}, nil
+	}
+	collectSecretScanningAlertsForJobs = func(target SecurityTarget) ([]SecretAlert, error) {
+		return []SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}}, nil
+	}
+
+	err := runJobs(JobsCommandOptions{
+		Targets:         "acme/api,acme/web",
+		IssueRepository: "acme/security",
+		WorkerCount:     2,
+	})
+	if err == nil {
+		t.Fatal("expected partial failure to abort jobs")
+	}
+	if !strings.Contains(err.Error(), "security jobs failed") || !strings.Contains(err.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCreateJobsIssue_Good_ReturnsTrimmedOutput(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf 'https://github.com/acme/security/issues/1\\n'\n")
 

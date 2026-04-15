@@ -83,6 +83,32 @@ func TestCmdDeps_runDeps_Good_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestCmdDeps_runDeps_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) {
+	withSecurityTempHome(t)
+	withFakeGitHubCLI(t)
+	registryPath := writeSecurityRegistry(t, "acme", "api", "web")
+
+	stubGitHubAPI(t, func(endpoint string) ([]byte, error) {
+		switch endpoint {
+		case "repos/acme/api/dependabot/alerts?state=open":
+			return []byte(`[]`), nil
+		case "repos/acme/web/dependabot/alerts?state=open":
+			return nil, assertiveError("dependabot unavailable")
+		default:
+			t.Fatalf("unexpected endpoint: %s", endpoint)
+			return nil, nil
+		}
+	})
+
+	err := runDeps(SecuritySelectionOptions{RegistryPath: registryPath})
+	if err == nil {
+		t.Fatal("expected multi-target partial failure to fail closed")
+	}
+	if !strings.Contains(err.Error(), "security deps failed") || !strings.Contains(err.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCmdDeps_addDepsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
 	firstRoot := &cli.Command{Use: "core"}
 	secondRoot := &cli.Command{Use: "core"}

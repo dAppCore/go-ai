@@ -56,14 +56,12 @@ func runScan(commandOptions ScanCommandOptions) error {
 
 	var allAlerts []ScanAlert
 	summary := &AlertSummary{}
+	targetErrors := map[string]error{}
 
 	for _, target := range targets {
 		targetAlerts, err := collectScanAlerts(target, commandOptions)
 		if err != nil {
-			if commandOptions.Selection.ExternalTarget != "" {
-				return err
-			}
-			cli.Print("%s %s: %v\n", cli.WarningStyle.Render(">>"), target.FullName, err)
+			targetErrors[target.FullName] = err
 			continue
 		}
 
@@ -71,6 +69,10 @@ func runScan(commandOptions ScanCommandOptions) error {
 			summary.Add(alert.Severity)
 		}
 		allAlerts = append(allAlerts, targetAlerts...)
+	}
+
+	if err := combineSecurityTargetErrors("security scan", targetErrors); err != nil {
+		return err
 	}
 
 	recordedRepo := metricRepositoryForTargets(targets)

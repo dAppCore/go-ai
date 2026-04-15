@@ -72,6 +72,32 @@ func TestCmdSecrets_runSecrets_Good_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestCmdSecrets_runSecrets_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) {
+	withSecurityTempHome(t)
+	withFakeGitHubCLI(t)
+	registryPath := writeSecurityRegistry(t, "acme", "api", "web")
+
+	stubGitHubAPI(t, func(endpoint string) ([]byte, error) {
+		switch endpoint {
+		case "repos/acme/api/secret-scanning/alerts?state=open":
+			return []byte(`[]`), nil
+		case "repos/acme/web/secret-scanning/alerts?state=open":
+			return nil, assertiveError("secret scanning unavailable")
+		default:
+			t.Fatalf("unexpected endpoint: %s", endpoint)
+			return nil, nil
+		}
+	})
+
+	err := runSecrets(SecuritySelectionOptions{RegistryPath: registryPath})
+	if err == nil {
+		t.Fatal("expected multi-target partial failure to fail closed")
+	}
+	if !strings.Contains(err.Error(), "security secrets failed") || !strings.Contains(err.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCmdSecrets_addSecretsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
 	firstRoot := &cli.Command{Use: "core"}
 	secondRoot := &cli.Command{Use: "core"}
