@@ -45,12 +45,12 @@ type ScanAlert struct {
 func runScan(commandOptions ScanCommandOptions) error {
 	startedAt := time.Now()
 
-	if err := checkGitHubCLI(); err != nil {
+	targets, err := resolveSecurityTargets(commandOptions.Selection.RegistryPath, commandOptions.Selection.RepositoryName, commandOptions.Selection.ExternalTarget)
+	if err != nil {
 		return err
 	}
 
-	targets, err := resolveSecurityTargets(commandOptions.Selection.RegistryPath, commandOptions.Selection.RepositoryName, commandOptions.Selection.ExternalTarget)
-	if err != nil {
+	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 

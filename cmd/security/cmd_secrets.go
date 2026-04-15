@@ -41,12 +41,12 @@ type SecretAlert struct {
 func runSecrets(selectionOptions SecuritySelectionOptions) error {
 	startedAt := time.Now()
 
-	if err := checkGitHubCLI(); err != nil {
+	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
+	if err != nil {
 		return err
 	}
 
-	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
-	if err != nil {
+	if err := checkGitHubCLI(); err != nil {
 		return err
 	}
 
