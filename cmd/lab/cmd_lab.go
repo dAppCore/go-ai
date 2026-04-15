@@ -44,8 +44,21 @@ func init() {
 
 // AddLabCommands registers the 'lab' command and subcommands.
 func AddLabCommands(root *cli.Command) {
+	if hasCommand(root, "lab") {
+		return
+	}
+
 	labCmd.AddCommand(serveCmd)
 	root.AddCommand(labCmd)
+}
+
+func hasCommand(parent *cli.Command, name string) bool {
+	for _, child := range parent.Commands() {
+		if child.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func runServe(cmd *cli.Command, args []string) error {
