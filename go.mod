@@ -10,6 +10,7 @@ require (
 	dappco.re/go/core/scm v0.6.1
 	forge.lthn.ai/core/cli v0.3.7
 	forge.lthn.ai/core/go-rag v0.1.11
+	dappco.re/go/rag v0.1.11
 )
 
 require (
@@ -58,3 +59,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace dappco.re/go/rag => ../go-rag

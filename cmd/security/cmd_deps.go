@@ -1,6 +1,9 @@
 package security
 
 import (
+	"time"
+
+	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
 	"dappco.re/go/core/i18n"
 	"forge.lthn.ai/core/cli/pkg/cli"
@@ -68,6 +71,27 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 		}
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
+
+	recordedRepo := ""
+	recordedTarget := ""
+	if selectionOptions.ExternalTarget != "" {
+		recordedRepo = selectionOptions.ExternalTarget
+		recordedTarget = selectionOptions.ExternalTarget
+	}
+	_ = ai.Record(ai.Event{
+		Type:      "security.deps",
+		Timestamp: time.Now(),
+		Repo:      recordedRepo,
+		Data: map[string]any{
+			"target":   recordedTarget,
+			"total":    summary.Total,
+			"critical": summary.Critical,
+			"high":     summary.High,
+			"medium":   summary.Medium,
+			"low":      summary.Low,
+			"unknown":  summary.Unknown,
+		},
+	})
 
 	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))

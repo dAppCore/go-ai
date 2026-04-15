@@ -3,14 +3,11 @@ package ai
 import (
 	"bufio"
 	"cmp"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
+	"dappco.re/go/core"
 	coreio "dappco.re/go/core/io"
 	coreerr "dappco.re/go/core/log"
 )
@@ -30,16 +27,16 @@ type Event struct {
 
 // metricsDir returns the base directory for metrics storage.
 func metricsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", coreerr.E("ai", "get metrics directory", err)
+	home := core.Env("CORE_HOME")
+	if home == "" {
+		home = core.Env("DIR_HOME")
 	}
-	return filepath.Join(home, ".core", "ai", "metrics"), nil
+	return core.JoinPath(home, ".core", "ai", "metrics"), nil
 }
 
 // metricsFilePath returns the JSONL file path for the given date.
 func metricsFilePath(dir string, t time.Time) string {
-	return filepath.Join(dir, t.Format("2006-01-02")+".jsonl")
+	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
 // Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
@@ -62,7 +59,7 @@ func Record(event Event) (err error) {
 
 	path := metricsFilePath(dir, event.Timestamp)
 
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	file, err := coreio.Local.Append(path)
 	if err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
@@ -72,12 +69,15 @@ func Record(event Event) (err error) {
 		}
 	}()
 
-	data, err := json.Marshal(event)
-	if err != nil {
-		return coreerr.E("ai", "record event", err)
+	data := core.JSONMarshal(event)
+	if !data.OK {
+		if marshalErr, ok := data.Value.(error); ok {
+			return coreerr.E("ai", "record event", marshalErr)
+		}
+		return coreerr.E("ai", "record event", nil)
 	}
 
-	if _, err := file.Write(append(data, '\n')); err != nil {
+	if _, err := file.Write(append(data.Value.([]byte), '\n')); err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
 
@@ -125,13 +125,13 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	}
 
 	var events []Event
-	scanner := bufio.NewScanner(strings.NewReader(content))
+	scanner := bufio.NewScanner(core.NewReader(content))
 	// Metrics payloads are small in practice, but the default scanner token limit
 	// is too low for larger JSON events with rich Data payloads.
 	scanner.Buffer(make([]byte, 1024), 1<<20)
 	for scanner.Scan() {
 		var ev Event
-		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+		if r := core.JSONUnmarshal(scanner.Bytes(), &ev); !r.OK {
 			continue // skip malformed lines
 		}
 		if !ev.Timestamp.Before(since) {

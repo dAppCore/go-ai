@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"forge.lthn.ai/core/go-rag"
+	rag "dappco.re/go/rag"
 )
 
 const (

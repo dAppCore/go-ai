@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"forge.lthn.ai/core/go-rag"
+	rag "dappco.re/go/rag"
 )
 
 func TestBuildTaskQuery_Good_CombinesAndTruncates(t *testing.T) {
@@ -56,8 +56,10 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		return nil, errors.New("qdrant unavailable")
 	}
 
-	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil || got != "" {
-		t.Fatalf("QueryRAGForTask() = %q, %v; want empty string and nil error", got, err)
+	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	} else if got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 
 	newQdrantClient = origNewQdrantClient
@@ -65,8 +67,10 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		return nil, errors.New("ollama unavailable")
 	}
 
-	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil || got != "" {
-		t.Fatalf("QueryRAGForTask() = %q, %v; want empty string and nil error", got, err)
+	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	} else if got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 
 	newOllamaClient = origNewOllamaClient
@@ -80,7 +84,9 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		return nil, errors.New("query failed")
 	}
 
-	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil || got != "" {
-		t.Fatalf("QueryRAGForTask() = %q, %v; want empty string and nil error", got, err)
+	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	} else if got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 }
