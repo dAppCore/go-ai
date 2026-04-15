@@ -3,5 +3,7 @@ package rag
 
 import ragcmd "dappco.re/go/rag/cmd/rag"
 
-// core ai rag query --question "What changed?"
+// AddRAGSubcommands(parent) re-exports the go-rag CLI under `core ai rag`.
+//
+//	core ai rag query --question "What changed?"
 var AddRAGSubcommands = ragcmd.AddRAGSubcommands

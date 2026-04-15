@@ -25,6 +25,7 @@ func init() {
 	cli.RegisterCommands(AddLabCommands)
 }
 
+// LabCommandOptions{Bind: "127.0.0.1:8080", AllowRemote: false} configures `core lab serve`.
 type LabCommandOptions struct {
 	Bind        string
 	AllowRemote bool

@@ -38,8 +38,8 @@ func recordSecurityMetricsEvent(event ai.Event) {
 	_ = ai.Record(event)
 }
 
-// core security alerts --repo go-ai
-// core security jobs --targets all --copies 4
+// SecuritySelectionOptions{RepositoryName: "go-ai", SeverityFilter: "high", JSONOutput: true}
+// captures one repo-scoped security command invocation.
 type SecuritySelectionOptions struct {
 	RegistryPath   string
 	RepositoryName string
@@ -48,13 +48,15 @@ type SecuritySelectionOptions struct {
 	ExternalTarget string
 }
 
-// ScanCommandOptions{Selection: SecuritySelectionOptions{ExternalTarget: "wailsapp/wails"}, ToolName: "CodeQL"} runs one scoped scan.
+// ScanCommandOptions{Selection: SecuritySelectionOptions{ExternalTarget: "wailsapp/wails"}, ToolName: "CodeQL"}
+// captures one `core security scan` invocation.
 type ScanCommandOptions struct {
 	Selection SecuritySelectionOptions
 	ToolName  string
 }
 
-// JobsCommandOptions{Targets: "all", IssueRepository: "host-uk/core", WorkerCount: 4} runs one multi-repo batch scan.
+// JobsCommandOptions{Targets: "all", IssueRepository: "host-uk/core", WorkerCount: 4}
+// captures one `core security jobs` batch run.
 type JobsCommandOptions struct {
 	RegistryPath    string
 	Targets         string
