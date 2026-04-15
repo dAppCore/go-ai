@@ -79,8 +79,7 @@ func runMetrics(options MetricsCommandOptions) error {
 
 	cli.Blank()
 	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), options.SinceWindow)
-	total, _ := summary["total"].(int)
-	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), total)
+	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), len(events))
 	cli.Blank()
 
 	if byType := summaryCountPairs(summary, "by_type"); len(byType) > 0 {

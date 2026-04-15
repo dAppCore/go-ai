@@ -169,7 +169,6 @@ func Summary(events []Event) map[string]any {
 	copy(recentCopy, recentEvents)
 
 	return map[string]any{
-		"total":    len(events),
 		"by_type":  cloneCounts(byTypeCounts),
 		"by_repo":  cloneCounts(byRepoCounts),
 		"by_agent": cloneCounts(byAgentCounts),
