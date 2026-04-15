@@ -118,11 +118,11 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		}
 
 		cli.Print("%s %s\n", cli.SuccessStyle.Render(">>"), issueURL)
-		_ = ai.Record(buildJobsMetricsEvent(commandOptions, overall, successful, issueURL))
+		recordSecurityMetricsEvent(buildJobsMetricsEvent(commandOptions, overall, successful, issueURL))
 		return nil
 	}
 
-	_ = ai.Record(buildJobsMetricsEvent(commandOptions, overall, successful, ""))
+	recordSecurityMetricsEvent(buildJobsMetricsEvent(commandOptions, overall, successful, ""))
 	return nil
 }
 

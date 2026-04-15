@@ -70,7 +70,7 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 
 	recordedRepo := metricRepositoryForTargets(targets)
 	recordedTarget := recordedRepo
-	_ = ai.Record(ai.Event{
+	recordSecurityMetricsEvent(ai.Event{
 		Type:      "security.secrets",
 		Timestamp: time.Now(),
 		Repo:      recordedRepo,

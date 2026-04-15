@@ -17,6 +17,8 @@ import (
 // metricsWriteMu protects concurrent file writes in Record.
 var metricsWriteMu sync.Mutex
 
+const recentEventLimit = 10
+
 // Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
 type Event struct {
 	Type      string         `json:"type"`
@@ -56,7 +58,7 @@ func metricsFilePath(dir string, t time.Time) string {
 	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
+// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to today's JSONL file.
 func Record(event Event) (err error) {
 	recordedAt := event.Timestamp
 	if recordedAt.IsZero() {
@@ -163,8 +165,7 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	return events, nil
 }
 
-// Summary(events) aggregates counts by type, repo, and agent.
-// Example: Summary([]Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}})
+// Summary([]Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}}) aggregates counts by type, repo, and agent.
 func Summary(events []Event) map[string]any {
 	byTypeCounts := make(map[string]int)
 	byRepoCounts := make(map[string]int)
@@ -181,8 +182,8 @@ func Summary(events []Event) map[string]any {
 	}
 
 	recentEvents := events
-	if len(recentEvents) > 10 {
-		recentEvents = recentEvents[len(recentEvents)-10:]
+	if len(recentEvents) > recentEventLimit {
+		recentEvents = recentEvents[len(recentEvents)-recentEventLimit:]
 	}
 	recentCopy := make([]Event, len(recentEvents))
 	copy(recentCopy, recentEvents)

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"slices"
 
+	"dappco.re/go/ai/ai"
 	"dappco.re/go/core"
 	"dappco.re/go/core/i18n"
 	"dappco.re/go/core/io"
@@ -15,6 +16,10 @@ import (
 )
 
 var callGitHubAPIRequest = runGitHubAPI
+
+func recordSecurityMetricsEvent(event ai.Event) {
+	_ = ai.Record(event)
+}
 
 // SecuritySelectionOptions{ExternalTarget: "wailsapp/wails", SeverityFilter: "critical,high"} captures
 // the shared repository and output flags used by the security query commands.
