@@ -73,12 +73,8 @@ func runScan(commandOptions ScanCommandOptions) error {
 	}
 
 	// Record metrics
-	recordedRepo := ""
-	recordedTarget := ""
-	if commandOptions.Selection.ExternalTarget != "" {
-		recordedRepo = commandOptions.Selection.ExternalTarget
-		recordedTarget = commandOptions.Selection.ExternalTarget
-	}
+	recordedRepo := metricRepoForTargets(targets)
+	recordedTarget := recordedRepo
 	_ = ai.Record(ai.Event{
 		Type:      "security.scan",
 		Timestamp: time.Now(),

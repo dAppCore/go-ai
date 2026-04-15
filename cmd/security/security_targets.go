@@ -42,6 +42,15 @@ func resolveSecurityTargets(registryPath, repoFilter, externalTarget string) ([]
 	return targets, nil
 }
 
+// metricRepoForTargets returns the repository name to record in metrics when a
+// security command is scoped to exactly one repository.
+func metricRepoForTargets(targets []SecurityTarget) string {
+	if len(targets) != 1 {
+		return ""
+	}
+	return targets[0].FullName
+}
+
 // parseSecurityTarget("wailsapp/wails") converts an external owner/repo string into the shared target shape.
 func parseSecurityTarget(target string) (SecurityTarget, error) {
 	parts := core.SplitN(target, "/", 2)

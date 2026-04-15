@@ -54,3 +54,15 @@ func TestSecuritySectionLabel_Good(t *testing.T) {
 		t.Fatalf("securitySectionLabel with target = %q", got)
 	}
 }
+
+func TestMetricRepoForTargets_Good(t *testing.T) {
+	if got := metricRepoForTargets(nil); got != "" {
+		t.Fatalf("metricRepoForTargets(nil) = %q, want empty string", got)
+	}
+	if got := metricRepoForTargets([]SecurityTarget{{FullName: "acme/api"}}); got != "acme/api" {
+		t.Fatalf("metricRepoForTargets(one) = %q, want acme/api", got)
+	}
+	if got := metricRepoForTargets([]SecurityTarget{{FullName: "acme/api"}, {FullName: "acme/web"}}); got != "" {
+		t.Fatalf("metricRepoForTargets(many) = %q, want empty string", got)
+	}
+}

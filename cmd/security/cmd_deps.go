@@ -72,12 +72,8 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	recordedRepo := ""
-	recordedTarget := ""
-	if selectionOptions.ExternalTarget != "" {
-		recordedRepo = selectionOptions.ExternalTarget
-		recordedTarget = selectionOptions.ExternalTarget
-	}
+	recordedRepo := metricRepoForTargets(targets)
+	recordedTarget := recordedRepo
 	_ = ai.Record(ai.Event{
 		Type:      "security.deps",
 		Timestamp: time.Now(),
