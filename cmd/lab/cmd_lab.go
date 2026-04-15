@@ -21,25 +21,8 @@ func init() {
 	cli.RegisterCommands(AddLabCommands)
 }
 
-var labCmd = &cli.Command{
-	Use:   "lab",
-	Short: "Homelab monitoring dashboard",
-	Long:  "Lab dashboard with real-time monitoring of machines, training runs, models, and services.",
-}
-
-var (
-	labBind string
-)
-
-var serveCmd = &cli.Command{
-	Use:   "serve",
-	Short: "Start the lab dashboard web server",
-	Long:  "Starts the lab dashboard HTTP server with live-updating collectors for system stats, Docker, Forgejo, HuggingFace, InfluxDB, and more.",
-	RunE:  runServe,
-}
-
-func init() {
-	serveCmd.Flags().StringVar(&labBind, "bind", ":8080", "HTTP listen address")
+type LabCommandOptions struct {
+	Bind string
 }
 
 // AddLabCommands registers the 'lab' command and subcommands.
@@ -48,8 +31,30 @@ func AddLabCommands(root *cli.Command) {
 		return
 	}
 
+	root.AddCommand(newLabCommand())
+}
+
+func newLabCommand() *cli.Command {
+	options := &LabCommandOptions{Bind: ":8080"}
+
+	labCmd := &cli.Command{
+		Use:   "lab",
+		Short: "Homelab monitoring dashboard",
+		Long:  "Lab dashboard with real-time monitoring of machines, training runs, models, and services.",
+	}
+
+	serveCmd := &cli.Command{
+		Use:   "serve",
+		Short: "Start the lab dashboard web server",
+		Long:  "Starts the lab dashboard HTTP server with live-updating collectors for system stats, Docker, Forgejo, HuggingFace, InfluxDB, and more.",
+		RunE: func(cmd *cli.Command, args []string) error {
+			return runServe(*options)
+		},
+	}
+	serveCmd.Flags().StringVar(&options.Bind, "bind", options.Bind, "HTTP listen address")
+
 	labCmd.AddCommand(serveCmd)
-	root.AddCommand(labCmd)
+	return labCmd
 }
 
 func hasCommand(parent *cli.Command, name string) bool {
@@ -61,9 +66,9 @@ func hasCommand(parent *cli.Command, name string) bool {
 	return false
 }
 
-func runServe(cmd *cli.Command, args []string) error {
+func runServe(options LabCommandOptions) error {
 	cfg := lab.LoadConfig()
-	cfg.Addr = labBind
+	cfg.Addr = options.Bind
 
 	store := lab.NewStore()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
