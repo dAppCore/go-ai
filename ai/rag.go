@@ -70,10 +70,10 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 }
 
 func buildTaskQuery(task TaskInfo) string {
-	query := task.Title + ": " + task.Description
-	if strings.TrimSpace(query) == "" {
+	if strings.TrimSpace(task.Title) == "" && strings.TrimSpace(task.Description) == "" {
 		return ""
 	}
+	query := task.Title + ": " + task.Description
 	return truncateRunes(query, ragTaskQueryRuneLimit)
 }
 

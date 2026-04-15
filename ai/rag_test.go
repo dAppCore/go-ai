@@ -35,6 +35,13 @@ func TestBuildTaskQuery_Good_TruncatesToLimit(t *testing.T) {
 	}
 }
 
+func TestBuildTaskQuery_Good_BlankTaskReturnsEmpty(t *testing.T) {
+	got := buildTaskQuery(TaskInfo{})
+	if got != "" {
+		t.Fatalf("buildTaskQuery() = %q, want empty string", got)
+	}
+}
+
 func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 	origNewQdrantClient := newQdrantClient
 	origNewOllamaClient := newOllamaClient
