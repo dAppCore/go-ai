@@ -100,7 +100,7 @@ func runMetrics(options MetricsCommandOptions) error {
 	}
 
 	if byAgent := summaryCountPairs(summary, "by_agent"); len(byAgent) > 0 {
-		cli.Print("%s\n", cli.DimStyle.Render("By contributor:"))
+		cli.Print("%s\n", cli.DimStyle.Render("By agent:"))
 		for _, entry := range byAgent {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
 		}

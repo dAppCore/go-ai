@@ -94,8 +94,9 @@ func ReadEvents(since time.Time) ([]Event, error) {
 	var events []Event
 	now := time.Now()
 
-	// Iterate each day from since to now.
-	for d := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, time.Local); !d.After(now); d = d.AddDate(0, 0, 1) {
+	// Iterate each day from since to now in the caller's location.
+	loc := since.Location()
+	for d := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc); !d.After(now.In(loc)); d = d.AddDate(0, 0, 1) {
 		path := metricsFilePath(dir, d)
 
 		dayEvents, err := readMetricsFile(path, since)
