@@ -5,9 +5,10 @@ package lab
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
-	"net"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -80,6 +81,11 @@ func runServe(options LabCommandOptions) error {
 		return err
 	}
 
+	authToken := strings.TrimSpace(os.Getenv("CORE_LAB_API_TOKEN"))
+	if err := validateLabRemoteAuth(options.Bind, authToken); err != nil {
+		return err
+	}
+
 	cfg := lab.LoadConfig()
 	cfg.Addr = options.Bind
 
@@ -116,7 +122,6 @@ func runServe(options LabCommandOptions) error {
 
 	web := handler.NewWebHandler(store)
 	api := handler.NewAPIHandler(store)
-	authToken := strings.TrimSpace(os.Getenv("CORE_LAB_API_TOKEN"))
 	authWrapper := func(handler http.HandlerFunc) http.HandlerFunc {
 		return requireLabAuth(handler, authToken)
 	}
@@ -185,16 +190,14 @@ func validateLabBindAddress(addr string, allowRemote bool) error {
 func isLoopbackBindAddress(addr string) bool {
 	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
 	if err != nil {
-		if strings.HasPrefix(addr, ":") {
-			host = "127.0.0.1"
-		} else if err.Error() == "missing port in address" {
+		if err.Error() == "missing port in address" {
 			return false
 		} else {
 			return false
 		}
 	}
 
-	if host == "" || host == "localhost" {
+	if host == "localhost" {
 		return true
 	}
 
@@ -213,11 +216,22 @@ func requireLabAuth(handler http.HandlerFunc, token string) http.HandlerFunc {
 		}
 
 		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
-		if authHeader != "Bearer "+token {
+		expected := "Bearer " + token
+		if len(authHeader) != len(expected) || subtle.ConstantTimeCompare([]byte(authHeader), []byte(expected)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
 		handler(w, r)
 	}
+}
+
+func validateLabRemoteAuth(bindAddr, authToken string) error {
+	if isLoopbackBindAddress(bindAddr) {
+		return nil
+	}
+	if strings.TrimSpace(authToken) != "" {
+		return nil
+	}
+	return fmt.Errorf("refusing to expose lab dashboard on %q without CORE_LAB_API_TOKEN", bindAddr)
 }

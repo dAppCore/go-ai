@@ -49,9 +49,7 @@ func TestCmdLab_AddLabCommands_Good(t *testing.T) {
 func TestCmdLab_validateLabBindAddress_Good_LoopbackAllowed(t *testing.T) {
 	tests := []string{
 		"127.0.0.1:8080",
-		":8080",
 		"localhost:8080",
-		"localhost",
 		"[::1]:8080",
 	}
 
@@ -72,6 +70,27 @@ func TestCmdLab_validateLabBindAddress_Bad_RejectsRemoteWithoutFlag(t *testing.T
 	if err := validateLabBindAddress("0.0.0.0:8080", false); err == nil {
 		t.Fatal("expected remote address to be rejected without --allow-remote")
 	}
+	if err := validateLabBindAddress(":8080", false); err == nil {
+		t.Fatal("expected wildcard bind to be rejected without --allow-remote")
+	}
+}
+
+func TestCmdLab_validateLabRemoteAuth_Bad_RejectsRemoteWithoutToken(t *testing.T) {
+	if err := validateLabRemoteAuth("0.0.0.0:8080", ""); err == nil {
+		t.Fatal("expected remote lab bind to require CORE_LAB_API_TOKEN")
+	}
+}
+
+func TestCmdLab_validateLabRemoteAuth_Good_AllowsLoopbackWithoutToken(t *testing.T) {
+	if err := validateLabRemoteAuth("127.0.0.1:8080", ""); err != nil {
+		t.Fatalf("validateLabRemoteAuth(loopback, empty token) = %v", err)
+	}
+}
+
+func TestCmdLab_validateLabRemoteAuth_Good_AllowsRemoteWithToken(t *testing.T) {
+	if err := validateLabRemoteAuth("0.0.0.0:8080", "expected-token"); err != nil {
+		t.Fatalf("validateLabRemoteAuth(remote, token) = %v", err)
+	}
 }
 
 func TestCmdLab_isLoopbackBindAddress_Good(t *testing.T) {
@@ -83,7 +102,7 @@ func TestCmdLab_isLoopbackBindAddress_Good(t *testing.T) {
 		{name: "localhost", addr: "localhost:8080", want: true},
 		{name: "ipv4 loopback", addr: "127.0.0.1:8080", want: true},
 		{name: "ipv6 loopback", addr: "[::1]:8080", want: true},
-		{name: "implicit localhost", addr: ":8080", want: true},
+		{name: "wildcard bind", addr: ":8080", want: false},
 	}
 
 	for _, tc := range tests {
@@ -140,6 +159,26 @@ func TestCmdLab_requireLabAuth_Bad_MissingTokenIsRejected(t *testing.T) {
 
 	if called {
 		t.Fatal("wrapped handler should not run when authorization is missing")
+	}
+	if got := rr.Result().StatusCode; got != http.StatusUnauthorized {
+		t.Fatalf("expected 401 status, got %d", got)
+	}
+}
+
+func TestCmdLab_requireLabAuth_Bad_InvalidTokenIsRejected(t *testing.T) {
+	var called bool
+	handler := requireLabAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}, "expected-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	rr := httptest.NewRecorder()
+	handler(rr, req)
+
+	if called {
+		t.Fatal("wrapped handler should not run when authorization is invalid")
 	}
 	if got := rr.Result().StatusCode; got != http.StatusUnauthorized {
 		t.Fatalf("expected 401 status, got %d", got)
