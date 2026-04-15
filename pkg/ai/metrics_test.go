@@ -255,12 +255,20 @@ func TestSummary_Good(t *testing.T) {
 		t.Errorf("expected type counts build=2 and test=1, got %v", byType)
 	}
 
-	byTypeSorted, _ := s["by_type_sorted"].([]map[string]any)
-	if len(byTypeSorted) != 2 {
-		t.Fatalf("expected 2 sorted types, got %d", len(byTypeSorted))
+	byRepo, ok := s["by_repo"].(map[string]int)
+	if !ok {
+		t.Fatalf("expected by_repo map, got %T", s["by_repo"])
 	}
-	if byTypeSorted[0]["key"] != "build" || byTypeSorted[0]["count"] != 2 {
-		t.Errorf("expected build:2 first, got %v:%v", byTypeSorted[0]["key"], byTypeSorted[0]["count"])
+	if byRepo["core-php"] != 2 || byRepo["core-api"] != 1 {
+		t.Errorf("expected repo counts core-php=2 and core-api=1, got %v", byRepo)
+	}
+
+	byAgent, ok := s["by_agent"].(map[string]int)
+	if !ok {
+		t.Fatalf("expected by_agent map, got %T", s["by_agent"])
+	}
+	if byAgent["agent-1"] != 2 || byAgent["agent-2"] != 1 {
+		t.Errorf("expected agent counts agent-1=2 and agent-2=1, got %v", byAgent)
 	}
 
 	recent, _ := s["recent"].([]Event)
@@ -294,49 +302,5 @@ func TestSummary_Good_RecentEventsLimit(t *testing.T) {
 	}
 	if recent[9].Timestamp.Minute() != 2 {
 		t.Errorf("expected tenth newest event last, got minute %d", recent[9].Timestamp.Minute())
-	}
-}
-
-// --- sortedCountPairs ---
-
-func TestSortedCountPairs_Good_Empty(t *testing.T) {
-	result := sortedCountPairs(map[string]int{})
-	if len(result) != 0 {
-		t.Errorf("expected empty slice, got %d entries", len(result))
-	}
-}
-
-func TestSortedCountPairs_Good_Ordering(t *testing.T) {
-	m := map[string]int{"a": 1, "b": 3, "c": 2}
-	result := sortedCountPairs(m)
-	if len(result) != 3 {
-		t.Fatalf("expected 3 entries, got %d", len(result))
-	}
-	// Descending by count
-	if result[0]["key"] != "b" {
-		t.Errorf("expected first key 'b', got %v", result[0]["key"])
-	}
-	if result[1]["key"] != "c" {
-		t.Errorf("expected second key 'c', got %v", result[1]["key"])
-	}
-	if result[2]["key"] != "a" {
-		t.Errorf("expected third key 'a', got %v", result[2]["key"])
-	}
-}
-
-func TestSortedCountPairs_Good_TieBreakByKey(t *testing.T) {
-	m := map[string]int{"beta": 2, "alpha": 2, "gamma": 1}
-	result := sortedCountPairs(m)
-	if len(result) != 3 {
-		t.Fatalf("expected 3 entries, got %d", len(result))
-	}
-	if result[0]["key"] != "alpha" {
-		t.Errorf("expected tie-break to prefer alpha, got %v", result[0]["key"])
-	}
-	if result[1]["key"] != "beta" {
-		t.Errorf("expected beta second, got %v", result[1]["key"])
-	}
-	if result[2]["key"] != "gamma" {
-		t.Errorf("expected gamma last, got %v", result[2]["key"])
 	}
 }

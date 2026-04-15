@@ -167,14 +167,11 @@ func Summary(events []Event) map[string]any {
 	}
 
 	return map[string]any{
-		"total":           len(events),
-		"by_type":         cloneCounts(byTypeCounts),
-		"by_repo":         cloneCounts(byRepoCounts),
-		"by_agent":        cloneCounts(byAgentCounts),
-		"by_type_sorted":  sortedCountPairs(byTypeCounts),
-		"by_repo_sorted":  sortedCountPairs(byRepoCounts),
-		"by_agent_sorted": sortedCountPairs(byAgentCounts),
-		"recent":          recentEvents,
+		"total":    len(events),
+		"by_type":  cloneCounts(byTypeCounts),
+		"by_repo":  cloneCounts(byRepoCounts),
+		"by_agent": cloneCounts(byAgentCounts),
+		"recent":   recentEvents,
 	}
 }
 
@@ -184,30 +181,4 @@ func cloneCounts(counts map[string]int) map[string]int {
 		cloned[key] = count
 	}
 	return cloned
-}
-
-// sortedCountPairs returns a slice of key-count pairs sorted by count descending,
-// with key ascending as a deterministic tie-breaker.
-func sortedCountPairs(counts map[string]int) []map[string]any {
-	type entry struct {
-		key   string
-		count int
-	}
-	entries := make([]entry, 0, len(counts))
-	for k, v := range counts {
-		entries = append(entries, entry{k, v})
-	}
-
-	slices.SortFunc(entries, func(a, b entry) int {
-		if result := cmp.Compare(b.count, a.count); result != 0 {
-			return result
-		}
-		return cmp.Compare(a.key, b.key)
-	})
-
-	result := make([]map[string]any, len(entries))
-	for i, e := range entries {
-		result[i] = map[string]any{"key": e.key, "count": e.count}
-	}
-	return result
 }

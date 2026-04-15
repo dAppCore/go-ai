@@ -2,7 +2,9 @@
 package metrics
 
 import (
+	"cmp"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -163,11 +165,31 @@ func parseSinceDuration(input string) (time.Duration, error) {
 }
 
 func summaryCountPairs(summary map[string]any, key string) []map[string]any {
-	if sorted, ok := summary[key+"_sorted"].([]map[string]any); ok {
-		return sorted
+	counts, ok := summary[key].(map[string]int)
+	if !ok || len(counts) == 0 {
+		return nil
 	}
-	if pairs, ok := summary[key].([]map[string]any); ok {
-		return pairs
+
+	type entry struct {
+		key   string
+		count int
 	}
-	return nil
+
+	entries := make([]entry, 0, len(counts))
+	for k, v := range counts {
+		entries = append(entries, entry{key: k, count: v})
+	}
+
+	slices.SortFunc(entries, func(a, b entry) int {
+		if result := cmp.Compare(b.count, a.count); result != 0 {
+			return result
+		}
+		return cmp.Compare(a.key, b.key)
+	})
+
+	result := make([]map[string]any, len(entries))
+	for i, entry := range entries {
+		result[i] = map[string]any{"key": entry.key, "count": entry.count}
+	}
+	return result
 }
