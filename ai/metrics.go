@@ -125,7 +125,13 @@ func ReadEvents(since time.Time) ([]Event, error) {
 
 	var events []Event
 	now := time.Now()
-	cappedSince := clampMetricsSince(since, now)
+	cappedSince := since
+	if cappedSince.IsZero() {
+		cappedSince = now.AddDate(0, 0, -maxMetricsReadWindowDays)
+	}
+	if cappedSince.After(now) {
+		cappedSince = now
+	}
 
 	// Iterate each day from capped since to now in the caller's location.
 	loc := cappedSince.Location()
