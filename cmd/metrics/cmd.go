@@ -10,15 +10,16 @@ import (
 	"time"
 
 	"dappco.re/go/ai/ai"
+	"dappco.re/go/core"
 	"dappco.re/go/core/i18n"
 	coreerr "dappco.re/go/core/log"
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-// MetricsCommandOptions{SinceWindow: "168h", JSONOutput: true} captures the
+// MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures the
 // flag values for one `ai metrics` command instance.
 type MetricsCommandOptions struct {
-	SinceWindow string
+	SinceWindow time.Duration
 	JSONOutput  bool
 }
 
@@ -29,7 +30,7 @@ func AddMetricsCommand(parent *cli.Command) {
 	}
 
 	options := &MetricsCommandOptions{
-		SinceWindow: "168h",
+		SinceWindow: 168 * time.Hour,
 	}
 
 	metricsCommand := &cli.Command{
@@ -41,7 +42,7 @@ func AddMetricsCommand(parent *cli.Command) {
 		},
 	}
 
-	metricsCommand.Flags().StringVar(&options.SinceWindow, "since", options.SinceWindow, i18n.T("cmd.ai.metrics.flag.since"))
+	metricsCommand.Flags().Var(&sinceDurationFlagValue{target: &options.SinceWindow}, "since", i18n.T("cmd.ai.metrics.flag.since"))
 	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, i18n.T("common.flag.json"))
 
 	parent.AddCommand(metricsCommand)
@@ -57,12 +58,7 @@ func hasCommand(parent *cli.Command, name string) bool {
 }
 
 func runMetrics(options MetricsCommandOptions) error {
-	since, err := parseSinceDuration(options.SinceWindow)
-	if err != nil {
-		return cli.Err("invalid --since value %q: %v", options.SinceWindow, err)
-	}
-
-	events, err := ai.ReadEvents(time.Now().Add(-since))
+	events, err := ai.ReadEvents(time.Now().Add(-options.SinceWindow))
 	if err != nil {
 		return cli.WrapVerb(err, "read", "metrics")
 	}
@@ -78,7 +74,7 @@ func runMetrics(options MetricsCommandOptions) error {
 	}
 
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), options.SinceWindow)
+	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), formatDurationShort(options.SinceWindow))
 	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), len(events))
 	cli.Blank()
 
@@ -161,6 +157,43 @@ func parseSinceDuration(input string) (time.Duration, error) {
 	default:
 		return 0, coreerr.E("metrics.parseSinceDuration", "invalid duration: "+input, nil)
 	}
+}
+
+func formatDurationShort(duration time.Duration) string {
+	switch {
+	case duration == 0:
+		return "0s"
+	case duration%time.Hour == 0:
+		return core.Sprintf("%dh", duration/time.Hour)
+	case duration%time.Minute == 0:
+		return core.Sprintf("%dm", duration/time.Minute)
+	default:
+		return duration.String()
+	}
+}
+
+type sinceDurationFlagValue struct {
+	target *time.Duration
+}
+
+func (v *sinceDurationFlagValue) String() string {
+	if v == nil || v.target == nil {
+		return ""
+	}
+	return v.target.String()
+}
+
+func (v *sinceDurationFlagValue) Set(input string) error {
+	duration, err := parseSinceDuration(input)
+	if err != nil {
+		return err
+	}
+	*v.target = duration
+	return nil
+}
+
+func (v *sinceDurationFlagValue) Type() string {
+	return "duration"
 }
 
 func summaryCountPairs(summary map[string]any, key string) []map[string]any {

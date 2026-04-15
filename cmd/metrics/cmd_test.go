@@ -70,19 +70,19 @@ func TestAddMetricsCommand_Good_CommandInstancesKeepFlagStateLocal(t *testing.T)
 		t.Fatalf("set first --since: %v", err)
 	}
 
-	firstSince, err := firstCommand.Flags().GetString("since")
+	firstSince, err := firstCommand.Flags().GetDuration("since")
 	if err != nil {
 		t.Fatalf("get first --since: %v", err)
 	}
-	secondSince, err := secondCommand.Flags().GetString("since")
+	secondSince, err := secondCommand.Flags().GetDuration("since")
 	if err != nil {
 		t.Fatalf("get second --since: %v", err)
 	}
 
-	if firstSince != "24h" {
-		t.Fatalf("first command since = %q, want %q", firstSince, "24h")
+	if firstSince != 24*time.Hour {
+		t.Fatalf("first command since = %v, want %v", firstSince, 24*time.Hour)
 	}
-	if secondSince != "168h" {
-		t.Fatalf("second command since leaked shared state: got %q, want %q", secondSince, "168h")
+	if secondSince != 168*time.Hour {
+		t.Fatalf("second command since leaked shared state: got %v, want %v", secondSince, 168*time.Hour)
 	}
 }
