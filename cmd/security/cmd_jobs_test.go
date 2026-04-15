@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -302,6 +303,113 @@ func TestBuildJobsMetricsEvent_Good_IssueRepoWins(t *testing.T) {
 	}
 	if event.Data["unknown"] != 1 {
 		t.Fatalf("event unknown count = %v, want 1", event.Data["unknown"])
+	}
+}
+
+func TestMergeAlertSummary_Good(t *testing.T) {
+	dst := &AlertSummary{Critical: 1, Total: 1}
+	src := &AlertSummary{High: 2, Low: 1, Total: 3}
+
+	mergeAlertSummary(dst, src)
+
+	if dst.Critical != 1 || dst.High != 2 || dst.Low != 1 || dst.Total != 4 {
+		t.Fatalf("unexpected merged summary: %+v", dst)
+	}
+}
+
+func TestBuildJobsIssueBody_Good_TruncatesFindingsAfterThree(t *testing.T) {
+	body := buildJobsIssueBody(
+		&AlertSummary{Critical: 1, High: 2, Total: 3},
+		[]jobRepoResult{{
+			Repo: "acme/api",
+			Summary: AlertSummary{
+				Critical: 1,
+				High:     1,
+				Total:    2,
+			},
+			Findings: []string{"one", "two", "three", "four"},
+		}},
+	)
+
+	if !strings.Contains(body, "## Security Scan Summary") || !strings.Contains(body, "Summary: 1 critical | 2 high") {
+		t.Fatalf("issue body missing summary text: %s", body)
+	}
+	if !strings.Contains(body, "- acme/api — 1 critical | 1 high") {
+		t.Fatalf("issue body missing repo summary: %s", body)
+	}
+	if !strings.Contains(body, "  - ...") {
+		t.Fatalf("issue body should truncate findings after three entries: %s", body)
+	}
+}
+
+func TestRunJobWorkers_Good_SortsResults(t *testing.T) {
+	originalCollectDependabotAlertsForJobs := collectDependabotAlertsForJobs
+	originalCollectCodeScanningAlertsForJobs := collectCodeScanningAlertsForJobs
+	originalCollectSecretScanningAlertsForJobs := collectSecretScanningAlertsForJobs
+	t.Cleanup(func() {
+		collectDependabotAlertsForJobs = originalCollectDependabotAlertsForJobs
+		collectCodeScanningAlertsForJobs = originalCollectCodeScanningAlertsForJobs
+		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
+	})
+
+	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) ([]DepAlert, error) {
+		return []DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}}, nil
+	}
+	collectCodeScanningAlertsForJobs = func(target SecurityTarget, _ ScanCommandOptions) ([]ScanAlert, error) {
+		return []ScanAlert{{Repo: target.DisplayName, Severity: "medium", RuleID: "R-1", Description: "scan"}}, nil
+	}
+	collectSecretScanningAlertsForJobs = func(target SecurityTarget) ([]SecretAlert, error) {
+		return []SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}}, nil
+	}
+
+	results := runJobWorkers([]string{"acme/web", "acme/api"}, 2)
+	if len(results) != 2 {
+		t.Fatalf("runJobWorkers len = %d, want 2", len(results))
+	}
+	if results[0].repo.Repo != "acme/api" || results[1].repo.Repo != "acme/web" {
+		t.Fatalf("runJobWorkers should sort results by repo: %+v", results)
+	}
+}
+
+func TestValidateJobsIssueRepository_Bad(t *testing.T) {
+	if _, err := validateJobsIssueRepository("bad repo"); err == nil {
+		t.Fatal("expected invalid issue repo error")
+	}
+}
+
+func TestRunJobs_Good_DryRunPrintsPlannedTargets(t *testing.T) {
+	withSecurityTempHome(t)
+
+	output := captureStdout(t, func() {
+		if err := runJobs(JobsCommandOptions{
+			Targets:     "acme/api, acme/web",
+			DryRun:      true,
+			WorkerCount: 4,
+		}); err != nil {
+			t.Fatalf("runJobs dry-run: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "Workers:") || !strings.Contains(output, "[dry-run] Would scan: acme/api") || !strings.Contains(output, "[dry-run] Would scan: acme/web") {
+		t.Fatalf("dry-run output missing planned targets: %s", output)
+	}
+}
+
+func TestRunJobs_Bad_InvalidWorkerCount(t *testing.T) {
+	if err := runJobs(JobsCommandOptions{Targets: "acme/api", WorkerCount: 0}); err == nil {
+		t.Fatal("expected invalid worker count error")
+	}
+}
+
+func TestCreateJobsIssue_Good_ReturnsTrimmedOutput(t *testing.T) {
+	withFakeGitHubScript(t, "#!/bin/sh\nprintf 'https://github.com/acme/security/issues/1\\n'\n")
+
+	got, err := createJobsIssue("acme/security", "Security scan summary", "body")
+	if err != nil {
+		t.Fatalf("createJobsIssue: %v", err)
+	}
+	if !bytes.Equal([]byte(got), []byte("https://github.com/acme/security/issues/1")) {
+		t.Fatalf("createJobsIssue = %q, want trimmed issue URL", got)
 	}
 }
 

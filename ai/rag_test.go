@@ -141,3 +141,156 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 }
+
+func TestRag_QueryRAGForTask_Good_ReturnsFormattedContext(t *testing.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	origCloseQdrant := closeQdrant
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+		closeQdrant = origCloseQdrant
+	})
+
+	var seenQuery string
+	var seenConfig rag.QueryConfig
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		return nil, nil
+	}
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+		return nil, nil
+	}
+	closeQdrant = func(*rag.QdrantClient) error { return nil }
+	runRAGQuery = func(
+		_ context.Context,
+		_ rag.VectorStore,
+		_ rag.Embedder,
+		query string,
+		cfg rag.QueryConfig,
+	) ([]rag.QueryResult, error) {
+		seenQuery = query
+		seenConfig = cfg
+		return []rag.QueryResult{
+			{
+				Text:    "Build failure runbook",
+				Source:  "docs/build.md",
+				Section: "Troubleshooting",
+				Score:   0.91,
+			},
+		}, nil
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{
+		Title:       "Investigate build failure",
+		Description: "CI compile step fails",
+	})
+	if err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	}
+	if got == "" {
+		t.Fatal("QueryRAGForTask() returned empty context for a populated result set")
+	}
+	if seenQuery != "Investigate build failure: CI compile step fails" {
+		t.Fatalf("QueryRAGForTask() query = %q, want task title + description", seenQuery)
+	}
+	if seenConfig.Collection != ragTaskCollection || seenConfig.Limit != ragTaskResultLimit || seenConfig.Threshold != ragTaskSimilarityThreshold {
+		t.Fatalf("QueryRAGForTask() config = %+v, want collection/limit/threshold defaults", seenConfig)
+	}
+
+	want := rag.FormatResultsContext([]rag.QueryResult{{
+		Text:    "Build failure runbook",
+		Source:  "docs/build.md",
+		Section: "Troubleshooting",
+		Score:   0.91,
+	}})
+	if got != want {
+		t.Fatalf("QueryRAGForTask() = %q, want %q", got, want)
+	}
+}
+
+func TestRag_QueryRAGForTask_Bad_ReturnsEmptyStringWhenNoResults(t *testing.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	origCloseQdrant := closeQdrant
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+		closeQdrant = origCloseQdrant
+	})
+
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		return nil, nil
+	}
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+		return nil, nil
+	}
+	closeQdrant = func(*rag.QdrantClient) error { return nil }
+	runRAGQuery = func(
+		_ context.Context,
+		_ rag.VectorStore,
+		_ rag.Embedder,
+		_ string,
+		_ rag.QueryConfig,
+	) ([]rag.QueryResult, error) {
+		return nil, nil
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{
+		Title:       "Investigate build failure",
+		Description: "CI compile step fails",
+	})
+	if err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, want empty string for no matches", got)
+	}
+}
+
+func TestRag_QueryRAGForTask_Ugly_EmptyTaskShortCircuitsSeams(t *testing.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	origCloseQdrant := closeQdrant
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+		closeQdrant = origCloseQdrant
+	})
+
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		t.Fatal("newQdrantClient should not be called for an empty task")
+		return nil, nil
+	}
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+		t.Fatal("newOllamaClient should not be called for an empty task")
+		return nil, nil
+	}
+	runRAGQuery = func(
+		_ context.Context,
+		_ rag.VectorStore,
+		_ rag.Embedder,
+		_ string,
+		_ rag.QueryConfig,
+	) ([]rag.QueryResult, error) {
+		t.Fatal("runRAGQuery should not be called for an empty task")
+		return nil, nil
+	}
+	closeQdrant = func(*rag.QdrantClient) error {
+		t.Fatal("closeQdrant should not be called for an empty task")
+		return nil
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{})
+	if err != nil {
+		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("QueryRAGForTask() = %q, want empty string for empty task", got)
+	}
+}
