@@ -15,7 +15,7 @@ Unified AI surface for the Core CLI. The library composes a thin AI facade, JSON
 ```go
 import "dappco.re/go/ai/ai"
 
-ctx, err := ai.QueryRAGForTask(ai.TaskInfo{
+contextText, err := ai.QueryRAGForTask(ai.TaskInfo{
     Title:       "Investigate build failure",
     Description: "CI compile step fails",
 })

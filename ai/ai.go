@@ -2,7 +2,7 @@
 //
 // Example:
 //
-//	ctx, err := ai.QueryRAGForTask(ai.TaskInfo{
+//	contextText, err := ai.QueryRAGForTask(ai.TaskInfo{
 //		Title:       "Investigate build failure",
 //		Description: "CI compile step fails",
 //	})
