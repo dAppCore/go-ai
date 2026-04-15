@@ -294,3 +294,19 @@ func TestRag_QueryRAGForTask_Ugly_EmptyTaskShortCircuitsSeams(t *testing.T) {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string for empty task", got)
 	}
 }
+
+func TestRag_truncateRunes_Ugly_NonPositiveLimitReturnsEmpty(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int
+	}{
+		{name: "zero", limit: 0},
+		{name: "negative", limit: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := truncateRunes("hello", tc.limit); got != "" {
+				t.Fatalf("truncateRunes(%q, %d) = %q, want empty string", "hello", tc.limit, got)
+			}
+		})
+	}
+}

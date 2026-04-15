@@ -3,6 +3,8 @@ package security
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -252,6 +254,40 @@ func TestCmdSecurity_runGitHubAPI_Bad_404ReturnsEmptyArray(t *testing.T) {
 	}
 }
 
+func TestCmdSecurity_runGitHubAPIStrict_Bad_DoesNotFallbackOnMissingEndpoint(t *testing.T) {
+	withFakeGitHubScript(t, "#!/bin/sh\nprintf '404 Not Found' >&2\nexit 1\n")
+
+	if got, err := runGitHubAPIStrict("repos/acme/api/dependabot/alerts?state=open"); err == nil {
+		t.Fatalf("runGitHubAPIStrict returned %q, want error", string(got))
+	}
+}
+
+func TestCmdSecurity_runGitHubAPIWithMode_Good_RetriesTransientFailures(t *testing.T) {
+	counterFile := filepath.Join(t.TempDir(), "attempts")
+	script := fmt.Sprintf(`#!/bin/sh
+count=0
+if [ -f %[1]q ]; then
+  count=$(cat %[1]q)
+fi
+count=$((count + 1))
+printf '%%s' "$count" > %[1]q
+if [ "$count" -lt 3 ]; then
+  printf 'temporary GitHub API failure' >&2
+  exit 1
+fi
+printf '[]'
+`, counterFile)
+	withFakeGitHubScript(t, script)
+
+	got, err := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
+	if err != nil {
+		t.Fatalf("runGitHubAPIWithMode retry path: %v", err)
+	}
+	if string(got) != "[]" {
+		t.Fatalf("runGitHubAPIWithMode retry path = %q, want []", string(got))
+	}
+}
+
 func TestCmdSecurity_checkGitHubCLI_Good_Found(t *testing.T) {
 	withFakeGitHubCLI(t)
 
@@ -265,6 +301,12 @@ func TestCmdSecurity_checkGitHubCLI_Bad_MissingBinary(t *testing.T) {
 
 	if err := checkGitHubCLI(); err == nil {
 		t.Fatal("checkGitHubCLI should fail when gh is unavailable")
+	}
+}
+
+func TestCmdSecurity_loadRegistry_Bad_ExplicitPathReturnsError(t *testing.T) {
+	if _, err := loadRegistry(filepath.Join(t.TempDir(), "missing-registry.yaml")); err == nil {
+		t.Fatal("expected loadRegistry to fail for a missing explicit path")
 	}
 }
 

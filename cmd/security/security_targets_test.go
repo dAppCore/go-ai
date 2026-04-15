@@ -117,6 +117,17 @@ func TestListGitHubOrgTargets_Good(t *testing.T) {
 	}
 }
 
+func TestSecurityTargets_listGitHubOrgTargets_Bad_RejectsInvalidOrgBeforeGitHubCall(t *testing.T) {
+	stubGitHubAPI(t, func(string) ([]byte, error) {
+		t.Fatal("GitHub API should not be called for an invalid org name")
+		return nil, nil
+	})
+
+	if _, err := listGitHubOrgTargets("bad org"); err == nil {
+		t.Fatal("expected invalid org to fail")
+	}
+}
+
 func TestListGitHubOrgTargets_Bad_InvalidRepositoryReturnedByGitHub(t *testing.T) {
 	stubGitHubAPI(t, func(string) ([]byte, error) {
 		return []byte(`[{"full_name":"bad repo"}]`), nil

@@ -193,6 +193,53 @@ func TestResolveJobTargets_Bad_UnknownRepo(t *testing.T) {
 	}
 }
 
+func TestCmdJobs_resolveJobTargetsForDryRun_Good_ExpandsAndDedupesRegistryTargets(t *testing.T) {
+	reg := &repos.Registry{
+		Org: "acme",
+		Repos: map[string]*repos.Repo{
+			"api":  {Name: "api"},
+			"web":  {Name: "web"},
+			"docs": {Name: "docs"},
+		},
+	}
+
+	got, err := resolveJobTargetsForDryRun("api, acme/web, api, acme/docs", reg)
+	if err != nil {
+		t.Fatalf("resolveJobTargetsForDryRun: %v", err)
+	}
+
+	want := []string{"acme/api", "acme/web", "acme/docs"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveJobTargetsForDryRun = %v, want %v", got, want)
+	}
+}
+
+func TestCmdJobs_resolveJobTargetsForDryRun_Bad_RequiresRegistryForAllAndShortNames(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets string
+		registry *repos.Registry
+	}{
+		{name: "all without registry", targets: "all", registry: nil},
+		{name: "short name without registry", targets: "api", registry: nil},
+		{name: "missing repo", targets: "missing", registry: &repos.Registry{Org: "acme", Repos: map[string]*repos.Repo{}}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := resolveJobTargetsForDryRun(tc.targets, tc.registry); err == nil {
+				t.Fatalf("expected resolveJobTargetsForDryRun(%q) to fail", tc.targets)
+			}
+		})
+	}
+}
+
+func TestCmdJobs_resolveJobTargetsForDryRun_Ugly_RejectsBlankTargets(t *testing.T) {
+	if _, err := resolveJobTargetsForDryRun("   ", &repos.Registry{Org: "acme"}); err == nil {
+		t.Fatal("expected blank --targets to fail")
+	}
+}
+
 func TestNormalizeJobWorkerCount_Good(t *testing.T) {
 	if got := normalizeJobWorkerCount(1, 10); got != 1 {
 		t.Fatalf("normalizeJobWorkerCount(1, 10) = %d, want 1", got)

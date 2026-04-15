@@ -56,6 +56,12 @@ func TestParseSinceDuration_Bad(t *testing.T) {
 	}
 }
 
+func TestCmdMetrics_parseSinceDuration_Ugly_RejectsZeroSecondDuration(t *testing.T) {
+	if _, err := parseSinceDuration("0s"); err == nil {
+		t.Fatal("expected parseSinceDuration to reject zero-second durations")
+	}
+}
+
 func TestAddMetricsCommand_Good_CommandInstancesKeepFlagStateLocal(t *testing.T) {
 	firstRoot := &cli.Command{Use: "core"}
 	secondRoot := &cli.Command{Use: "core"}
@@ -129,6 +135,12 @@ func TestFormatDurationShort_Good(t *testing.T) {
 	}
 }
 
+func TestCmdMetrics_formatDurationShort_Ugly_UsesVerboseDurationForMixedValues(t *testing.T) {
+	if got := formatDurationShort(95*time.Minute + 30*time.Second); got != (95*time.Minute + 30*time.Second).String() {
+		t.Fatalf("formatDurationShort(mixed) = %q, want verbose duration", got)
+	}
+}
+
 func TestSummaryCountPairs_Good_SortsByCountThenKey(t *testing.T) {
 	summary := map[string]any{
 		"by_type": map[string]int{
@@ -153,6 +165,24 @@ func TestSummaryCountPairs_Bad_EmptyOrWrongTypeReturnsNil(t *testing.T) {
 	}
 	if got := summaryCountPairs(map[string]any{"by_type": []string{"scan"}}, "by_type"); got != nil {
 		t.Fatalf("expected nil for wrong type, got %#v", got)
+	}
+}
+
+func TestCmdMetrics_sinceDurationFlagValue_String_Ugly_NilReceiverReturnsEmpty(t *testing.T) {
+	var flag *sinceDurationFlagValue
+	if got := flag.String(); got != "" {
+		t.Fatalf("nil flag String() = %q, want empty string", got)
+	}
+}
+
+func TestCmdMetrics_sinceDurationFlagValue_Set_Bad_RejectsInvalidDuration(t *testing.T) {
+	value := time.Hour
+	flag := &sinceDurationFlagValue{target: &value}
+	if err := flag.Set("bad"); err == nil {
+		t.Fatal("expected Set to reject invalid durations")
+	}
+	if value != time.Hour {
+		t.Fatalf("Set should not mutate target on failure, got %v", value)
 	}
 }
 

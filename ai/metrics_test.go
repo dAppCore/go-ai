@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,6 +78,37 @@ func TestMetrics_ReadEvents_Bad_SkipsMalformedAndOldLines(t *testing.T) {
 	}
 }
 
+func TestMetrics_Record_Bad_ReturnsErrorForUnsupportedPayload(t *testing.T) {
+	withTempMetricsHome(t)
+
+	err := Record(Event{
+		Type: "scan",
+		Data: map[string]any{
+			"bad": make(chan int),
+		},
+	})
+	if err == nil {
+		t.Fatal("expected Record to fail for unsupported JSON payloads")
+	}
+}
+
+func TestMetrics_readMetricsFile_Bad_ReturnsErrorOnOversizedLine(t *testing.T) {
+	tempHome := withTempMetricsHome(t)
+
+	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+	dir := core.JoinPath(tempHome, ".core", "ai", "metrics")
+	path := metricsFilePath(dir, now)
+
+	oversized := bytes.Repeat([]byte("a"), 1<<20+1)
+	if err := os.WriteFile(path, oversized, 0o644); err != nil {
+		t.Fatalf("write oversized metrics file: %v", err)
+	}
+
+	if _, err := readMetricsFile(path, now.Add(-time.Hour)); err == nil {
+		t.Fatal("expected readMetricsFile to fail on oversized JSONL lines")
+	}
+}
+
 func TestMetrics_Summary_Good_ClonesReturnedMapsAndEvents(t *testing.T) {
 	event := Event{
 		Type:      "scan",
@@ -109,6 +141,30 @@ func TestMetrics_Summary_Good_ClonesReturnedMapsAndEvents(t *testing.T) {
 	freshRecent := fresh["recent"].([]Event)
 	if freshRecent[0].Data["features"] != 3 {
 		t.Fatalf("summary event data leaked mutation, got %+v", freshRecent[0].Data)
+	}
+}
+
+func TestMetrics_cloneMetricValue_Good_DeepClonesNestedStructures(t *testing.T) {
+	original := map[string]any{
+		"items": []any{
+			map[string]any{"count": 1},
+			[]any{"nested"},
+		},
+	}
+
+	cloned, ok := cloneMetricValue(original).(map[string]any)
+	if !ok {
+		t.Fatalf("cloneMetricValue returned %T, want map[string]any", cloneMetricValue(original))
+	}
+
+	cloned["items"].([]any)[0].(map[string]any)["count"] = 2
+	cloned["items"].([]any)[1].([]any)[0] = "changed"
+
+	if original["items"].([]any)[0].(map[string]any)["count"] != 1 {
+		t.Fatalf("nested map was not cloned: %+v", original)
+	}
+	if original["items"].([]any)[1].([]any)[0] != "nested" {
+		t.Fatalf("nested slice was not cloned: %+v", original)
 	}
 }
 
