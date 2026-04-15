@@ -93,15 +93,20 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		return nil
 	}
 
+	// Validate the target specification before any gh invocation.
+	if _, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry); err != nil {
+		return err
+	}
+
+	if err := checkGitHubCLI(); err != nil {
+		return err
+	}
+
 	targets, err := resolveJobTargets(commandOptions.Targets, registry)
 	if err != nil {
 		return err
 	}
 	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
-
-	if err := checkGitHubCLI(); err != nil {
-		return err
-	}
 
 	results := runJobWorkers(targets, workerCount)
 	var successful []jobRepoResult
