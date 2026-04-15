@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -262,6 +263,31 @@ func TestCollectJobRepoResult_Bad_AllCollectorsFail(t *testing.T) {
 
 	if _, err := collectJobRepoResult("acme/api"); err == nil {
 		t.Fatal("expected all-collectors-failed error, got nil")
+	}
+}
+
+func TestCollectJobRepoResult_Bad_PartialFailureFailsClosed(t *testing.T) {
+	originalCollectDependabotAlertsForJobs := collectDependabotAlertsForJobs
+	originalCollectCodeScanningAlertsForJobs := collectCodeScanningAlertsForJobs
+	originalCollectSecretScanningAlertsForJobs := collectSecretScanningAlertsForJobs
+	t.Cleanup(func() {
+		collectDependabotAlertsForJobs = originalCollectDependabotAlertsForJobs
+		collectCodeScanningAlertsForJobs = originalCollectCodeScanningAlertsForJobs
+		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
+	})
+
+	collectDependabotAlertsForJobs = func(SecurityTarget, string) ([]DepAlert, error) {
+		return []DepAlert{{Repo: "api", Severity: "critical", CVE: "CVE-1", Summary: "dep"}}, nil
+	}
+	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) ([]ScanAlert, error) {
+		return nil, errors.New("code scanning unavailable")
+	}
+	collectSecretScanningAlertsForJobs = func(SecurityTarget) ([]SecretAlert, error) {
+		return []SecretAlert{{Repo: "api", Number: 1, SecretType: "token"}}, nil
+	}
+
+	if _, err := collectJobRepoResult("acme/api"); err == nil {
+		t.Fatal("expected collectJobRepoResult to fail closed on partial collector failure")
 	}
 }
 

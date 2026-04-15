@@ -303,8 +303,12 @@ func collectJobRepoResult(target string) (jobRepoResult, error) {
 	codeScanningAlerts, codeScanningError := collectCodeScanningAlertsForJobs(securityTarget, ScanCommandOptions{})
 	secretScanningAlerts, secretScanningError := collectSecretScanningAlertsForJobs(securityTarget)
 
-	if dependabotError != nil && codeScanningError != nil && secretScanningError != nil {
-		return jobRepoResult{}, coreerr.E("security", "failed to fetch any alerts for "+target, nil)
+	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
+		return jobRepoResult{}, combineSecurityCollectorErrors(target, map[string]error{
+			"dependabot":      dependabotError,
+			"code-scanning":   codeScanningError,
+			"secret-scanning": secretScanningError,
+		})
 	}
 
 	for _, alert := range buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, "") {

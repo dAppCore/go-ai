@@ -131,8 +131,12 @@ func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertO
 	})
 	secretScanningAlerts, secretScanningError := collectSecretAlerts(target)
 
-	if dependabotError != nil && codeScanningError != nil && secretScanningError != nil {
-		return nil, cli.Err("failed to fetch any alerts for %s", target.FullName)
+	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
+		return nil, combineSecurityCollectorErrors(target.FullName, map[string]error{
+			"dependabot":      dependabotError,
+			"code-scanning":   codeScanningError,
+			"secret-scanning": secretScanningError,
+		})
 	}
 
 	return buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, severityFilter), nil

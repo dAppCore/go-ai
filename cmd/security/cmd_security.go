@@ -3,8 +3,10 @@ package security
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"slices"
+	"strings"
 	"time"
 
 	"dappco.re/go/ai/ai"
@@ -302,6 +304,42 @@ func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
 
 	slices.Sort(names)
 	return names, nil
+}
+
+func combineSecurityCollectorErrors(target string, collectorErrors map[string]error) error {
+	type collectorFailure struct {
+		name string
+		err  error
+	}
+
+	failures := make([]collectorFailure, 0, len(collectorErrors))
+	for name, err := range collectorErrors {
+		if err == nil {
+			continue
+		}
+		failures = append(failures, collectorFailure{name: name, err: err})
+	}
+
+	if len(failures) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(failures, func(a, b collectorFailure) int {
+		return strings.Compare(a.name, b.name)
+	})
+
+	missingCollectors := make([]string, 0, len(failures))
+	messages := make([]string, 0, len(failures))
+	for _, failure := range failures {
+		missingCollectors = append(missingCollectors, failure.name)
+		messages = append(messages, fmt.Sprintf("%s: %v", failure.name, failure.err))
+	}
+
+	return coreerr.E("security", core.Sprintf("failed to fetch %s for %s: %s",
+		core.Join(", ", missingCollectors...),
+		target,
+		core.Join("; ", messages...),
+	), nil)
 }
 
 func buildSecurityMetricsEvent(eventType string, startedAt time.Time, repository string, data map[string]any) ai.Event {

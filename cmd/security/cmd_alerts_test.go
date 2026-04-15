@@ -2,6 +2,7 @@ package security
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -95,6 +96,26 @@ func TestCmdAlerts_collectAlertOutputs_Bad_AllCollectorsFail(t *testing.T) {
 
 	if _, err := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ""); err == nil {
 		t.Fatal("expected collectAlertOutputs to fail when all collectors fail")
+	}
+}
+
+func TestCmdAlerts_collectAlertOutputs_Bad_PartialFailureFailsClosed(t *testing.T) {
+	stubGitHubAPI(t, func(endpoint string) ([]byte, error) {
+		switch endpoint {
+		case "repos/acme/api/dependabot/alerts?state=open":
+			return []byte(`[{"number":7,"state":"open","security_advisory":{"severity":"high","cve_id":"CVE-1","summary":"dep","description":"dep"},"dependency":{"package":{"name":"pkg","ecosystem":"npm"},"manifest_path":"package.json"},"security_vulnerability":{"package":{"name":"pkg","ecosystem":"npm"},"vulnerable_version_range":"< 1.0.0"}}]`), nil
+		case "repos/acme/api/code-scanning/alerts?state=open":
+			return nil, errors.New("code scanning unavailable")
+		case "repos/acme/api/secret-scanning/alerts?state=open":
+			return []byte(`[{"number":9,"state":"open","secret_type":"aws_access_key","push_protection_bypassed":true}]`), nil
+		default:
+			t.Fatalf("unexpected endpoint: %s", endpoint)
+			return nil, nil
+		}
+	})
+
+	if _, err := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ""); err == nil {
+		t.Fatal("expected collectAlertOutputs to fail closed on partial collector failure")
 	}
 }
 
