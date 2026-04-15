@@ -3,6 +3,7 @@ package ai
 import (
 	"bufio"
 	"cmp"
+	"fmt"
 	"os"
 	"slices"
 	"sync"
@@ -40,6 +41,9 @@ func metricsDir() (string, error) {
 		if err == nil {
 			home = userHome
 		}
+	}
+	if home == "" {
+		return "", fmt.Errorf("resolve metrics home directory")
 	}
 	return core.JoinPath(home, ".core", "ai", "metrics"), nil
 }
