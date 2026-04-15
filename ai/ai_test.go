@@ -77,6 +77,31 @@ func TestRecordAndReadEvents_Good(t *testing.T) {
 	}
 }
 
+func TestReadEvents_Good_SkipsMissingDays(t *testing.T) {
+	withTempHome(t)
+
+	dayOne := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	dayThree := time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC)
+
+	if err := Record(Event{Type: "scan", Timestamp: dayOne, Repo: "core/go-ai"}); err != nil {
+		t.Fatalf("Record day one: %v", err)
+	}
+	if err := Record(Event{Type: "deps", Timestamp: dayThree, Repo: "core/go-rag"}); err != nil {
+		t.Fatalf("Record day three: %v", err)
+	}
+
+	events, err := ReadEvents(time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+	if events[0].Timestamp != dayOne || events[1].Timestamp != dayThree {
+		t.Fatalf("events not returned in chronological order: %+v", events)
+	}
+}
+
 func TestSummary_Good(t *testing.T) {
 	summary := Summary([]Event{
 		{Type: "scan", Repo: "core/go-ai", AgentID: "agent-1", Timestamp: time.Date(2026, 3, 15, 10, 0, 0, 0, time.UTC)},
@@ -105,5 +130,29 @@ func TestSummary_Good(t *testing.T) {
 	}
 	if recent[0].Type != "scan" || recent[1].AgentID != "agent-2" || recent[2].Repo != "core/go-rag" {
 		t.Fatalf("recent events preserve input order: %+v", recent)
+	}
+}
+
+func TestSummary_Good_TruncatesRecentEvents(t *testing.T) {
+	events := make([]Event, 0, 11)
+	for i := range 11 {
+		events = append(events, Event{
+			Type:      "scan",
+			Repo:      "core/go-ai",
+			AgentID:   "agent-1",
+			Timestamp: time.Date(2026, 4, 15, 10, i, 0, 0, time.UTC),
+		})
+	}
+
+	summary := Summary(events)
+	recent, ok := summary["recent"].([]Event)
+	if !ok {
+		t.Fatalf("expected recent slice, got %T", summary["recent"])
+	}
+	if len(recent) != 10 {
+		t.Fatalf("expected 10 recent events, got %d", len(recent))
+	}
+	if recent[0].Timestamp != events[1].Timestamp || recent[9].Timestamp != events[10].Timestamp {
+		t.Fatalf("recent slice should contain the last 10 events: %+v", recent)
 	}
 }
