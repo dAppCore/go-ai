@@ -195,3 +195,22 @@ func TestBuildTaskQuery_Good_TruncatesFullQueryToRuneLimit(t *testing.T) {
 		t.Fatalf("expected truncated description to fill the remaining query budget, got %d runes", len([]rune(strings.TrimPrefix(got, wantPrefix))))
 	}
 }
+
+func TestBuildTaskQuery_Good_UsesDirectTitleDescriptionShape(t *testing.T) {
+	got := buildTaskQuery(TaskInfo{
+		Title:       "Investigate build failure",
+		Description: "CI compile step fails",
+	})
+
+	want := "Investigate build failure: CI compile step fails"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestBuildTaskQuery_Good_EmptyTaskReturnsEmptyQuery(t *testing.T) {
+	got := buildTaskQuery(TaskInfo{})
+	if got != "" {
+		t.Fatalf("expected empty query for empty task, got %q", got)
+	}
+}

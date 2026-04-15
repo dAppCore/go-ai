@@ -72,18 +72,11 @@ func buildTaskQuery(task TaskInfo) string {
 	title := strings.TrimSpace(task.Title)
 	description := strings.TrimSpace(task.Description)
 
-	var query string
-
-	switch {
-	case title == "":
-		query = description
-	case description == "":
-		query = title
-	default:
-		query = title + ": " + description
+	if title == "" && description == "" {
+		return ""
 	}
 
-	return truncateRunes(query, ragTaskQueryRuneLimit)
+	return truncateRunes(title+": "+description, ragTaskQueryRuneLimit)
 }
 
 func truncateRunes(value string, limit int) string {
