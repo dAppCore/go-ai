@@ -53,12 +53,12 @@ func TestBuildTaskQuery_Good_BlankTaskReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildTaskQuery_Good_UsesDescriptionWithoutLeadingSeparator(t *testing.T) {
+func TestBuildTaskQuery_Good_UsesDescriptionWithRFCSeparator(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{
 		Description: "CI compile step fails",
 	})
 
-	want := "CI compile step fails"
+	want := ": CI compile step fails"
 	if got != want {
 		t.Fatalf("buildTaskQuery() = %q, want %q", got, want)
 	}

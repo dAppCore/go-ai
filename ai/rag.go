@@ -77,14 +77,7 @@ func buildTaskQuery(task TaskInfo) string {
 		return ""
 	}
 
-	switch {
-	case title == "":
-		return truncateRunes(description, ragTaskQueryRuneLimit)
-	case description == "":
-		return truncateRunes(title, ragTaskQueryRuneLimit)
-	default:
-		return truncateRunes(title+": "+description, ragTaskQueryRuneLimit)
-	}
+	return truncateRunes(title+": "+description, ragTaskQueryRuneLimit)
 }
 
 func truncateRunes(value string, limit int) string {
