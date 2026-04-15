@@ -77,6 +77,40 @@ func TestRecordAndReadEvents_Good(t *testing.T) {
 	}
 }
 
+func TestRecord_Good_UsesEventTimestampForDailyFile(t *testing.T) {
+	withTempHome(t)
+
+	recordedAt := time.Date(2026, 4, 12, 9, 30, 0, 0, time.UTC)
+	if err := Record(Event{
+		Type:      "scan",
+		Timestamp: recordedAt,
+		Repo:      "core/go-ai",
+	}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	dir, err := metricsDir()
+	if err != nil {
+		t.Fatalf("metricsDir: %v", err)
+	}
+
+	path := metricsFilePath(dir, recordedAt)
+	if !coreio.Local.Exists(path) {
+		t.Fatalf("expected metrics file %s to exist", path)
+	}
+
+	events, err := ReadEvents(recordedAt.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if !events[0].Timestamp.Equal(recordedAt) {
+		t.Fatalf("expected timestamp %v, got %v", recordedAt, events[0].Timestamp)
+	}
+}
+
 func TestReadEvents_Good_SkipsMissingDays(t *testing.T) {
 	withTempHome(t)
 
