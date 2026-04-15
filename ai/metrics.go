@@ -161,13 +161,14 @@ func Summary(events []Event) map[string]any {
 		}
 	}
 
-	recentEvents := make([]Event, len(events))
-	copy(recentEvents, events)
-	slices.SortStableFunc(recentEvents, func(a, b Event) int {
-		return cmp.Compare(b.Timestamp.UnixNano(), a.Timestamp.UnixNano())
-	})
+	recentEvents := events
 	if len(recentEvents) > 10 {
-		recentEvents = recentEvents[:10]
+		recentEvents = recentEvents[len(recentEvents)-10:]
+	}
+	recentCopy := make([]Event, len(recentEvents))
+	copy(recentCopy, recentEvents)
+	for i, j := 0, len(recentCopy)-1; i < j; i, j = i+1, j-1 {
+		recentCopy[i], recentCopy[j] = recentCopy[j], recentCopy[i]
 	}
 
 	return map[string]any{
@@ -175,7 +176,7 @@ func Summary(events []Event) map[string]any {
 		"by_type":  cloneCounts(byTypeCounts),
 		"by_repo":  cloneCounts(byRepoCounts),
 		"by_agent": cloneCounts(byAgentCounts),
-		"recent":   recentEvents,
+		"recent":   recentCopy,
 	}
 }
 
