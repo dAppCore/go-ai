@@ -1,4 +1,7 @@
-// Package ai provides JSONL metrics storage and aggregation for Core AI events.
+// Package ai records and summarizes AI events.
+//
+//	_ = ai.Record(ai.Event{Type: "security.scan", Repo: "core/go-ai"})
+//	events, err := ai.ReadEvents(time.Now().Add(-24 * time.Hour))
 package ai
 
 import (
@@ -56,7 +59,7 @@ func metricsFilePath(dir string, t time.Time) string {
 	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the matching daily JSONL file.
+// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends one event to today's JSONL file.
 func Record(event Event) (err error) {
 	recordedAt := event.Timestamp
 	if recordedAt.IsZero() {

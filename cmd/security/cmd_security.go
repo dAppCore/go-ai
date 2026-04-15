@@ -31,13 +31,13 @@ type SecuritySelectionOptions struct {
 	ExternalTarget string
 }
 
-// ScanCommandOptions{Selection: SecuritySelectionOptions{ExternalTarget: "wailsapp/wails"}, ToolName: "CodeQL"} configures one `security scan` execution.
+// ScanCommandOptions{Selection: SecuritySelectionOptions{ExternalTarget: "wailsapp/wails"}, ToolName: "CodeQL"} runs one scoped scan.
 type ScanCommandOptions struct {
 	Selection SecuritySelectionOptions
 	ToolName  string
 }
 
-// JobsCommandOptions{Targets: "all", IssueRepository: "host-uk/core", WorkerCount: 4} configures one `security jobs` execution.
+// JobsCommandOptions{Targets: "all", IssueRepository: "host-uk/core", WorkerCount: 4} runs one multi-repo batch scan.
 type JobsCommandOptions struct {
 	RegistryPath    string
 	Targets         string
@@ -143,7 +143,6 @@ type SecretScanningAlert struct {
 	Resolution     string `json:"resolution"`
 }
 
-// loadRegistry loads the repository registry.
 func loadRegistry(registryPath string) (*repos.Registry, error) {
 	if registryPath != "" {
 		registry, err := repos.LoadRegistry(io.Local, registryPath)
@@ -164,7 +163,6 @@ func loadRegistry(registryPath string) (*repos.Registry, error) {
 	return registry, nil
 }
 
-// checkGitHubCLI() verifies that the GitHub CLI is installed before a command tries to call the GitHub API.
 func checkGitHubCLI() error {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return coreerr.E("security", i18n.T("error.gh_not_found"), nil)
@@ -172,7 +170,6 @@ func checkGitHubCLI() error {
 	return nil
 }
 
-// callGitHubAPIRequest("repos/core/go-ai/dependabot/alerts?state=open") returns the paginated GitHub API response body.
 func runGitHubAPI(endpoint string) ([]byte, error) {
 	cmd := exec.Command("gh", "api", endpoint, "--paginate", "--slurp")
 	output, err := cmd.Output()

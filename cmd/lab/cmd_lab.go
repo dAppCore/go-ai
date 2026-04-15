@@ -25,7 +25,7 @@ type LabCommandOptions struct {
 	Bind string
 }
 
-// AddLabCommands registers the 'lab' command and subcommands.
+// core lab serve --bind :8080
 func AddLabCommands(root *cli.Command) {
 	if hasCommand(root, "lab") {
 		return
@@ -73,7 +73,6 @@ func runServe(options LabCommandOptions) error {
 	store := lab.NewStore()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	// Setup collectors.
 	reg := collector.NewRegistry(logger)
 	reg.Register(collector.NewSystem(cfg, store), 60*time.Second)
 	reg.Register(collector.NewPrometheus(cfg.PrometheusURL, store),
@@ -102,13 +101,11 @@ func runServe(options LabCommandOptions) error {
 	reg.Start(ctx)
 	defer reg.Stop()
 
-	// Setup HTTP handlers.
 	web := handler.NewWebHandler(store)
 	api := handler.NewAPIHandler(store)
 
 	mux := http.NewServeMux()
 
-	// Web pages.
 	mux.HandleFunc("GET /", web.Dashboard)
 	mux.HandleFunc("GET /models", web.Models)
 	mux.HandleFunc("GET /training", web.Training)
@@ -122,10 +119,8 @@ func runServe(options LabCommandOptions) error {
 	mux.HandleFunc("GET /agents", web.Agents)
 	mux.HandleFunc("GET /services", web.Services)
 
-	// SSE for live updates.
 	mux.HandleFunc("GET /events", web.Events)
 
-	// JSON API.
 	mux.HandleFunc("GET /api/status", api.Status)
 	mux.HandleFunc("GET /api/models", api.Models)
 	mux.HandleFunc("GET /api/training", api.Training)

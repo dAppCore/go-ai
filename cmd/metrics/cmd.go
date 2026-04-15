@@ -1,4 +1,7 @@
-// Package metrics exposes `core ai metrics`.
+// Package metrics exposes `core ai metrics`, for example:
+//
+//	core ai metrics --since 7d
+//	core ai metrics --json
 package metrics
 
 import (
@@ -16,14 +19,12 @@ import (
 	"forge.lthn.ai/core/cli/pkg/cli"
 )
 
-// MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures one
-// `core ai metrics` invocation.
+// MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures one `core ai metrics` invocation.
 type MetricsCommandOptions struct {
 	SinceWindow time.Duration
 	JSONOutput  bool
 }
 
-// core ai metrics --since 7d
 func AddMetricsCommand(parent *cli.Command) {
 	if commandExists(parent, "metrics") {
 		return
