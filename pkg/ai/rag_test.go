@@ -9,7 +9,7 @@ import (
 	"forge.lthn.ai/core/go-rag"
 )
 
-func TestQueryRAGForTask_Good_GracefulDegradationWhenQdrantUnavailable(t *testing.T) {
+func TestQueryRAGForTask_Bad_PropagatesQdrantUnavailable(t *testing.T) {
 	origNewQdrantClient := newQdrantClient
 	origNewOllamaClient := newOllamaClient
 	origRunRAGQuery := runRAGQuery
@@ -38,11 +38,11 @@ func TestQueryRAGForTask_Good_GracefulDegradationWhenQdrantUnavailable(t *testin
 		Description: "The compile step is failing in CI",
 	})
 
+	if err == nil {
+		t.Fatal("expected qdrant error, got nil")
+	}
 	if got != "" {
 		t.Fatalf("expected empty context on failure, got %q", got)
-	}
-	if err != nil {
-		t.Fatalf("expected graceful degradation, got error: %v", err)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestQueryRAGForTask_Good_UsesRFCQueryShape(t *testing.T) {
 	}
 }
 
-func TestQueryRAGForTask_Good_GracefulDegradationWhenQueryFails(t *testing.T) {
+func TestQueryRAGForTask_Bad_PropagatesQueryFailures(t *testing.T) {
 	origNewQdrantClient := newQdrantClient
 	origNewOllamaClient := newOllamaClient
 	origRunRAGQuery := runRAGQuery
@@ -130,11 +130,11 @@ func TestQueryRAGForTask_Good_GracefulDegradationWhenQueryFails(t *testing.T) {
 		Description: "The compile step is failing in CI",
 	})
 
+	if err == nil {
+		t.Fatal("expected query error, got nil")
+	}
 	if got != "" {
 		t.Fatalf("expected empty context on query failure, got %q", got)
-	}
-	if err != nil {
-		t.Fatalf("expected graceful degradation, got error: %v", err)
 	}
 }
 
