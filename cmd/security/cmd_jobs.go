@@ -63,6 +63,11 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		return cli.Err("--copies must be at least 1")
 	}
 
+	issueRepoTarget, err := validateJobsIssueRepository(commandOptions.IssueRepository)
+	if err != nil {
+		return err
+	}
+
 	registry, err := loadRegistryForJobs(commandOptions)
 	if err != nil {
 		return err
@@ -80,8 +85,8 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		for _, target := range targets {
 			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would scan:"), target)
 		}
-		if commandOptions.IssueRepository != "" {
-			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would create summary issue in:"), commandOptions.IssueRepository)
+		if issueRepoTarget.FullName != "" {
+			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would create summary issue in:"), issueRepoTarget.FullName)
 		}
 		cli.Blank()
 		return nil
@@ -114,14 +119,10 @@ func runJobs(commandOptions JobsCommandOptions) error {
 	}
 	cli.Blank()
 
-	if commandOptions.IssueRepository != "" {
-		issueRepo, err := parseSecurityTarget(commandOptions.IssueRepository)
-		if err != nil {
-			return cli.Err("invalid --issue-repo format: use owner/repo")
-		}
+	if issueRepoTarget.FullName != "" {
 		title := "Security scan summary: " + time.Now().Format("2006-01-02")
 		body := buildJobsIssueBody(overall, successful)
-		issueURL, err := createJobsIssue(issueRepo.FullName, title, body)
+		issueURL, err := createJobsIssue(issueRepoTarget.FullName, title, body)
 		if err != nil {
 			return err
 		}
@@ -137,6 +138,18 @@ func runJobs(commandOptions JobsCommandOptions) error {
 	event.Duration = time.Since(startedAt)
 	recordSecurityMetricsEvent(event)
 	return nil
+}
+
+func validateJobsIssueRepository(issueRepository string) (SecurityTarget, error) {
+	if core.Trim(issueRepository) == "" {
+		return SecurityTarget{}, nil
+	}
+
+	target, err := parseSecurityTarget(issueRepository)
+	if err != nil {
+		return SecurityTarget{}, cli.Err("invalid --issue-repo format: use owner/repo")
+	}
+	return target, nil
 }
 
 func normalizeJobWorkerCount(requested, targetCount int) int {
