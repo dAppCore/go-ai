@@ -38,15 +38,15 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 		return "", nil
 	}
 
-	qdrantConfig := rag.DefaultQdrantConfig()
-	qdrantClient, err := newQdrantClient(qdrantConfig)
+	qdrantConfiguration := rag.DefaultQdrantConfig()
+	qdrantClient, err := newQdrantClient(qdrantConfiguration)
 	if err != nil {
 		return "", nil
 	}
 	defer func() { _ = closeQdrant(qdrantClient) }()
 
-	ollamaConfig := rag.DefaultOllamaConfig()
-	ollamaClient, err := newOllamaClient(ollamaConfig)
+	ollamaConfiguration := rag.DefaultOllamaConfig()
+	ollamaClient, err := newOllamaClient(ollamaConfiguration)
 	if err != nil {
 		return "", nil
 	}
@@ -54,13 +54,13 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	queryConfig := rag.QueryConfig{
+	queryConfiguration := rag.QueryConfig{
 		Collection: ragTaskCollection,
 		Limit:      ragTaskResultLimit,
 		Threshold:  ragTaskSimilarityThreshold,
 	}
 
-	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfig)
+	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfiguration)
 	if err != nil {
 		return "", nil
 	}
@@ -86,9 +86,9 @@ func truncateRunes(value string, limit int) string {
 	if limit <= 0 {
 		return ""
 	}
-	runes := []rune(value)
-	if len(runes) <= limit {
+	inputRunes := []rune(value)
+	if len(inputRunes) <= limit {
 		return value
 	}
-	return string(runes[:limit])
+	return string(inputRunes[:limit])
 }

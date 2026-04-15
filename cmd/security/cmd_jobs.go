@@ -359,26 +359,26 @@ func createJobsIssue(issueRepo, title, body string) (string, error) {
 }
 
 func buildJobsIssueBody(summary *AlertSummary, repos []jobRepoResult) string {
-	sb := core.NewBuilder()
+	builder := core.NewBuilder()
 
-	sb.WriteString("## Security Scan Summary\n\n")
-	sb.WriteString("Summary: " + summary.PlainString() + "\n\n")
-	sb.WriteString("### Repositories\n\n")
-	for _, repo := range repos {
-		sb.WriteString("- " + repo.Repo + " — " + repo.Summary.PlainString() + "\n")
-		for i, finding := range repo.Findings {
-			if i == 3 {
-				sb.WriteString("  - ...\n")
+	builder.WriteString("## Security Scan Summary\n\n")
+	builder.WriteString("Summary: " + summary.PlainString() + "\n\n")
+	builder.WriteString("### Repositories\n\n")
+	for _, repository := range repos {
+		builder.WriteString("- " + repository.Repo + " — " + repository.Summary.PlainString() + "\n")
+		for findingIndex, finding := range repository.Findings {
+			if findingIndex == 3 {
+				builder.WriteString("  - ...\n")
 				break
 			}
-			sb.WriteString("  - " + finding + "\n")
+			builder.WriteString("  - " + finding + "\n")
 		}
 	}
 
-	sb.WriteString("\n### Checklist\n\n")
-	sb.WriteString("- [ ] Triage critical and high findings first\n")
-	sb.WriteString("- [ ] Create fix PRs for affected repositories\n")
-	sb.WriteString("- [ ] Re-run security scans after remediation\n")
+	builder.WriteString("\n### Checklist\n\n")
+	builder.WriteString("- [ ] Triage critical and high findings first\n")
+	builder.WriteString("- [ ] Create fix PRs for affected repositories\n")
+	builder.WriteString("- [ ] Re-run security scans after remediation\n")
 
-	return sb.String()
+	return builder.String()
 }

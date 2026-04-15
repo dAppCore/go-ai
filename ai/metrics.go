@@ -1,7 +1,8 @@
 // Package ai records and summarizes AI events.
 //
 //	_ = ai.Record(ai.Event{Type: "security.scan", Repo: "core/go-ai"})
-//	events, err := ai.ReadEvents(time.Now().Add(-24 * time.Hour))
+//	events, err := ai.ReadEvents(time.Now().Add(-7 * 24 * time.Hour))
+//	summary := ai.Summary(events)
 package ai
 
 import (
@@ -20,7 +21,7 @@ import (
 
 var metricsWriteMu sync.Mutex
 
-const recentEventLimit = 10
+const recentEventsLimit = 10
 
 // ai.Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
 type Event struct {
@@ -118,8 +119,8 @@ func ReadEvents(since time.Time) ([]Event, error) {
 
 	// Iterate each day from since to now in the caller's location.
 	loc := since.Location()
-	for d := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc); !d.After(now.In(loc)); d = d.AddDate(0, 0, 1) {
-		path := metricsFilePath(dir, d)
+	for day := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc); !day.After(now.In(loc)); day = day.AddDate(0, 0, 1) {
+		path := metricsFilePath(dir, day)
 
 		dayEvents, err := readMetricsFile(path, since)
 		if err != nil {
@@ -151,12 +152,12 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	// is too low for larger JSON events with rich Data payloads.
 	scanner.Buffer(make([]byte, 1024), 1<<20)
 	for scanner.Scan() {
-		var ev Event
-		if r := core.JSONUnmarshal(scanner.Bytes(), &ev); !r.OK {
+		var event Event
+		if unmarshalResult := core.JSONUnmarshal(scanner.Bytes(), &event); !unmarshalResult.OK {
 			continue // skip malformed lines
 		}
-		if !ev.Timestamp.Before(since) {
-			events = append(events, ev)
+		if !event.Timestamp.Before(since) {
+			events = append(events, event)
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -182,8 +183,8 @@ func Summary(events []Event) map[string]any {
 	}
 
 	recentEvents := events
-	if len(recentEvents) > recentEventLimit {
-		recentEvents = recentEvents[len(recentEvents)-recentEventLimit:]
+	if len(recentEvents) > recentEventsLimit {
+		recentEvents = recentEvents[len(recentEvents)-recentEventsLimit:]
 	}
 	recentCopy := make([]Event, len(recentEvents))
 	copy(recentCopy, recentEvents)
