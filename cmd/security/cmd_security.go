@@ -22,7 +22,7 @@ func recordSecurityMetricsEvent(event ai.Event) {
 	_ = ai.Record(event)
 }
 
-// core security alerts --target wailsapp/wails
+// core security alerts --repo go-ai
 // core security jobs --targets all --copies 4
 type SecuritySelectionOptions struct {
 	RegistryPath   string

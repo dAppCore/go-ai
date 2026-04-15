@@ -25,7 +25,8 @@ type MetricsCommandOptions struct {
 	JSONOutput  bool
 }
 
-// AddMetricsCommand(parent) mounts `core ai metrics` beneath an existing command tree.
+// core ai metrics --since 7d
+// core ai metrics --json
 func AddMetricsCommand(parent *cli.Command) {
 	if commandExists(parent, "metrics") {
 		return

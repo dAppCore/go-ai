@@ -19,7 +19,7 @@ import (
 	coreerr "dappco.re/go/core/log"
 )
 
-var metricsWriteMutex sync.Mutex
+var metricsWriteMu sync.Mutex
 
 const recentEventLimit = 10
 
@@ -68,8 +68,8 @@ func Record(event Event) (err error) {
 		event.Timestamp = recordedAt
 	}
 
-	metricsWriteMutex.Lock()
-	defer metricsWriteMutex.Unlock()
+	metricsWriteMu.Lock()
+	defer metricsWriteMu.Unlock()
 
 	dir, err := metricsDir()
 	if err != nil {
