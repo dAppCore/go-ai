@@ -34,10 +34,11 @@ func resolveSecurityTargets(registryPath, repoFilter, externalTarget string) ([]
 
 	targets := make([]SecurityTarget, 0, len(repositories))
 	for _, repository := range repositories {
-		targets = append(targets, SecurityTarget{
-			DisplayName: repository.Name,
-			FullName:    core.Sprintf("%s/%s", registry.Org, repository.Name),
-		})
+		target, err := parseSecurityTarget(core.Sprintf("%s/%s", registry.Org, repository.Name))
+		if err != nil {
+			return nil, cli.Err("invalid repository target in registry: %s/%s", registry.Org, repository.Name)
+		}
+		targets = append(targets, target)
 	}
 	return targets, nil
 }
@@ -57,11 +58,31 @@ func parseSecurityTarget(target string) (SecurityTarget, error) {
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return SecurityTarget{}, cli.Err("invalid target format: use owner/repo (e.g. wailsapp/wails)")
 	}
+	if !isSafeGitHubPathComponent(parts[0]) || !isSafeGitHubPathComponent(parts[1]) {
+		return SecurityTarget{}, cli.Err("invalid target format: use owner/repo (e.g. wailsapp/wails)")
+	}
 
 	return SecurityTarget{
 		DisplayName: parts[1],
 		FullName:    target,
 	}, nil
+}
+
+func isSafeGitHubPathComponent(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-', r == '_', r == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func selectRegistryRepos(registry *repos.Registry, repoFilter string) []*repos.Repo {
@@ -91,6 +112,12 @@ func listGitHubOrgTargets(org string) ([]string, error) {
 	targets, err := decodeGitHubRepositoryNames(output)
 	if err != nil {
 		return nil, cli.Wrap(err, "parse GitHub repositories for "+org)
+	}
+
+	for _, target := range targets {
+		if _, err := parseSecurityTarget(target); err != nil {
+			return nil, cli.Err("invalid repository target returned by GitHub: %s", target)
+		}
 	}
 
 	return targets, nil

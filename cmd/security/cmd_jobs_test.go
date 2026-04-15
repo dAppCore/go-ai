@@ -166,6 +166,18 @@ func TestResolveJobTargets_Bad_UnknownRepo(t *testing.T) {
 	}
 }
 
+func TestNormalizeJobWorkerCount_Good(t *testing.T) {
+	if got := normalizeJobWorkerCount(1, 10); got != 1 {
+		t.Fatalf("normalizeJobWorkerCount(1, 10) = %d, want 1", got)
+	}
+	if got := normalizeJobWorkerCount(10, 2); got != 2 {
+		t.Fatalf("normalizeJobWorkerCount(10, 2) = %d, want 2", got)
+	}
+	if got := normalizeJobWorkerCount(100, 100); got != maxSecurityJobWorkers {
+		t.Fatalf("normalizeJobWorkerCount(100, 100) = %d, want %d", got, maxSecurityJobWorkers)
+	}
+}
+
 func TestCollectJobRepoResult_Good_UsesSharedCollectors(t *testing.T) {
 	originalCollectDependabotAlertsForJobs := collectDependabotAlertsForJobs
 	originalCollectCodeScanningAlertsForJobs := collectCodeScanningAlertsForJobs

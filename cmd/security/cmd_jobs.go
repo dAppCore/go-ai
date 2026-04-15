@@ -20,6 +20,8 @@ var (
 	collectSecretScanningAlertsForJobs = collectSecretAlerts
 )
 
+const maxSecurityJobWorkers = 32
+
 type jobRepoResult struct {
 	Repo     string
 	Summary  AlertSummary
@@ -70,10 +72,11 @@ func runJobs(commandOptions JobsCommandOptions) error {
 	if err != nil {
 		return err
 	}
+	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
 	if commandOptions.DryRun {
 		// Dry-run only needs target resolution; it should not require `gh` to be installed.
 		cli.Blank()
-		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), commandOptions.WorkerCount)
+		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), workerCount)
 		for _, target := range targets {
 			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would scan:"), target)
 		}
@@ -88,7 +91,7 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		return err
 	}
 
-	results := runJobWorkers(targets, commandOptions.WorkerCount)
+	results := runJobWorkers(targets, workerCount)
 	var successful []jobRepoResult
 	overall := &AlertSummary{}
 	for _, result := range results {
@@ -112,9 +115,13 @@ func runJobs(commandOptions JobsCommandOptions) error {
 	cli.Blank()
 
 	if commandOptions.IssueRepository != "" {
+		issueRepo, err := parseSecurityTarget(commandOptions.IssueRepository)
+		if err != nil {
+			return cli.Err("invalid --issue-repo format: use owner/repo")
+		}
 		title := "Security scan summary: " + time.Now().Format("2006-01-02")
 		body := buildJobsIssueBody(overall, successful)
-		issueURL, err := createJobsIssue(commandOptions.IssueRepository, title, body)
+		issueURL, err := createJobsIssue(issueRepo.FullName, title, body)
 		if err != nil {
 			return err
 		}
@@ -130,6 +137,20 @@ func runJobs(commandOptions JobsCommandOptions) error {
 	event.Duration = time.Since(startedAt)
 	recordSecurityMetricsEvent(event)
 	return nil
+}
+
+func normalizeJobWorkerCount(requested, targetCount int) int {
+	workerCount := requested
+	if workerCount > targetCount {
+		workerCount = targetCount
+	}
+	if workerCount > maxSecurityJobWorkers {
+		workerCount = maxSecurityJobWorkers
+	}
+	if workerCount < 1 {
+		return 1
+	}
+	return workerCount
 }
 
 func loadRegistryForJobs(commandOptions JobsCommandOptions) (*repos.Registry, error) {

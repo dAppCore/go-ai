@@ -23,9 +23,17 @@ func TestParseSecurityTarget_Good(t *testing.T) {
 }
 
 func TestParseSecurityTarget_Bad(t *testing.T) {
-	for _, input := range []string{"", "wailsapp", "/wails", "wailsapp/"} {
+	for _, input := range []string{"", "wailsapp", "/wails", "wailsapp/", "wailsapp/wails/extra", "wails app/wails"} {
 		if _, err := parseSecurityTarget(input); err == nil {
 			t.Fatalf("expected error for %q, got nil", input)
+		}
+	}
+}
+
+func TestIsSafeGitHubPathComponent_Good(t *testing.T) {
+	for _, input := range []string{"wailsapp", "go-ai", "go_ai", "go.ai"} {
+		if !isSafeGitHubPathComponent(input) {
+			t.Fatalf("expected %q to be accepted", input)
 		}
 	}
 }
