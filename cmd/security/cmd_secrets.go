@@ -29,7 +29,7 @@ func addSecretsCommand(parent *cli.Command) {
 	parent.AddCommand(cmd)
 }
 
-// SecretAlert represents a secret scanning alert for output.
+// SecretAlert is the normalised row emitted by `core security secrets --json`.
 type SecretAlert struct {
 	Repo           string `json:"repo"`
 	Number         int    `json:"number"`
@@ -85,7 +85,6 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 		return nil
 	}
 
-	// Print summary
 	cli.Blank()
 	if summary.Total > 0 {
 		cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Secrets", selectionOptions.ExternalTarget)+":"), cli.ErrorStyle.Render(core.Sprintf("%d open", summary.Total)))
@@ -98,7 +97,6 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 		return nil
 	}
 
-	// Print table
 	for _, alert := range allAlerts {
 		bypassed := ""
 		if alert.PushProtection {

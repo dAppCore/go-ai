@@ -1,3 +1,4 @@
+// Package ai gives you `ai.QueryRAGForTask(...)` for task-scoped documentation lookup.
 package ai
 
 import (

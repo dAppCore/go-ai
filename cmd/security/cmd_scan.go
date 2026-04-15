@@ -31,7 +31,7 @@ func addScanCommand(parent *cli.Command) {
 	parent.AddCommand(cmd)
 }
 
-// ScanAlert represents a code scanning alert for output.
+// ScanAlert is the normalised row emitted by `core security scan --json`.
 type ScanAlert struct {
 	Repo        string `json:"repo"`
 	Severity    string `json:"severity"`
@@ -72,7 +72,6 @@ func runScan(commandOptions ScanCommandOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	// Record metrics
 	recordedRepo := metricRepositoryForTargets(targets)
 	recordedTarget := recordedRepo
 	recordSecurityMetricsEvent(ai.Event{
@@ -94,7 +93,6 @@ func runScan(commandOptions ScanCommandOptions) error {
 		return nil
 	}
 
-	// Print summary
 	cli.Blank()
 	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Code Scanning", commandOptions.Selection.ExternalTarget)+":"), summary.String())
 	cli.Blank()
@@ -103,7 +101,6 @@ func runScan(commandOptions ScanCommandOptions) error {
 		return nil
 	}
 
-	// Print table
 	for _, alert := range allAlerts {
 		sevStyle := severityStyle(alert.Severity)
 

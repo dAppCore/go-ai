@@ -25,6 +25,7 @@ type MetricsCommandOptions struct {
 	JSONOutput  bool
 }
 
+// AddMetricsCommand(parent) mounts `core ai metrics` beneath an existing command tree.
 func AddMetricsCommand(parent *cli.Command) {
 	if commandExists(parent, "metrics") {
 		return
@@ -123,7 +124,7 @@ func runMetrics(options MetricsCommandOptions) error {
 	return nil
 }
 
-// parseSinceDuration("168h") parses the metrics window and keeps "7d" compatibility for older callers.
+// parseSinceDuration("7d") returns 168 hours for the default metrics window shorthand.
 func parseSinceDuration(input string) (time.Duration, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {

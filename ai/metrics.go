@@ -1,4 +1,4 @@
-// Package ai records and summarizes AI events.
+// Package ai gives you `ai.Record(...)`, `ai.ReadEvents(...)`, and `ai.Summary(...)`.
 //
 //	_ = ai.Record(ai.Event{Type: "security.scan", Repo: "core/go-ai"})
 //	events, err := ai.ReadEvents(time.Now().Add(-7 * 24 * time.Hour))
@@ -19,11 +19,11 @@ import (
 	coreerr "dappco.re/go/core/log"
 )
 
-var metricsWriteMu sync.Mutex
+var metricsWriteMutex sync.Mutex
 
-const recentEventsLimit = 10
+const recentEventLimit = 10
 
-// ai.Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
+// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
 type Event struct {
 	Type      string         `json:"type"`
 	Timestamp time.Time      `json:"timestamp"`
@@ -60,7 +60,7 @@ func metricsFilePath(dir string, t time.Time) string {
 	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends one event to today's JSONL file.
+// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
 func Record(event Event) (err error) {
 	recordedAt := event.Timestamp
 	if recordedAt.IsZero() {
@@ -68,8 +68,8 @@ func Record(event Event) (err error) {
 		event.Timestamp = recordedAt
 	}
 
-	metricsWriteMu.Lock()
-	defer metricsWriteMu.Unlock()
+	metricsWriteMutex.Lock()
+	defer metricsWriteMutex.Unlock()
 
 	dir, err := metricsDir()
 	if err != nil {
@@ -183,8 +183,8 @@ func Summary(events []Event) map[string]any {
 	}
 
 	recentEvents := events
-	if len(recentEvents) > recentEventsLimit {
-		recentEvents = recentEvents[len(recentEvents)-recentEventsLimit:]
+	if len(recentEvents) > recentEventLimit {
+		recentEvents = recentEvents[len(recentEvents)-recentEventLimit:]
 	}
 	recentCopy := make([]Event, len(recentEvents))
 	copy(recentCopy, recentEvents)

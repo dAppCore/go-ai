@@ -27,7 +27,7 @@ func addAlertsCommand(parent *cli.Command) {
 	parent.AddCommand(cmd)
 }
 
-// AlertOutput represents a unified alert for output.
+// AlertOutput is the normalised row emitted by `core security alerts --json`.
 type AlertOutput struct {
 	Repo     string `json:"repo"`
 	Severity string `json:"severity"`
@@ -73,7 +73,6 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 		return nil
 	}
 
-	// Print summary
 	cli.Blank()
 	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Alerts", selectionOptions.ExternalTarget)+":"), summary.String())
 	cli.Blank()
@@ -82,7 +81,6 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 		return nil
 	}
 
-	// Print table
 	for _, alert := range allAlerts {
 		sevStyle := severityStyle(alert.Severity)
 

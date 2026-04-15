@@ -30,7 +30,7 @@ func addDepsCommand(parent *cli.Command) {
 	parent.AddCommand(cmd)
 }
 
-// DepAlert represents a dependency vulnerability for output.
+// DepAlert is the normalised row emitted by `core security deps --json`.
 type DepAlert struct {
 	Repo           string `json:"repo"`
 	Severity       string `json:"severity"`
@@ -94,7 +94,6 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 		return nil
 	}
 
-	// Print summary
 	cli.Blank()
 	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Dependabot", selectionOptions.ExternalTarget)+":"), summary.String())
 	cli.Blank()
@@ -103,7 +102,6 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 		return nil
 	}
 
-	// Print table
 	for _, alert := range allAlerts {
 		sevStyle := severityStyle(alert.Severity)
 

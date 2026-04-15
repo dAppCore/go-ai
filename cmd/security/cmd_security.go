@@ -303,7 +303,6 @@ func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
 	return names, nil
 }
 
-// severityStyle returns the appropriate style for a severity level.
 func severityStyle(severity string) *cli.AnsiStyle {
 	switch core.Lower(severity) {
 	case "critical":
@@ -317,7 +316,6 @@ func severityStyle(severity string) *cli.AnsiStyle {
 	}
 }
 
-// filterBySeverity checks if the severity matches the filter.
 func filterBySeverity(severity, filter string) bool {
 	if filter == "" {
 		return true
@@ -340,7 +338,7 @@ type AlertSummary struct {
 	Total    int
 }
 
-// Add increments summary counters for the provided severity.
+// summary.Add("critical")
 func (s *AlertSummary) Add(severity string) {
 	s.Total++
 	switch core.Lower(severity) {
@@ -357,7 +355,7 @@ func (s *AlertSummary) Add(severity string) {
 	}
 }
 
-// String renders a styled summary of alert counts.
+// summary.String() // "1 critical | 2 high"
 func (s *AlertSummary) String() string {
 	plain := s.parts()
 	if len(plain) == 0 {
@@ -381,7 +379,7 @@ func (s *AlertSummary) String() string {
 	return core.Join(" | ", styled...)
 }
 
-// PlainString() returns strings like "1 critical | 2 high" for logs and issue bodies.
+// summary.PlainString() // "1 critical | 2 high"
 func (s *AlertSummary) PlainString() string {
 	parts := s.parts()
 	if len(parts) == 0 {
