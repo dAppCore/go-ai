@@ -65,7 +65,7 @@ func runMetrics(options MetricsCommandOptions) error {
 
 	summary := ai.Summary(events)
 	if options.JSONOutput {
-		output, err := json.MarshalIndent(summary, "", "  ")
+		output, err := marshalMetricsSummaryJSON(summary)
 		if err != nil {
 			return cli.Wrap(err, "marshal metrics JSON")
 		}
@@ -224,4 +224,8 @@ func summaryCountPairs(summary map[string]any, key string) []map[string]any {
 		result[i] = map[string]any{"key": entry.key, "count": entry.count}
 	}
 	return result
+}
+
+func marshalMetricsSummaryJSON(summary map[string]any) ([]byte, error) {
+	return json.Marshal(summary)
 }

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -84,5 +85,24 @@ func TestAddMetricsCommand_Good_CommandInstancesKeepFlagStateLocal(t *testing.T)
 	}
 	if secondSince != 168*time.Hour {
 		t.Fatalf("second command since leaked shared state: got %v, want %v", secondSince, 168*time.Hour)
+	}
+}
+
+func TestMarshalMetricsSummaryJSON_Good_CompactOutput(t *testing.T) {
+	summary := map[string]any{
+		"by_type": map[string]int{"scan": 2},
+		"recent":  []any{},
+	}
+
+	got, err := marshalMetricsSummaryJSON(summary)
+	if err != nil {
+		t.Fatalf("marshalMetricsSummaryJSON: %v", err)
+	}
+
+	if json.Valid(got) == false {
+		t.Fatalf("marshalMetricsSummaryJSON returned invalid JSON: %s", string(got))
+	}
+	if string(got) != `{"by_type":{"scan":2},"recent":[]}` {
+		t.Fatalf("marshalMetricsSummaryJSON = %s, want compact JSON", string(got))
 	}
 }
