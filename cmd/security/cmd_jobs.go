@@ -2,6 +2,7 @@ package security
 
 import (
 	"cmp"
+	// Note: os/exec — exec.LookPath probes gh CLI presence; CLI handlers have no Core context, so c.Process() is unreachable.
 	"os/exec"
 	"slices"
 	"time"
