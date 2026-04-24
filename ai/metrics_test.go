@@ -1,12 +1,12 @@
 package ai
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
-	"time"
+	"bytes"         // Note: test-only — constructs oversized JSONL payloads without external fixtures
+	"os"            // Note: test-only — writes malformed metrics files and directories under t.TempDir
+	"path/filepath" // Note: test-only — builds temporary metrics paths inside test home
+	"sync"          // Note: test-only — coordinates concurrent Record calls in race-focused test
+	"testing"       // Note: intrinsic — Go test entry points and assertions
+	"time"          // Note: test-only — fixes timestamps and read windows for metrics behavior
 
 	"dappco.re/go/core"
 	coreio "dappco.re/go/core/io"
