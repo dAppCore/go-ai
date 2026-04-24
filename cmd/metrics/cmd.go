@@ -6,10 +6,8 @@ package metrics
 
 import (
 	"cmp"
-	"encoding/json"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"dappco.re/go/ai/ai"
@@ -127,7 +125,7 @@ func runMetrics(options MetricsCommandOptions) error {
 
 // parseSinceDuration("7d") returns 168 hours for the default metrics window shorthand.
 func parseSinceDuration(input string) (time.Duration, error) {
-	trimmed := strings.TrimSpace(input)
+	trimmed := core.Trim(input)
 	if trimmed == "" {
 		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
@@ -230,5 +228,11 @@ func summaryCountPairs(summary map[string]any, key string) []map[string]any {
 }
 
 func marshalMetricsSummaryJSON(summary map[string]any) ([]byte, error) {
-	return json.Marshal(summary)
+	r := core.JSONMarshal(summary)
+	if !r.OK {
+		err, _ := r.Value.(error)
+		return nil, err
+	}
+	data, _ := r.Value.([]byte)
+	return data, nil
 }
