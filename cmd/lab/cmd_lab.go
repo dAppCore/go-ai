@@ -6,13 +6,13 @@ package lab
 import (
 	"context"
 	"crypto/subtle"
-	"fmt"
+	"fmt" // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
-	"strings"
+	"os"        // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
+	"os/signal" // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
+	"strings"   // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
 	"time"
 
 	"forge.lthn.ai/core/cli/pkg/cli"
