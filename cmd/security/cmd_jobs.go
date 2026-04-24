@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"dappco.re/go/ai/ai"
+	"dappco.re/go/cli/pkg/cli"
 	"dappco.re/go/core"
-	"dappco.re/go/core/i18n"
-	coreerr "dappco.re/go/core/log"
-	"dappco.re/go/core/scm/repos"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/i18n"
+	coreerr "dappco.re/go/log"
+	"dappco.re/go/scm/repos"
 )
 
 var (

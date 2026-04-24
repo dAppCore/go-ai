@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdLab_HasCommand_Good(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"dappco.re/go/core/scm/repos"
+	"dappco.re/go/scm/repos"
 )
 
 func TestParseSecurityTarget_Good(t *testing.T) {

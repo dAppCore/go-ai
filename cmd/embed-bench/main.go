@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"dappco.re/go/core"
-	coreerr "dappco.re/go/core/log"
+	coreerr "dappco.re/go/log"
 )
 
 var ollamaURL = flag.String("ollama", "http://localhost:11434", "Ollama base URL")
@@ -466,8 +466,9 @@ func truncate(s string, n int) string {
 	}
 	return s[:n-3] + "..."
 }
+
 const (
-	ollamaHTTPTimeout      = 45 * time.Second
-	ollamaEmbedTimeout     = 20 * time.Second
+	ollamaHTTPTimeout       = 45 * time.Second
+	ollamaEmbedTimeout      = 20 * time.Second
 	ollamaListModelsTimeout = 15 * time.Second
 )

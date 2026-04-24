@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdScan_collectScanAlerts_Good(t *testing.T) {

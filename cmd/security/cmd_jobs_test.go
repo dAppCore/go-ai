@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"dappco.re/go/core/scm/repos"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/cli/pkg/cli"
+	"dappco.re/go/scm/repos"
 )
 
 func TestAlertSummaryPlainString_Good(t *testing.T) {

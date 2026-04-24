@@ -9,7 +9,7 @@ import (
 	"time"          // Note: test-only — fixes timestamps and read windows for metrics behavior
 
 	"dappco.re/go/core"
-	coreio "dappco.re/go/core/io"
+	coreio "dappco.re/go/io"
 )
 
 func withTempMetricsHome(t *testing.T) string {

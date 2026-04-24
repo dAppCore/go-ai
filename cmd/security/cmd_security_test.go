@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"dappco.re/go/ai/ai"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdSecurity_decodeGitHubArrayItems_Good(t *testing.T) {

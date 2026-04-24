@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"dappco.re/go/ai/ai"
+	"dappco.re/go/cli/pkg/cli"
 	"dappco.re/go/core"
-	"dappco.re/go/core/i18n"
-	coreerr "dappco.re/go/core/log"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/i18n"
+	coreerr "dappco.re/go/log"
 )
 
 // MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures one `core ai metrics` invocation.

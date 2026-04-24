@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdSecrets_collectSecretAlerts_Good(t *testing.T) {

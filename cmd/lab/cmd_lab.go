@@ -15,7 +15,7 @@ import (
 	"strings"   // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
 	"time"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/cli/pkg/cli"
 	"forge.lthn.ai/lthn/lem/pkg/lab"
 	"forge.lthn.ai/lthn/lem/pkg/lab/collector"
 	"forge.lthn.ai/lthn/lem/pkg/lab/handler"

@@ -1,9 +1,9 @@
 package security
 
 import (
+	"dappco.re/go/cli/pkg/cli"
 	"dappco.re/go/core"
-	"dappco.re/go/core/scm/repos"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/scm/repos"
 )
 
 // SecurityTarget{DisplayName: "go-ai", FullName: "core/go-ai"} is the canonical repo target shape used by security commands.
