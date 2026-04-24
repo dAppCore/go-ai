@@ -7,7 +7,6 @@ package metrics
 import (
 	"cmp"
 	"slices"
-	"strconv"
 	"time"
 
 	"dappco.re/go/ai/ai"
@@ -144,8 +143,8 @@ func parseSinceDuration(input string) (time.Duration, error) {
 	unit := trimmed[len(trimmed)-1]
 	value := trimmed[:len(trimmed)-1]
 
-	n, err := strconv.Atoi(value)
-	if err != nil {
+	n, ok := parseShorthandDurationValue(value)
+	if !ok {
 		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
 	if n <= 0 {
@@ -158,6 +157,27 @@ func parseSinceDuration(input string) (time.Duration, error) {
 	default:
 		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
+}
+
+func parseShorthandDurationValue(value string) (int, bool) {
+	if value == "" {
+		return 0, false
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	n := 0
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		digit := int(c - '0')
+		if n > (maxInt-digit)/10 {
+			return 0, false
+		}
+		n = n*10 + digit
+	}
+	return n, true
 }
 
 func formatDurationShort(duration time.Duration) string {
@@ -228,11 +248,5 @@ func summaryCountPairs(summary map[string]any, key string) []map[string]any {
 }
 
 func marshalMetricsSummaryJSON(summary map[string]any) ([]byte, error) {
-	r := core.JSONMarshal(summary)
-	if !r.OK {
-		err, _ := r.Value.(error)
-		return nil, err
-	}
-	data, _ := r.Value.([]byte)
-	return data, nil
+	return []byte(core.JSONMarshalString(summary)), nil
 }
