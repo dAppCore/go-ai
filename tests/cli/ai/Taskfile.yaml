@@ -1,0 +1,32 @@
+version: "3"
+
+tasks:
+  build:
+    dir: ../../..
+    cmds:
+      - go build ./...
+
+  build-stub:
+    dir: ../../..
+    cmds:
+      - go build -tags nomlx ./...
+
+  test:
+    dir: ../../..
+    cmds:
+      - go test -count=1 -race ./ai/...
+
+  test-metrics:
+    dir: ../../..
+    cmds:
+      - go test -count=1 -race -run "^TestRecord" ./ai/...
+
+  test-security:
+    dir: ../../..
+    cmds:
+      - go vet ./cmd/security/...
+
+  vet:
+    dir: ../../..
+    cmds:
+      - go vet ./...
