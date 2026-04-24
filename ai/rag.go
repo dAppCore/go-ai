@@ -3,9 +3,9 @@ package ai
 
 import (
 	"context"
-	"strings"
 	"time"
 
+	"dappco.re/go/core"
 	rag "dappco.re/go/rag"
 )
 
@@ -75,7 +75,7 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 }
 
 func buildTaskQuery(task TaskInfo) string {
-	if strings.TrimSpace(task.Title) == "" && strings.TrimSpace(task.Description) == "" {
+	if core.Trim(task.Title) == "" && core.Trim(task.Description) == "" {
 		return ""
 	}
 
