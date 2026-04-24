@@ -2,13 +2,10 @@
 package ai
 
 import (
-	"bufio"
 	"cmp"
-	"fmt"
-	"os"
+	goio "io"
 	"slices"
-	"strings"
-	"sync"
+	"syscall"
 	"time"
 
 	"dappco.re/go/core"
@@ -16,11 +13,12 @@ import (
 	coreerr "dappco.re/go/core/log"
 )
 
-var metricsWriteMu sync.Mutex
+var metricsWriteLock = core.New().Lock("ai.metrics.write")
 
 const recentEventLimit = 10
 const (
 	maxMetricsReadWindowDays = 365
+	maxMetricsLineBytes      = 1 << 20
 	metricsFileMode          = 0o600
 	metricsDirMode           = 0o700
 )
@@ -36,26 +34,27 @@ type Event struct {
 }
 
 func metricsDir() (string, error) {
-	home := os.Getenv("CORE_HOME")
+	home := core.Env("CORE_HOME")
 	if home == "" {
-		home = os.Getenv("HOME")
+		home = core.Env("HOME")
 	}
 	if home == "" {
-		home = os.Getenv("USERPROFILE")
+		home = core.Env("USERPROFILE")
 	}
 	if home == "" {
-		home = os.Getenv("DIR_HOME")
+		home = metricsDirHomeEnv()
 	}
 	if home == "" {
-		userHome, err := os.UserHomeDir()
-		if err == nil {
-			home = userHome
-		}
-	}
-	if home == "" {
-		return "", fmt.Errorf("resolve metrics home directory")
+		return "", core.E("ai.metricsDir", "resolve metrics home directory", nil)
 	}
 	return core.JoinPath(home, ".core", "ai", "metrics"), nil
+}
+
+func metricsDirHomeEnv() string {
+	if home, ok := syscall.Getenv("DIR_HOME"); ok && home != "" {
+		return home
+	}
+	return core.Env("DIR_HOME")
 }
 
 func metricsFilePath(dir string, t time.Time) string {
@@ -71,8 +70,8 @@ func Record(event Event) (err error) {
 
 	event.Data = sanitizeMetricsData(event.Data)
 
-	metricsWriteMu.Lock()
-	defer metricsWriteMu.Unlock()
+	metricsWriteLock.Mutex.Lock()
+	defer metricsWriteLock.Mutex.Unlock()
 
 	dir, err := metricsDir()
 	if err != nil {
@@ -82,7 +81,7 @@ func Record(event Event) (err error) {
 	if err := coreio.Local.EnsureDir(dir); err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
-	if err := os.Chmod(dir, metricsDirMode); err != nil {
+	if err := chmodMetricsPath(dir, metricsDirMode); err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
 
@@ -177,36 +176,43 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 	}
 
 	var events []Event
-	scanner := bufio.NewScanner(core.NewReader(content))
-	// Metrics payloads are small in practice, but the default scanner token limit
-	// is too low for larger JSON events with rich Data payloads.
-	scanner.Buffer(make([]byte, 1024), 1<<20)
-	for scanner.Scan() {
+	for _, line := range core.Split(content, "\n") {
+		if len(line) > maxMetricsLineBytes {
+			return nil, coreerr.E("ai", "read events", core.E("ai.readMetricsFile", "metrics line exceeds maximum size", nil))
+		}
+
 		var event Event
-		if unmarshalResult := core.JSONUnmarshal(scanner.Bytes(), &event); !unmarshalResult.OK {
+		if unmarshalResult := core.JSONUnmarshalString(line, &event); !unmarshalResult.OK {
 			continue // skip malformed lines
 		}
 		if !event.Timestamp.Before(since) {
 			events = append(events, event)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, coreerr.E("ai", "read events", err)
-	}
 	return events, nil
 }
 
-func openMetricsEventFile(path string) (*os.File, error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, metricsFileMode)
+func openMetricsEventFile(path string) (goio.WriteCloser, error) {
+	if !coreio.Local.Exists(path) {
+		if err := coreio.Local.WriteMode(path, "", metricsFileMode); err != nil {
+			return nil, err
+		}
+	}
+
+	file, err := coreio.Local.Append(path)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := os.Chmod(path, metricsFileMode); err != nil {
+	if err := chmodMetricsPath(path, metricsFileMode); err != nil {
 		file.Close()
 		return nil, err
 	}
 	return file, nil
+}
+
+func chmodMetricsPath(path string, mode uint32) error {
+	return syscall.Chmod(path, mode)
 }
 
 var sensitiveMetricKeys = []string{
@@ -249,9 +255,9 @@ func sanitizeMetricsValue(value any) any {
 }
 
 func isSensitiveMetricKey(key string) bool {
-	lowerKey := strings.ToLower(key)
+	lowerKey := core.Lower(key)
 	for _, sensitive := range sensitiveMetricKeys {
-		if strings.Contains(lowerKey, sensitive) {
+		if core.Contains(lowerKey, sensitive) {
 			return true
 		}
 	}
