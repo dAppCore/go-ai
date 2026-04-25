@@ -4,6 +4,8 @@ package ai
 import (
 	metricscmd "dappco.re/go/ai/cmd/metrics"
 	ragcmd "dappco.re/go/ai/cmd/rag"
+	_ "dappco.re/go/ai/cmd/security" // registers core security commands when cmd/ai is imported.
+	_ "dappco.re/go/ai/pkg/lab"      // registers core lab commands when cmd/ai is imported.
 	"dappco.re/go/cli/pkg/cli"
 )
 
