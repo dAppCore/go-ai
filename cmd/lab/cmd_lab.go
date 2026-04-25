@@ -83,7 +83,7 @@ func runServe(options LabCommandOptions) error {
 	}
 
 	authToken := strings.TrimSpace(os.Getenv("CORE_LAB_API_TOKEN"))
-	if err := validateLabRemoteAuth(options.Bind, authToken); err != nil {
+	if err := validateLabRemoteAuth(options.AllowRemote, authToken); err != nil {
 		return err
 	}
 
@@ -227,12 +227,12 @@ func requireLabAuth(handler http.HandlerFunc, token string) http.HandlerFunc {
 	}
 }
 
-func validateLabRemoteAuth(bindAddr, authToken string) error {
-	if isLoopbackBindAddress(bindAddr) {
+func validateLabRemoteAuth(allowRemote bool, authToken string) error {
+	if !allowRemote {
 		return nil
 	}
 	if strings.TrimSpace(authToken) != "" {
 		return nil
 	}
-	return fmt.Errorf("refusing to expose lab dashboard on %q without CORE_LAB_API_TOKEN", bindAddr)
+	return fmt.Errorf("refusing to start lab dashboard with --allow-remote without CORE_LAB_API_TOKEN")
 }

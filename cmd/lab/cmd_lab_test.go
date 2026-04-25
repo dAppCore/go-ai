@@ -6,6 +6,7 @@ package lab
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"dappco.re/go/cli/pkg/cli"
@@ -46,6 +47,30 @@ func TestCmdLab_AddLabCommands_Good(t *testing.T) {
 	}
 }
 
+func TestCmdLab_Serve_Bad_NonLoopbackWithoutFlag(t *testing.T) {
+	t.Setenv("CORE_LAB_API_TOKEN", "expected-token")
+
+	err := runServe(LabCommandOptions{Bind: "0.0.0.0:8080"})
+	if err == nil {
+		t.Fatal("expected non-loopback bind to be rejected without --allow-remote")
+	}
+	if got := err.Error(); !strings.Contains(got, "non-loopback") || !strings.Contains(got, "--allow-remote") {
+		t.Fatalf("expected clear non-loopback --allow-remote error, got %q", got)
+	}
+}
+
+func TestCmdLab_Serve_Bad_AllowRemoteWithoutToken(t *testing.T) {
+	t.Setenv("CORE_LAB_API_TOKEN", "")
+
+	err := runServe(LabCommandOptions{Bind: defaultLabBindAddr, AllowRemote: true})
+	if err == nil {
+		t.Fatal("expected --allow-remote to require CORE_LAB_API_TOKEN")
+	}
+	if got := err.Error(); !strings.Contains(got, "--allow-remote") || !strings.Contains(got, "CORE_LAB_API_TOKEN") {
+		t.Fatalf("expected clear --allow-remote CORE_LAB_API_TOKEN error, got %q", got)
+	}
+}
+
 func TestCmdLab_validateLabBindAddress_Good_LoopbackAllowed(t *testing.T) {
 	tests := []string{
 		"127.0.0.1:8080",
@@ -75,20 +100,20 @@ func TestCmdLab_validateLabBindAddress_Bad_RejectsRemoteWithoutFlag(t *testing.T
 	}
 }
 
-func TestCmdLab_validateLabRemoteAuth_Bad_RejectsRemoteWithoutToken(t *testing.T) {
-	if err := validateLabRemoteAuth("0.0.0.0:8080", ""); err == nil {
-		t.Fatal("expected remote lab bind to require CORE_LAB_API_TOKEN")
+func TestCmdLab_validateLabRemoteAuth_Bad_RejectsAllowRemoteWithoutToken(t *testing.T) {
+	if err := validateLabRemoteAuth(true, ""); err == nil {
+		t.Fatal("expected --allow-remote to require CORE_LAB_API_TOKEN")
 	}
 }
 
-func TestCmdLab_validateLabRemoteAuth_Good_AllowsLoopbackWithoutToken(t *testing.T) {
-	if err := validateLabRemoteAuth("127.0.0.1:8080", ""); err != nil {
-		t.Fatalf("validateLabRemoteAuth(loopback, empty token) = %v", err)
+func TestCmdLab_validateLabRemoteAuth_Good_AllowsLocalOnlyWithoutToken(t *testing.T) {
+	if err := validateLabRemoteAuth(false, ""); err != nil {
+		t.Fatalf("validateLabRemoteAuth(local-only, empty token) = %v", err)
 	}
 }
 
 func TestCmdLab_validateLabRemoteAuth_Good_AllowsRemoteWithToken(t *testing.T) {
-	if err := validateLabRemoteAuth("0.0.0.0:8080", "expected-token"); err != nil {
+	if err := validateLabRemoteAuth(true, "expected-token"); err != nil {
 		t.Fatalf("validateLabRemoteAuth(remote, token) = %v", err)
 	}
 }
