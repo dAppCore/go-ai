@@ -83,12 +83,12 @@ func runJobs(commandOptions JobsCommandOptions) error {
 
 		// Dry-run only needs target resolution; it should not require `gh` to be installed or call the GitHub API.
 		cli.Blank()
-		cli.Print("%s %d\n", cli.DimStyle.Render("Workers:"), workerCount)
+		cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("Workers: %d", workerCount)))
 		for _, target := range plannedTargets {
-			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would scan:"), target)
+			cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("[dry-run] Would scan: %s", target)))
 		}
 		if issueRepoTarget.FullName != "" {
-			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would create summary issue in:"), issueRepoTarget.FullName)
+			cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("[dry-run] Would create summary issue in: %s", issueRepoTarget.FullName)))
 		}
 		cli.Blank()
 		return nil
