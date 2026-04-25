@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os/exec"
 	"runtime"
 
+	"dappco.re/go/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -87,7 +87,7 @@ func (t *TrayService) GetSnapshot() TraySnapshot {
 // StartStack starts the Docker compose stack.
 func (t *TrayService) StartStack() error {
 	if t.docker == nil {
-		return fmt.Errorf("docker service not available")
+		return core.E("lem.desktop.tray", "docker service not available", nil)
 	}
 	return t.docker.Start()
 }
@@ -95,7 +95,7 @@ func (t *TrayService) StartStack() error {
 // StopStack stops the Docker compose stack.
 func (t *TrayService) StopStack() error {
 	if t.docker == nil {
-		return fmt.Errorf("docker service not available")
+		return core.E("lem.desktop.tray", "docker service not available", nil)
 	}
 	return t.docker.Stop()
 }
@@ -103,7 +103,7 @@ func (t *TrayService) StopStack() error {
 // StartAgent starts the scoring agent.
 func (t *TrayService) StartAgent() error {
 	if t.agent == nil {
-		return fmt.Errorf("agent service not available")
+		return core.E("lem.desktop.tray", "agent service not available", nil)
 	}
 	return t.agent.Start()
 }

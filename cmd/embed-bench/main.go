@@ -10,7 +10,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -349,7 +348,7 @@ func embed(model, text string) ([]float64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ollamaEmbedTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, *ollamaURL+"/api/embeddings", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, *ollamaURL+"/api/embeddings", core.NewBuffer(body))
 	if err != nil {
 		return nil, coreerr.E("embed", "create embeddings request", err)
 	}

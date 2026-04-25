@@ -4,7 +4,6 @@ import (
 	"context"
 	exec "os/exec" // Note: retained until security commands receive a configured core.Process context.
 	"slices"
-	"strings"
 	"time"
 
 	"dappco.re/go/ai/ai"
@@ -404,7 +403,14 @@ func combineSecurityCollectorErrors(target string, collectorErrors map[string]er
 	}
 
 	slices.SortFunc(failures, func(a, b collectorFailure) int {
-		return strings.Compare(a.name, b.name)
+		switch {
+		case a.name < b.name:
+			return -1
+		case a.name > b.name:
+			return 1
+		default:
+			return 0
+		}
 	})
 
 	missingCollectors := make([]string, 0, len(failures))
