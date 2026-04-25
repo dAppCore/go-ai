@@ -57,8 +57,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// TODO(#809): Keep until dappco.re/go/rag publishes go-import metadata; removing this returns 404 from dappco.re/go/rag?go-get=1.
-replace dappco.re/go/rag => ../go-rag
-
 // TODO(#1015): Keep until dappco.re/go/api publishes go-import metadata; removing this returns 404 from dappco.re/go/api?go-get=1.
 replace dappco.re/go/api => dappco.re/go/core/api v0.8.0-alpha.1
