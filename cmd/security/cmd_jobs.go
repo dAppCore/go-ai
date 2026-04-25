@@ -2,8 +2,7 @@ package security
 
 import (
 	"cmp"
-	// Note: os/exec — exec.LookPath probes gh CLI presence; CLI handlers have no Core context, so c.Process() is unreachable.
-	"os/exec"
+	"context"
 	"slices"
 	"time"
 
@@ -19,6 +18,7 @@ var (
 	collectDependabotAlertsForJobs     = collectDepAlerts
 	collectCodeScanningAlertsForJobs   = collectScanAlerts
 	collectSecretScanningAlertsForJobs = collectSecretAlerts
+	jobsProcessCore                    = cli.Core
 )
 
 const maxSecurityJobWorkers = 32
@@ -457,18 +457,37 @@ func buildJobsMetricsEvent(commandOptions JobsCommandOptions, summary *AlertSumm
 }
 
 func createJobsIssue(issueRepo, title, body string) (string, error) {
-	cmd := exec.Command("gh", "issue", "create",
+	c := jobsProcessCore()
+	result := c.Process().Run(context.Background(), "gh",
+		"issue", "create",
 		"--repo", issueRepo,
 		"--title", title,
 		"--body", body,
 		"--label", "type:security-scan",
 	)
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", cli.Wrap(err, "create summary issue: "+string(output))
+	output := processResultOutput(result.Value)
+	if !result.OK {
+		message := "create summary issue"
+		if output != "" {
+			message += ": " + output
+		}
+		return "", cli.Wrap(coreResultError(result), message)
 	}
-	return core.Trim(string(output)), nil
+	return core.Trim(output), nil
+}
+
+func processResultOutput(value any) string {
+	switch output := value.(type) {
+	case string:
+		return output
+	case []byte:
+		return string(output)
+	case nil:
+		return ""
+	default:
+		return core.Sprint(output)
+	}
 }
 
 func buildJobsIssueBody(summary *AlertSummary, repos []jobRepoResult) string {
