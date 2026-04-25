@@ -3,6 +3,7 @@ module dappco.re/go/ai
 go 1.26.0
 
 require (
+	dappco.re/go/api v0.8.0-alpha.1
 	dappco.re/go/core v0.8.0-alpha.1
 	dappco.re/go/i18n v0.8.0-alpha.1
 	dappco.re/go/io v0.8.0-alpha.1
@@ -10,6 +11,7 @@ require (
 	dappco.re/go/scm v0.8.0-alpha.1
 	dappco.re/go/rag v0.8.0-alpha.1
 	dappco.re/go/cli v0.8.0-alpha.1
+	github.com/gin-gonic/gin v1.12.0
 )
 
 require (
@@ -57,3 +59,6 @@ require (
 
 // TODO(#809): Keep until dappco.re/go/rag publishes go-import metadata; removing this returns 404 from dappco.re/go/rag?go-get=1.
 replace dappco.re/go/rag => ../go-rag
+
+// TODO(#1015): Keep until dappco.re/go/api publishes go-import metadata; removing this returns 404 from dappco.re/go/api?go-get=1.
+replace dappco.re/go/api => dappco.re/go/core/api v0.8.0-alpha.1
