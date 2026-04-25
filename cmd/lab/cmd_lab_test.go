@@ -1,50 +1,99 @@
-//go:build ignore
-// +build ignore
+// SPDX-License-Identifier: EUPL-1.2
 
-package lab
+package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-
-	"dappco.re/go/cli/pkg/cli"
 )
 
-func TestCmdLab_HasCommand_Good(t *testing.T) {
-	root := &cli.Command{Use: "core"}
-	root.AddCommand(&cli.Command{Use: "lab"})
+func TestCmdLab_RunCommand_Good_Help(t *testing.T) {
+	var stdout bytes.Buffer
 
-	if !hasCommand(root, "lab") {
-		t.Fatal("expected hasCommand to detect existing lab command")
+	if err := runLabCommand([]string{"--help"}, &stdout, ioDiscard{}); err != nil {
+		t.Fatalf("runLabCommand(help): %v", err)
 	}
-	if hasCommand(root, "missing") {
-		t.Fatal("expected hasCommand to ignore missing command")
+	if got := stdout.String(); !strings.Contains(got, "go-ai serve") {
+		t.Fatalf("expected usage to mention go-ai serve, got %q", got)
 	}
 }
 
-func TestCmdLab_AddLabCommands_Good(t *testing.T) {
-	root := &cli.Command{Use: "core"}
-
-	AddLabCommands(root)
-	AddLabCommands(root)
-
-	commands := root.Commands()
-	if len(commands) != 1 {
-		t.Fatalf("expected one lab command, got %d", len(commands))
+func TestCmdLab_RunCommand_Bad_UnknownCommand(t *testing.T) {
+	err := runLabCommand([]string{"missing"}, ioDiscard{}, ioDiscard{})
+	if err == nil {
+		t.Fatal("expected unknown command to be rejected")
 	}
-	if commands[0].Name() != "lab" {
-		t.Fatalf("expected top-level command lab, got %s", commands[0].Name())
+	if got := err.Error(); !strings.Contains(got, "unknown go-ai command") {
+		t.Fatalf("expected unknown command error, got %q", got)
 	}
+}
 
-	cmd, _, err := root.Find([]string{"lab", "serve"})
+func TestCmdLab_parseLabServeOptions_Good_Defaults(t *testing.T) {
+	options, err := parseLabServeOptions(nil, ioDiscard{})
 	if err != nil {
-		t.Fatalf("find lab serve command: %v", err)
+		t.Fatalf("parseLabServeOptions(defaults): %v", err)
 	}
-	if cmd.Name() != "serve" {
-		t.Fatalf("expected serve subcommand, got %s", cmd.Name())
+
+	if options.Bind != defaultLabBindAddr {
+		t.Fatalf("expected default bind %q, got %q", defaultLabBindAddr, options.Bind)
 	}
+	if options.AllowRemote {
+		t.Fatal("expected allow-remote to default false")
+	}
+}
+
+func TestCmdLab_parseLabServeOptions_Good_CustomFlags(t *testing.T) {
+	options, err := parseLabServeOptions([]string{"--bind", "127.0.0.1:9090", "--allow-remote"}, ioDiscard{})
+	if err != nil {
+		t.Fatalf("parseLabServeOptions(custom): %v", err)
+	}
+
+	if options.Bind != "127.0.0.1:9090" {
+		t.Fatalf("expected custom bind, got %q", options.Bind)
+	}
+	if !options.AllowRemote {
+		t.Fatal("expected allow-remote true")
+	}
+}
+
+func TestCmdLab_Build_Good_ProducesExecutable(t *testing.T) {
+	tempDir := t.TempDir()
+	exePath := filepath.Join(tempDir, "lab-build-check")
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate current test file")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+
+	cmd := exec.Command("go", "build", "-o", exePath, "./cmd/lab")
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(), "GOCACHE="+filepath.Join(tempDir, "gocache"))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go build ./cmd/lab: %v\n%s", err, output)
+	}
+
+	info, err := os.Stat(exePath)
+	if err != nil {
+		t.Fatalf("stat build output: %v", err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("expected build output to be executable, mode %s", info.Mode())
+	}
+}
+
+type ioDiscard struct{}
+
+func (ioDiscard) Write(p []byte) (int, error) {
+	return len(p), nil
 }
 
 func TestCmdLab_Serve_Bad_NonLoopbackWithoutFlag(t *testing.T) {
@@ -166,6 +215,33 @@ func TestCmdLab_requireLabAuth_Good_AllowWithoutToken(t *testing.T) {
 	if !called {
 		t.Fatal("wrapped handler was not executed")
 	}
+	if got := rr.Result().StatusCode; got != http.StatusOK {
+		t.Fatalf("expected 200 status, got %d", got)
+	}
+}
+
+func TestCmdLab_newLabServeMux_Good_Healthz(t *testing.T) {
+	mux := newLabServeMux("")
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if got := rr.Result().StatusCode; got != http.StatusOK {
+		t.Fatalf("expected 200 status, got %d", got)
+	}
+	if got := strings.TrimSpace(rr.Body.String()); got != `{"status":"ok"}` {
+		t.Fatalf("expected healthz JSON, got %q", got)
+	}
+}
+
+func TestCmdLab_newLabServeMux_Good_HealthAlias(t *testing.T) {
+	mux := newLabServeMux("")
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
 	if got := rr.Result().StatusCode; got != http.StatusOK {
 		t.Fatalf("expected 200 status, got %d", got)
 	}

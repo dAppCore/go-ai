@@ -1,31 +1,30 @@
-//go:build ignore
-// +build ignore
+// SPDX-License-Identifier: EUPL-1.2
 
-package lab
+package main
 
 import (
 	"context"
 	"crypto/subtle"
-	"fmt" // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
+	"flag"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"os"        // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
-	"os/signal" // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
-	"strings"   // Note: intrinsic — this file is //go:build ignore (demo scaffold); stdlib use is intentional for easy copy-paste reference.
+	"os"
+	"os/signal"
+	"strings"
 	"time"
-
-	"dappco.re/go/cli/pkg/cli"
-	"forge.lthn.ai/lthn/lem/pkg/lab"
-	"forge.lthn.ai/lthn/lem/pkg/lab/collector"
-	"forge.lthn.ai/lthn/lem/pkg/lab/handler"
 )
 
-func init() {
-	cli.RegisterCommands(AddLabCommands)
+func main() {
+	if err := runLabCommand(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 }
 
-// LabCommandOptions{Bind: "127.0.0.1:8080", AllowRemote: false} configures `core lab serve`.
+// LabCommandOptions{Bind: "127.0.0.1:8080", AllowRemote: false} configures `go-ai serve`.
 type LabCommandOptions struct {
 	Bind        string
 	AllowRemote bool
@@ -33,48 +32,54 @@ type LabCommandOptions struct {
 
 const defaultLabBindAddr = "127.0.0.1:8080"
 
-// core lab serve --bind :8080
-func AddLabCommands(root *cli.Command) {
-	if hasCommand(root, "lab") {
-		return
+func runLabCommand(args []string, stdout io.Writer, stderr io.Writer) error {
+	if len(args) == 0 {
+		printLabUsage(stdout)
+		return nil
 	}
 
-	root.AddCommand(newLabCommand())
+	switch args[0] {
+	case "help", "-h", "--help":
+		printLabUsage(stdout)
+		return nil
+	case "serve":
+		options, err := parseLabServeOptions(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return runServe(options)
+	default:
+		return fmt.Errorf("unknown go-ai command %q", args[0])
+	}
 }
 
-func newLabCommand() *cli.Command {
-	options := &LabCommandOptions{
+func parseLabServeOptions(args []string, output io.Writer) (LabCommandOptions, error) {
+	options := LabCommandOptions{
 		Bind: defaultLabBindAddr,
 	}
-
-	labCmd := &cli.Command{
-		Use:   "lab",
-		Short: "Homelab monitoring dashboard",
-		Long:  "Lab dashboard with real-time monitoring of machines, training runs, models, and services.",
+	if output == nil {
+		output = io.Discard
 	}
 
-	serveCmd := &cli.Command{
-		Use:   "serve",
-		Short: "Start the lab dashboard web server",
-		Long:  "Starts the lab dashboard HTTP server with live-updating collectors for system stats, Docker, Forgejo, HuggingFace, InfluxDB, and more.",
-		RunE: func(cmd *cli.Command, args []string) error {
-			return runServe(*options)
-		},
-	}
-	serveCmd.Flags().StringVar(&options.Bind, "bind", options.Bind, "HTTP listen address")
-	serveCmd.Flags().BoolVar(&options.AllowRemote, "allow-remote", false, "Allow binding to non-loopback interfaces")
+	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
+	flags.SetOutput(output)
+	flags.StringVar(&options.Bind, "bind", options.Bind, "HTTP listen address")
+	flags.BoolVar(&options.AllowRemote, "allow-remote", false, "Allow binding to non-loopback interfaces")
 
-	labCmd.AddCommand(serveCmd)
-	return labCmd
+	if err := flags.Parse(args); err != nil {
+		return options, err
+	}
+	if flags.NArg() > 0 {
+		return options, fmt.Errorf("unexpected argument %q", flags.Arg(0))
+	}
+	return options, nil
 }
 
-func hasCommand(parent *cli.Command, name string) bool {
-	for _, child := range parent.Commands() {
-		if child.Name() == name {
-			return true
-		}
+func printLabUsage(output io.Writer) {
+	if output == nil {
+		return
 	}
-	return false
+	_, _ = fmt.Fprintln(output, "Usage: go-ai serve [--bind address] [--allow-remote]")
 }
 
 func runServe(options LabCommandOptions) error {
@@ -87,76 +92,13 @@ func runServe(options LabCommandOptions) error {
 		return err
 	}
 
-	cfg := lab.LoadConfig()
-	cfg.Addr = options.Bind
-
-	store := lab.NewStore()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	reg := collector.NewRegistry(logger)
-	reg.Register(collector.NewSystem(cfg, store), 60*time.Second)
-	reg.Register(collector.NewPrometheus(cfg.PrometheusURL, store),
-		time.Duration(cfg.PrometheusInterval)*time.Second)
-	reg.Register(collector.NewHuggingFace(cfg.HFAuthor, store),
-		time.Duration(cfg.HFInterval)*time.Second)
-	reg.Register(collector.NewDocker(store),
-		time.Duration(cfg.DockerInterval)*time.Second)
-
-	if cfg.ForgeToken != "" {
-		reg.Register(collector.NewForgejo(cfg.ForgeURL, cfg.ForgeToken, store),
-			time.Duration(cfg.ForgeInterval)*time.Second)
-	}
-
-	reg.Register(collector.NewTraining(cfg, store),
-		time.Duration(cfg.TrainingInterval)*time.Second)
-	reg.Register(collector.NewServices(store), 60*time.Second)
-
-	if cfg.InfluxToken != "" {
-		reg.Register(collector.NewInfluxDB(cfg, store),
-			time.Duration(cfg.InfluxInterval)*time.Second)
-	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	reg.Start(ctx)
-	defer reg.Stop()
-
-	web := handler.NewWebHandler(store)
-	api := handler.NewAPIHandler(store)
-	authWrapper := func(handler http.HandlerFunc) http.HandlerFunc {
-		return requireLabAuth(handler, authToken)
-	}
-
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /", authWrapper(web.Dashboard))
-	mux.HandleFunc("GET /models", authWrapper(web.Models))
-	mux.HandleFunc("GET /training", authWrapper(web.Training))
-	mux.HandleFunc("GET /dataset", authWrapper(web.Dataset))
-	mux.HandleFunc("GET /golden-set", authWrapper(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/dataset", http.StatusMovedPermanently)
-	}))
-	mux.HandleFunc("GET /runs", authWrapper(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/training", http.StatusMovedPermanently)
-	}))
-	mux.HandleFunc("GET /agents", authWrapper(web.Agents))
-	mux.HandleFunc("GET /services", authWrapper(web.Services))
-
-	mux.HandleFunc("GET /events", authWrapper(web.Events))
-
-	mux.HandleFunc("GET /api/status", authWrapper(api.Status))
-	mux.HandleFunc("GET /api/models", authWrapper(api.Models))
-	mux.HandleFunc("GET /api/training", authWrapper(api.Training))
-	mux.HandleFunc("GET /api/dataset", authWrapper(api.GoldenSet))
-	mux.HandleFunc("GET /api/golden-set", authWrapper(api.GoldenSet))
-	mux.HandleFunc("GET /api/runs", authWrapper(api.Runs))
-	mux.HandleFunc("GET /api/agents", authWrapper(api.Agents))
-	mux.HandleFunc("GET /api/services", authWrapper(api.Services))
-	mux.HandleFunc("GET /health", authWrapper(api.Health))
 
 	srv := &http.Server{
-		Addr:         cfg.Addr,
-		Handler:      mux,
+		Addr:         options.Bind,
+		Handler:      newLabServeMux(authToken),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
@@ -169,11 +111,35 @@ func runServe(options LabCommandOptions) error {
 		srv.Shutdown(shutCtx)
 	}()
 
-	logger.Info("lab dashboard starting", "addr", cfg.Addr)
+	logger.Info("lab dashboard starting", "addr", options.Bind)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
+}
+
+func newLabServeMux(authToken string) *http.ServeMux {
+	authWrapper := func(handler http.HandlerFunc) http.HandlerFunc {
+		return requireLabAuth(handler, authToken)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", authWrapper(labIndex))
+	mux.HandleFunc("GET /health", authWrapper(labHealthz))
+	mux.HandleFunc("GET /healthz", authWrapper(labHealthz))
+	return mux
+}
+
+func labIndex(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("go-ai lab\n"))
+}
+
+func labHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
 }
 
 func validateLabBindAddress(addr string, allowRemote bool) error {
