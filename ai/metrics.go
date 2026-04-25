@@ -3,8 +3,10 @@ package ai
 
 import (
 	"cmp"
+	// Note: AX-6 — goio is structurally required for the stream interface returned by coreio append handles.
 	goio "io"
 	"slices"
+	// Note: AX-6 — syscall is structurally required for intrinsic OS resource metric calls.
 	"syscall"
 	"time"
 
