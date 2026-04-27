@@ -1,24 +1,31 @@
+// Metrics helpers for recording and summarising AI and security events.
 package ai
 
 import (
-	"bufio"
 	"cmp"
-	"encoding/json"
-	"os"
-	"path/filepath"
+	// Note: AX-6 — goio is structurally required for the stream interface returned by coreio append handles.
+	goio "io"
 	"slices"
-	"sort"
-	"sync"
+	// Note: AX-6 — syscall is structurally required for intrinsic OS resource metric calls.
+	"syscall"
 	"time"
 
-	coreio "dappco.re/go/core/io"
-	coreerr "dappco.re/go/core/log"
+	"dappco.re/go/core"
+	coreio "dappco.re/go/io"
+	coreerr "dappco.re/go/log"
 )
 
-// metricsWriteMu protects concurrent file writes in Record.
-var metricsWriteMu sync.Mutex
+var metricsWriteLock = core.New().Lock("ai.metrics.write")
 
-// Event{Type: "security.scan", Repo: "wailsapp/wails"} records AI or security activity in ~/.core/ai/metrics/YYYY-MM-DD.jsonl.
+const recentEventLimit = 10
+const (
+	maxMetricsReadWindowDays = 365
+	maxMetricsLineBytes      = 1 << 20
+	metricsFileMode          = 0o600
+	metricsDirMode           = 0o700
+)
+
+// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
 type Event struct {
 	Type      string         `json:"type"`
 	Timestamp time.Time      `json:"timestamp"`
@@ -28,75 +35,101 @@ type Event struct {
 	Data      map[string]any `json:"data,omitempty"`
 }
 
-// metricsDir returns the base directory for metrics storage.
 func metricsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", coreerr.E("ai.metricsDir", "get home directory", err)
+	home := core.Env("CORE_HOME")
+	if home == "" {
+		home = core.Env("HOME")
 	}
-	return filepath.Join(home, ".core", "ai", "metrics"), nil
+	if home == "" {
+		home = core.Env("USERPROFILE")
+	}
+	if home == "" {
+		home = metricsDirHomeEnv()
+	}
+	if home == "" {
+		return "", core.E("ai.metricsDir", "resolve metrics home directory", nil)
+	}
+	return core.JoinPath(home, ".core", "ai", "metrics"), nil
 }
 
-// metricsFilePath returns the JSONL file path for the given date.
+func metricsDirHomeEnv() string {
+	if home, ok := syscall.Getenv("DIR_HOME"); ok && home != "" {
+		return home
+	}
+	return core.Env("DIR_HOME")
+}
+
 func metricsFilePath(dir string, t time.Time) string {
-	return filepath.Join(dir, t.Format("2006-01-02")+".jsonl")
+	return core.JoinPath(dir, t.Format("2006-01-02")+".jsonl")
 }
 
-// Record(Event{Type: "security.scan", Repo: "wailsapp/wails"}) appends the event to the daily JSONL log.
+// ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
 func Record(event Event) (err error) {
+	recordedAt := time.Now()
 	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now()
+		event.Timestamp = recordedAt
 	}
 
-	metricsWriteMu.Lock()
-	defer metricsWriteMu.Unlock()
+	event.Data = sanitizeMetricsData(event.Data)
+
+	metricsWriteLock.Mutex.Lock()
+	defer metricsWriteLock.Mutex.Unlock()
 
 	dir, err := metricsDir()
 	if err != nil {
-		return err
+		return coreerr.E("ai", "record event", err)
 	}
 
 	if err := coreio.Local.EnsureDir(dir); err != nil {
-		return coreerr.E("ai.Record", "create metrics directory", err)
+		return coreerr.E("ai", "record event", err)
+	}
+	if err := chmodMetricsPath(dir, metricsDirMode); err != nil {
+		return coreerr.E("ai", "record event", err)
 	}
 
-	path := metricsFilePath(dir, event.Timestamp)
-
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	path := metricsFilePath(dir, recordedAt)
+	file, err := openMetricsEventFile(path)
 	if err != nil {
-		return coreerr.E("ai.Record", "open metrics file", err)
+		return coreerr.E("ai", "record event", err)
 	}
 	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = coreerr.E("ai.Record", "close metrics file", cerr)
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = coreerr.E("ai", "record event", closeErr)
 		}
 	}()
 
-	data, err := json.Marshal(event)
-	if err != nil {
-		return coreerr.E("ai.Record", "marshal event", err)
+	data := core.JSONMarshal(event)
+	if !data.OK {
+		if marshalErr, ok := data.Value.(error); ok {
+			return coreerr.E("ai", "record event", marshalErr)
+		}
+		return coreerr.E("ai", "record event", nil)
 	}
 
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		return coreerr.E("ai.Record", "write event", err)
+	if _, err := file.Write(append(data.Value.([]byte), '\n')); err != nil {
+		return coreerr.E("ai", "record event", err)
 	}
 
 	return nil
 }
 
-// ReadEvents(time.Now().Add(-24 * time.Hour)) reads recent daily JSONL files and silently skips any missing days.
+// events, err := ai.ReadEvents(time.Now().Add(-24 * time.Hour))
 func ReadEvents(since time.Time) ([]Event, error) {
 	dir, err := metricsDir()
 	if err != nil {
-		return nil, err
+		return nil, coreerr.E("ai", "read events", err)
 	}
 
 	var events []Event
 	now := time.Now()
+	since = clampMetricsSince(since, now)
 
-	// Iterate each day from since to now.
-	for d := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, time.Local); !d.After(now); d = d.AddDate(0, 0, 1) {
-		path := metricsFilePath(dir, d)
+	// Iterate each day from the caller's `since` timestamp to now in the caller's location.
+	loc := since.Location()
+	scanStart := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc)
+	today := now.In(loc)
+	for day := scanStart; !day.After(today); day = day.AddDate(0, 0, 1) {
+		path := metricsFilePath(dir, day)
 
 		dayEvents, err := readMetricsFile(path, since)
 		if err != nil {
@@ -105,39 +138,135 @@ func ReadEvents(since time.Time) ([]Event, error) {
 		events = append(events, dayEvents...)
 	}
 
+	slices.SortStableFunc(events, func(a, b Event) int {
+		return cmp.Compare(a.Timestamp.UnixNano(), b.Timestamp.UnixNano())
+	})
+
 	return events, nil
 }
 
-// readMetricsFile reads events from a single JSONL file, returning only those at or after since.
-func readMetricsFile(path string, since time.Time) ([]Event, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, coreerr.E("ai.readMetricsFile", "open metrics file", err)
+func clampMetricsSince(since, now time.Time) time.Time {
+	if since.IsZero() {
+		return now.AddDate(0, 0, -maxMetricsReadWindowDays)
 	}
-	defer func() { _ = f.Close() }()
+
+	cutoff := now.AddDate(0, 0, -maxMetricsReadWindowDays)
+	if since.Before(cutoff) {
+		return cutoff
+	}
+	if since.After(now) {
+		return now
+	}
+	return since
+}
+
+func daysScannedFromDate(start, current time.Time) int {
+	if current.Before(start) {
+		return 0
+	}
+	return int(current.Sub(start).Hours() / 24)
+}
+
+func readMetricsFile(path string, since time.Time) ([]Event, error) {
+	if !coreio.Local.Exists(path) {
+		return nil, nil
+	}
+
+	content, err := coreio.Local.Read(path)
+	if err != nil {
+		return nil, coreerr.E("ai", "read events", err)
+	}
 
 	var events []Event
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		var ev Event
-		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+	for _, line := range core.Split(content, "\n") {
+		if len(line) > maxMetricsLineBytes {
+			return nil, coreerr.E("ai", "read events", core.E("ai.readMetricsFile", "metrics line exceeds maximum size", nil))
+		}
+
+		var event Event
+		if unmarshalResult := core.JSONUnmarshalString(line, &event); !unmarshalResult.OK {
 			continue // skip malformed lines
 		}
-		if !ev.Timestamp.Before(since) {
-			events = append(events, ev)
+		if !event.Timestamp.Before(since) {
+			events = append(events, event)
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, coreerr.E("ai.readMetricsFile", "read metrics file", err)
 	}
 	return events, nil
 }
 
-// Summary(events) aggregates counts by type, repo, and agent.
-// Example: Summary([]Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}})
+func openMetricsEventFile(path string) (goio.WriteCloser, error) {
+	if !coreio.Local.Exists(path) {
+		if err := coreio.Local.WriteMode(path, "", metricsFileMode); err != nil {
+			return nil, err
+		}
+	}
+
+	file, err := coreio.Local.Append(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := chmodMetricsPath(path, metricsFileMode); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func chmodMetricsPath(path string, mode uint32) error {
+	return syscall.Chmod(path, mode)
+}
+
+var sensitiveMetricKeys = []string{
+	"password",
+	"secret",
+	"token",
+	"api_key",
+	"apikey",
+	"bearer",
+}
+
+func sanitizeMetricsData(data map[string]any) map[string]any {
+	if len(data) == 0 {
+		return data
+	}
+
+	sanitized := make(map[string]any, len(data))
+	for key, value := range data {
+		if isSensitiveMetricKey(key) {
+			continue
+		}
+		sanitized[key] = sanitizeMetricsValue(value)
+	}
+	return sanitized
+}
+
+func sanitizeMetricsValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeMetricsData(typed)
+	case []any:
+		sanitized := make([]any, 0, len(typed))
+		for _, item := range typed {
+			sanitized = append(sanitized, sanitizeMetricsValue(item))
+		}
+		return sanitized
+	default:
+		return value
+	}
+}
+
+func isSensitiveMetricKey(key string) bool {
+	lowerKey := core.Lower(key)
+	for _, sensitive := range sensitiveMetricKeys {
+		if core.Contains(lowerKey, sensitive) {
+			return true
+		}
+	}
+	return false
+}
+
+// summary := ai.Summary([]ai.Event{{Type: "build", Repo: "core-php", AgentID: "agent-1"}})
 func Summary(events []Event) map[string]any {
 	byTypeCounts := make(map[string]int)
 	byRepoCounts := make(map[string]int)
@@ -153,65 +282,57 @@ func Summary(events []Event) map[string]any {
 		}
 	}
 
-	recentEvents := make([]Event, len(events))
-	copy(recentEvents, events)
-	sort.SliceStable(recentEvents, func(i, j int) bool {
-		return recentEvents[i].Timestamp.After(recentEvents[j].Timestamp)
-	})
-	if len(recentEvents) > 10 {
-		recentEvents = recentEvents[:10]
+	recentEvents := events
+	if len(recentEvents) > recentEventLimit {
+		recentEvents = recentEvents[len(recentEvents)-recentEventLimit:]
+	}
+	recentCopy := make([]Event, len(recentEvents))
+	for i, event := range recentEvents {
+		recentCopy[i] = cloneEvent(event)
 	}
 
 	return map[string]any{
-		"total":    len(events),
-		"by_type":  sortedCountPairs(byTypeCounts),
-		"by_repo":  sortedCountPairs(byRepoCounts),
-		"by_agent": sortedCountPairs(byAgentCounts),
-		"events":   compactEvents(recentEvents),
+		"by_type":  cloneCounts(byTypeCounts),
+		"by_repo":  cloneCounts(byRepoCounts),
+		"by_agent": cloneCounts(byAgentCounts),
+		"recent":   recentCopy,
 	}
 }
 
-// sortedCountPairs returns a slice of key-count pairs sorted by count descending,
-// with key ascending as a deterministic tie-breaker.
-func sortedCountPairs(counts map[string]int) []map[string]any {
-	type entry struct {
-		key   string
-		count int
+func cloneCounts(counts map[string]int) map[string]int {
+	cloned := make(map[string]int, len(counts))
+	for key, count := range counts {
+		cloned[key] = count
 	}
-	entries := make([]entry, 0, len(counts))
-	for k, v := range counts {
-		entries = append(entries, entry{k, v})
-	}
-
-	slices.SortFunc(entries, func(a, b entry) int {
-		if result := cmp.Compare(b.count, a.count); result != 0 {
-			return result
-		}
-		return cmp.Compare(a.key, b.key)
-	})
-
-	result := make([]map[string]any, len(entries))
-	for i, e := range entries {
-		result[i] = map[string]any{"key": e.key, "count": e.count}
-	}
-	return result
+	return cloned
 }
 
-// compactEvents converts events into the compact shape used by metrics_query.
-func compactEvents(events []Event) []map[string]any {
-	result := make([]map[string]any, len(events))
-	for i, ev := range events {
-		item := map[string]any{
-			"type":      ev.Type,
-			"timestamp": ev.Timestamp,
+func cloneEvent(event Event) Event {
+	cloned := event
+	if len(event.Data) > 0 {
+		cloned.Data = make(map[string]any, len(event.Data))
+		for key, value := range event.Data {
+			cloned.Data[key] = cloneMetricValue(value)
 		}
-		if ev.AgentID != "" {
-			item["agent_id"] = ev.AgentID
-		}
-		if ev.Repo != "" {
-			item["repo"] = ev.Repo
-		}
-		result[i] = item
 	}
-	return result
+	return cloned
+}
+
+func cloneMetricValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneMetricValue(item)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, item := range typed {
+			cloned[i] = cloneMetricValue(item)
+		}
+		return cloned
+	default:
+		return value
+	}
 }

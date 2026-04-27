@@ -1,23 +1,21 @@
-module dappco.re/go/core/ai
+module dappco.re/go/ai
 
 go 1.26.0
 
 require (
-	dappco.re/go/core/i18n v0.2.0
-	dappco.re/go/core/io v0.2.0
-	dappco.re/go/core/log v0.1.0
-	dappco.re/go/core/scm v0.4.0
-	dappco.re/go/core/cli v0.3.7
-	dappco.re/go/core/rag v0.1.11
+	dappco.re/go/api v0.8.0-alpha.1
+	dappco.re/go/core v0.8.0-alpha.1
+	dappco.re/go/i18n v0.8.0-alpha.1
+	dappco.re/go/io v0.8.0-alpha.1
+	dappco.re/go/log v0.8.0-alpha.1
+	dappco.re/go/scm v0.8.0-alpha.1
+	dappco.re/go/rag v0.8.0-alpha.1
+	dappco.re/go/cli v0.8.0-alpha.1
+	github.com/gin-gonic/gin v1.12.0
 )
 
 require (
-	dappco.re/go/core v0.5.0 // indirect
-	dappco.re/go/core v0.3.3 // indirect
-	dappco.re/go/core/i18n v0.1.7 // indirect
-	dappco.re/go/core/inference v0.1.7 // indirect
-	dappco.re/go/core/io v0.1.7 // indirect
-	dappco.re/go/core/log v0.0.4 // indirect
+	dappco.re/go/inference v0.8.0-alpha.1 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
@@ -32,6 +30,7 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -57,3 +56,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+// TODO(#1015): Keep until dappco.re/go/api publishes go-import metadata; removing this returns 404 from dappco.re/go/api?go-get=1.
+replace dappco.re/go/api => dappco.re/go/core/api v0.8.0-alpha.1

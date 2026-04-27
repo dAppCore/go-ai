@@ -568,8 +568,8 @@ Malformed JSONL lines are skipped without returning an error, providing forward 
 
 ```go
 func Summary(events []Event) map[string]any {
-    // returns: total, by_type, by_repo, by_agent
-    // each dimension is a []map[string]any sorted by count descending
+    // returns: by_type, by_repo, by_agent, recent
+    // each count map is keyed by the group value
 }
 ```
 

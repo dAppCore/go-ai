@@ -144,10 +144,10 @@ summary := ai.Summary(events)        // Aggregate by type, repo, agent
 `ReadEvents` iterates calendar days from `since` to today, opening each daily file. Missing files are silently skipped. Malformed JSONL lines are skipped without error.
 
 `Summary` returns a `map[string]any` with:
-- `total` -- total event count
-- `by_type` -- sorted slice of `{key, count}` maps
-- `by_repo` -- sorted slice of `{key, count}` maps
-- `by_agent` -- sorted slice of `{key, count}` maps
+- `by_type` -- counts grouped by event type
+- `by_repo` -- counts grouped by repository
+- `by_agent` -- counts grouped by agent ID
+- `recent` -- the last 10 events in chronological order
 
 ### CLI Command
 

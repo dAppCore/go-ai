@@ -1,33 +1,35 @@
 package security
 
 import (
-	"encoding/json"
-	"fmt"
+	"time"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
-	"dappco.re/go/core/i18n"
+	"dappco.re/go/cli/pkg/cli"
+	"dappco.re/go/core"
+	"dappco.re/go/i18n"
 )
 
 func addAlertsCommand(parent *cli.Command) {
+	selectionOptions := &SecuritySelectionOptions{}
+
 	cmd := &cli.Command{
 		Use:   "alerts",
 		Short: i18n.T("cmd.security.alerts.short"),
 		Long:  i18n.T("cmd.security.alerts.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runAlerts()
+			return runAlerts(*selectionOptions)
 		},
 	}
 
-	cmd.Flags().StringVar(&securityRegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&securityRepo, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&securitySeverity, "severity", "", i18n.T("cmd.security.flag.severity"))
-	cmd.Flags().BoolVar(&securityJSON, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&securityTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
+	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", i18n.T("cmd.security.flag.severity"))
+	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, i18n.T("common.flag.json"))
+	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }
 
-// AlertOutput represents a unified alert for output.
+// AlertOutput is the normalised row emitted by `core security alerts --json`.
 type AlertOutput struct {
 	Repo     string `json:"repo"`
 	Severity string `json:"severity"`
@@ -39,121 +41,64 @@ type AlertOutput struct {
 	Message  string `json:"message"`
 }
 
-func runAlerts() error {
-	if err := checkGH(); err != nil {
-		return err
-	}
+func runAlerts(selectionOptions SecuritySelectionOptions) error {
+	startedAt := time.Now()
 
-	// External target mode: bypass registry entirely
-	if securityTarget != "" {
-		return runAlertsForTarget(securityTarget)
-	}
-
-	reg, err := loadRegistry(securityRegistryPath)
+	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
 		return err
 	}
 
-	repoList := getReposToCheck(reg, securityRepo)
-	if len(repoList) == 0 {
-		return cli.Err("repo not found: %s", securityRepo)
+	if err := checkGitHubCLI(); err != nil {
+		return err
 	}
 
 	var allAlerts []AlertOutput
 	summary := &AlertSummary{}
+	targetErrors := map[string]error{}
 
-	for _, repo := range repoList {
-		repoFullName := fmt.Sprintf("%s/%s", reg.Org, repo.Name)
-
-		// Fetch Dependabot alerts
-		depAlerts, err := fetchDependabotAlerts(repoFullName)
-		if err == nil {
-			for _, alert := range depAlerts {
-				if alert.State != "open" {
-					continue
-				}
-				severity := alert.Advisory.Severity
-				if !filterBySeverity(severity, securitySeverity) {
-					continue
-				}
-				summary.Add(severity)
-				allAlerts = append(allAlerts, AlertOutput{
-					Repo:     repo.Name,
-					Severity: severity,
-					ID:       alert.Advisory.CVEID,
-					Package:  alert.Dependency.Package.Name,
-					Version:  alert.SecurityVulnerability.VulnerableVersionRange,
-					Type:     "dependabot",
-					Message:  alert.Advisory.Summary,
-				})
-			}
+	for _, target := range targets {
+		targetAlerts, err := collectAlertOutputs(target, selectionOptions.SeverityFilter)
+		if err != nil {
+			targetErrors[target.FullName] = err
+			continue
 		}
 
-		// Fetch code scanning alerts
-		codeAlerts, err := fetchCodeScanningAlerts(repoFullName)
-		if err == nil {
-			for _, alert := range codeAlerts {
-				if alert.State != "open" {
-					continue
-				}
-				severity := alert.Rule.Severity
-				if !filterBySeverity(severity, securitySeverity) {
-					continue
-				}
-				summary.Add(severity)
-				location := fmt.Sprintf("%s:%d", alert.MostRecentInstance.Location.Path, alert.MostRecentInstance.Location.StartLine)
-				allAlerts = append(allAlerts, AlertOutput{
-					Repo:     repo.Name,
-					Severity: severity,
-					ID:       alert.Rule.ID,
-					Location: location,
-					Type:     alert.Tool.Name,
-					Message:  alert.Rule.Description,
-				})
-			}
+		for _, alert := range targetAlerts {
+			summary.Add(alert.Severity)
 		}
-
-		// Fetch secret scanning alerts
-		secretAlerts, err := fetchSecretScanningAlerts(repoFullName)
-		if err == nil {
-			for _, alert := range secretAlerts {
-				if alert.State != "open" {
-					continue
-				}
-				if !filterBySeverity("high", securitySeverity) {
-					continue
-				}
-				summary.Add("high") // Secrets are always high severity
-				allAlerts = append(allAlerts, AlertOutput{
-					Repo:     repo.Name,
-					Severity: "high",
-					ID:       fmt.Sprintf("secret-%d", alert.Number),
-					Type:     "secret-scanning",
-					Message:  alert.SecretType,
-				})
-			}
-		}
+		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
+	if err := combineSecurityTargetErrors("security alerts", targetErrors); err != nil {
+		return err
+	}
+
+	recordedRepo := metricRepositoryForTargets(targets)
+	recordedTarget := recordedRepo
+	recordSecurityMetricsEvent(buildSecurityMetricsEvent("security.alerts", startedAt, recordedRepo, map[string]any{
+		"target":   recordedTarget,
+		"total":    summary.Total,
+		"critical": summary.Critical,
+		"high":     summary.High,
+		"medium":   summary.Medium,
+		"low":      summary.Low,
+		"unknown":  summary.Unknown,
+	}))
+
+	if selectionOptions.JSONOutput {
+		cli.Text(core.JSONMarshalString(allAlerts))
 		return nil
 	}
 
-	// Print summary
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Alerts:"), summary.String())
+	cli.Print("%s %s\n", cli.DimStyle.Render(securitySectionLabel("Alerts", selectionOptions.ExternalTarget)+":"), summary.String())
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
 		return nil
 	}
 
-	// Print table
 	for _, alert := range allAlerts {
 		sevStyle := severityStyle(alert.Severity)
 
@@ -163,12 +108,12 @@ func runAlerts() error {
 			location = alert.Location
 		}
 		if alert.Version != "" {
-			location = fmt.Sprintf("%s %s", location, cli.DimStyle.Render(alert.Version))
+			location = core.Sprintf("%s %s", location, cli.DimStyle.Render(alert.Version))
 		}
 
 		cli.Print("%-20s %s  %-16s %-40s %s\n",
 			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(fmt.Sprintf("%-8s", alert.Severity)),
+			sevStyle.Render(core.Sprintf("%-8s", alert.Severity)),
 			alert.ID,
 			location,
 			cli.DimStyle.Render(alert.Type),
@@ -179,162 +124,105 @@ func runAlerts() error {
 	return nil
 }
 
-// runAlertsForTarget runs unified alert checks against an external repo target.
-func runAlertsForTarget(target string) error {
-	repo, fullName := buildTargetRepo(target)
-	if repo == nil {
-		return cli.Err("invalid target format: use owner/repo (e.g. wailsapp/wails)")
+func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertOutput, error) {
+	dependabotAlerts, dependabotError := collectDepAlerts(target, severityFilter)
+	codeScanningAlerts, codeScanningError := collectScanAlerts(target, ScanCommandOptions{
+		Selection: SecuritySelectionOptions{
+			SeverityFilter: severityFilter,
+		},
+	})
+	secretScanningAlerts, secretScanningError := collectSecretAlerts(target)
+
+	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
+		return nil, combineSecurityCollectorErrors(target.FullName, map[string]error{
+			"dependabot":      dependabotError,
+			"code-scanning":   codeScanningError,
+			"secret-scanning": secretScanningError,
+		})
 	}
 
-	var allAlerts []AlertOutput
-	summary := &AlertSummary{}
+	return buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, severityFilter), nil
+}
 
-	// Fetch Dependabot alerts
-	depAlerts, err := fetchDependabotAlerts(fullName)
-	if err == nil {
-		for _, alert := range depAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			severity := alert.Advisory.Severity
-			if !filterBySeverity(severity, securitySeverity) {
-				continue
-			}
-			summary.Add(severity)
-			allAlerts = append(allAlerts, AlertOutput{
-				Repo:     repo.Name,
-				Severity: severity,
-				ID:       alert.Advisory.CVEID,
-				Package:  alert.Dependency.Package.Name,
-				Version:  alert.SecurityVulnerability.VulnerableVersionRange,
-				Type:     "dependabot",
-				Message:  alert.Advisory.Summary,
-			})
-		}
+func buildAlertOutputs(dependabotAlerts []DepAlert, codeScanningAlerts []ScanAlert, secretScanningAlerts []SecretAlert, severityFilter string) []AlertOutput {
+	allAlerts := make([]AlertOutput, 0, len(dependabotAlerts)+len(codeScanningAlerts)+len(secretScanningAlerts))
+
+	for _, alert := range dependabotAlerts {
+		allAlerts = append(allAlerts, AlertOutput{
+			Repo:     alert.Repo,
+			Severity: alert.Severity,
+			ID:       alert.CVE,
+			Package:  alert.Package,
+			Version:  alert.Vulnerable,
+			Type:     "dependabot",
+			Message:  alert.Summary,
+		})
 	}
 
-	// Fetch code scanning alerts
-	codeAlerts, err := fetchCodeScanningAlerts(fullName)
-	if err == nil {
-		for _, alert := range codeAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			severity := alert.Rule.Severity
-			if !filterBySeverity(severity, securitySeverity) {
-				continue
-			}
-			summary.Add(severity)
-			location := fmt.Sprintf("%s:%d", alert.MostRecentInstance.Location.Path, alert.MostRecentInstance.Location.StartLine)
-			allAlerts = append(allAlerts, AlertOutput{
-				Repo:     repo.Name,
-				Severity: severity,
-				ID:       alert.Rule.ID,
-				Location: location,
-				Type:     alert.Tool.Name,
-				Message:  alert.Rule.Description,
-			})
-		}
+	for _, alert := range codeScanningAlerts {
+		allAlerts = append(allAlerts, AlertOutput{
+			Repo:     alert.Repo,
+			Severity: alert.Severity,
+			ID:       alert.RuleID,
+			Location: core.Sprintf("%s:%d", alert.Path, alert.Line),
+			Type:     "code-scanning",
+			Message:  alert.Message,
+		})
 	}
 
-	// Fetch secret scanning alerts
-	secretAlerts, err := fetchSecretScanningAlerts(fullName)
-	if err == nil {
-		for _, alert := range secretAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			if !filterBySeverity("high", securitySeverity) {
-				continue
-			}
-			summary.Add("high")
+	if filterBySeverity("high", severityFilter) {
+		for _, alert := range secretScanningAlerts {
 			allAlerts = append(allAlerts, AlertOutput{
-				Repo:     repo.Name,
+				Repo:     alert.Repo,
 				Severity: "high",
-				ID:       fmt.Sprintf("secret-%d", alert.Number),
+				ID:       core.Sprintf("secret-%d", alert.Number),
 				Type:     "secret-scanning",
 				Message:  alert.SecretType,
 			})
 		}
 	}
 
-	if securityJSON {
-		output, err := json.MarshalIndent(allAlerts, "", "  ")
-		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
-		}
-		cli.Text(string(output))
-		return nil
-	}
-
-	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Alerts ("+fullName+"):"), summary.String())
-	cli.Blank()
-
-	if len(allAlerts) == 0 {
-		return nil
-	}
-
-	for _, alert := range allAlerts {
-		sevStyle := severityStyle(alert.Severity)
-		location := alert.Package
-		if location == "" {
-			location = alert.Location
-		}
-		if alert.Version != "" {
-			location = fmt.Sprintf("%s %s", location, cli.DimStyle.Render(alert.Version))
-		}
-		cli.Print("%-20s %s  %-16s %-40s %s\n",
-			cli.ValueStyle.Render(alert.Repo),
-			sevStyle.Render(fmt.Sprintf("%-8s", alert.Severity)),
-			alert.ID,
-			location,
-			cli.DimStyle.Render(alert.Type),
-		)
-	}
-	cli.Blank()
-
-	return nil
+	return allAlerts
 }
 
 func fetchDependabotAlerts(repoFullName string) ([]DependabotAlert, error) {
-	endpoint := fmt.Sprintf("repos/%s/dependabot/alerts?state=open", repoFullName)
-	output, err := runGHAPI(endpoint)
+	endpoint := core.Sprintf("repos/%s/dependabot/alerts?state=open", repoFullName)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
-		return nil, cli.Wrap(err, fmt.Sprintf("fetch dependabot alerts for %s", repoFullName))
+		return nil, cli.Wrap(err, core.Sprintf("fetch dependabot alerts for %s", repoFullName))
 	}
 
-	var alerts []DependabotAlert
-	if err := json.Unmarshal(output, &alerts); err != nil {
-		return nil, cli.Wrap(err, fmt.Sprintf("parse dependabot alerts for %s", repoFullName))
+	alerts, err := decodeDependabotAlerts(output)
+	if err != nil {
+		return nil, cli.Wrap(err, core.Sprintf("parse dependabot alerts for %s", repoFullName))
 	}
 	return alerts, nil
 }
 
 func fetchCodeScanningAlerts(repoFullName string) ([]CodeScanningAlert, error) {
-	endpoint := fmt.Sprintf("repos/%s/code-scanning/alerts?state=open", repoFullName)
-	output, err := runGHAPI(endpoint)
+	endpoint := core.Sprintf("repos/%s/code-scanning/alerts?state=open", repoFullName)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
-		return nil, cli.Wrap(err, fmt.Sprintf("fetch code-scanning alerts for %s", repoFullName))
+		return nil, cli.Wrap(err, core.Sprintf("fetch code-scanning alerts for %s", repoFullName))
 	}
 
-	var alerts []CodeScanningAlert
-	if err := json.Unmarshal(output, &alerts); err != nil {
-		return nil, cli.Wrap(err, fmt.Sprintf("parse code-scanning alerts for %s", repoFullName))
+	alerts, err := decodeCodeScanningAlerts(output)
+	if err != nil {
+		return nil, cli.Wrap(err, core.Sprintf("parse code-scanning alerts for %s", repoFullName))
 	}
 	return alerts, nil
 }
 
 func fetchSecretScanningAlerts(repoFullName string) ([]SecretScanningAlert, error) {
-	endpoint := fmt.Sprintf("repos/%s/secret-scanning/alerts?state=open", repoFullName)
-	output, err := runGHAPI(endpoint)
+	endpoint := core.Sprintf("repos/%s/secret-scanning/alerts?state=open", repoFullName)
+	output, err := callGitHubAPIRequest(endpoint)
 	if err != nil {
-		return nil, cli.Wrap(err, fmt.Sprintf("fetch secret-scanning alerts for %s", repoFullName))
+		return nil, cli.Wrap(err, core.Sprintf("fetch secret-scanning alerts for %s", repoFullName))
 	}
 
-	var alerts []SecretScanningAlert
-	if err := json.Unmarshal(output, &alerts); err != nil {
-		return nil, cli.Wrap(err, fmt.Sprintf("parse secret-scanning alerts for %s", repoFullName))
+	alerts, err := decodeSecretScanningAlerts(output)
+	if err != nil {
+		return nil, cli.Wrap(err, core.Sprintf("parse secret-scanning alerts for %s", repoFullName))
 	}
 	return alerts, nil
 }

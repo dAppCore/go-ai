@@ -1,230 +1,516 @@
 package security
 
 import (
-	"fmt"
-	"os/exec"
-	"strings"
+	"cmp"
+	"context"
+	"slices"
 	"time"
 
-	"forge.lthn.ai/core/cli/pkg/cli"
-	"dappco.re/go/core/ai/ai"
-	"dappco.re/go/core/i18n"
-	coreerr "dappco.re/go/core/log"
+	"dappco.re/go/ai/ai"
+	"dappco.re/go/cli/pkg/cli"
+	"dappco.re/go/core"
+	"dappco.re/go/i18n"
+	coreerr "dappco.re/go/log"
+	"dappco.re/go/scm/repos"
 )
 
 var (
-	jobsTargets   []string
-	jobsIssueRepo string
-	jobsDryRun    bool
-	jobsCopies    int
+	collectDependabotAlertsForJobs     = collectDepAlerts
+	collectCodeScanningAlertsForJobs   = collectScanAlerts
+	collectSecretScanningAlertsForJobs = collectSecretAlerts
+	jobsProcessCore                    = cli.Core
 )
 
+const maxSecurityJobWorkers = 32
+
+type jobRepoResult struct {
+	Repo     string
+	Summary  AlertSummary
+	Findings []string
+}
+
+type jobResult struct {
+	repo jobRepoResult
+	err  error
+}
+
 func addJobsCommand(parent *cli.Command) {
+	commandOptions := &JobsCommandOptions{
+		WorkerCount: 1,
+	}
+
 	cmd := &cli.Command{
 		Use:   "jobs",
 		Short: i18n.T("cmd.security.jobs.short"),
 		Long:  i18n.T("cmd.security.jobs.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runJobs()
+			return runJobs(*commandOptions)
 		},
 	}
 
-	cmd.Flags().StringSliceVar(&jobsTargets, "targets", nil, i18n.T("cmd.security.jobs.flag.targets"))
-	cmd.Flags().StringVar(&jobsIssueRepo, "issue-repo", "host-uk/core", i18n.T("cmd.security.jobs.flag.issue_repo"))
-	cmd.Flags().BoolVar(&jobsDryRun, "dry-run", false, i18n.T("cmd.security.jobs.flag.dry_run"))
-	cmd.Flags().IntVar(&jobsCopies, "copies", 1, i18n.T("cmd.security.jobs.flag.copies"))
+	cmd.Flags().StringVar(&commandOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
+	cmd.Flags().StringVar(&commandOptions.Targets, "targets", "", i18n.T("cmd.security.jobs.flag.targets"))
+	cmd.Flags().StringVar(&commandOptions.IssueRepository, "issue-repo", "", i18n.T("cmd.security.jobs.flag.issue_repo"))
+	cmd.Flags().BoolVar(&commandOptions.DryRun, "dry-run", false, i18n.T("cmd.security.jobs.flag.dry_run"))
+	cmd.Flags().IntVar(&commandOptions.WorkerCount, "copies", commandOptions.WorkerCount, i18n.T("cmd.security.jobs.flag.copies"))
 
 	parent.AddCommand(cmd)
 }
 
-func runJobs() error {
-	if err := checkGH(); err != nil {
-		return err
-	}
+func runJobs(commandOptions JobsCommandOptions) error {
+	startedAt := time.Now()
 
-	if len(jobsTargets) == 0 {
-		return cli.Err("at least one --targets value required (e.g. --targets wailsapp/wails)")
-	}
-
-	if jobsCopies < 1 {
+	if commandOptions.WorkerCount < 1 {
 		return cli.Err("--copies must be at least 1")
 	}
 
-	var failedCount int
-	for _, target := range jobsTargets {
-		if err := createJobForTarget(target); err != nil {
-			cli.Print("%s %s: %v\n", cli.ErrorStyle.Render(">>"), target, err)
-			failedCount++
-			continue
-		}
-	}
-
-	if failedCount == len(jobsTargets) {
-		return cli.Err("all targets failed to process")
-	}
-
-	return nil
-}
-
-func createJobForTarget(target string) error {
-	parts := strings.SplitN(target, "/", 2)
-	if len(parts) != 2 {
-		return coreerr.E("security.createJobForTarget", "invalid target format: use owner/repo", nil)
-	}
-
-	// Gather findings
-	summary := &AlertSummary{}
-	var findings []string
-	var fetchErrors int
-
-	// Code scanning
-	codeAlerts, err := fetchCodeScanningAlerts(target)
+	issueRepoTarget, err := validateJobsIssueRepository(commandOptions.IssueRepository)
 	if err != nil {
-		cli.Print("%s %s: failed to fetch code scanning alerts: %v\n", cli.WarningStyle.Render(">>"), target, err)
-		fetchErrors++
-	}
-	if err == nil {
-		for _, alert := range codeAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			severity := alert.Rule.Severity
-			if severity == "" {
-				severity = "medium"
-			}
-			summary.Add(severity)
-			findings = append(findings, fmt.Sprintf("- [%s] %s: %s (%s:%d)",
-				strings.ToUpper(severity), alert.Tool.Name, alert.Rule.Description,
-				alert.MostRecentInstance.Location.Path, alert.MostRecentInstance.Location.StartLine))
-		}
+		return err
 	}
 
-	// Dependabot
-	depAlerts, err := fetchDependabotAlerts(target)
+	registry, err := loadRegistryForJobs(commandOptions)
 	if err != nil {
-		cli.Print("%s %s: failed to fetch dependabot alerts: %v\n", cli.WarningStyle.Render(">>"), target, err)
-		fetchErrors++
+		return err
 	}
-	if err == nil {
-		for _, alert := range depAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			summary.Add(alert.Advisory.Severity)
-			findings = append(findings, fmt.Sprintf("- [%s] %s: %s (%s)",
-				strings.ToUpper(alert.Advisory.Severity), alert.Dependency.Package.Name,
-				alert.Advisory.Summary, alert.Advisory.CVEID))
+
+	if commandOptions.DryRun {
+		plannedTargets, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry)
+		if err != nil {
+			return err
 		}
-	}
+		workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(plannedTargets))
 
-	// Secret scanning
-	secretAlerts, err := fetchSecretScanningAlerts(target)
-	if err != nil {
-		cli.Print("%s %s: failed to fetch secret scanning alerts: %v\n", cli.WarningStyle.Render(">>"), target, err)
-		fetchErrors++
-	}
-	if err == nil {
-		for _, alert := range secretAlerts {
-			if alert.State != "open" {
-				continue
-			}
-			summary.Add("high")
-			findings = append(findings, fmt.Sprintf("- [HIGH] Secret: %s (#%d)", alert.SecretType, alert.Number))
+		// Dry-run only needs target resolution; it should not require `gh` to be installed or call the GitHub API.
+		cli.Blank()
+		cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("Workers: %d", workerCount)))
+		for _, target := range plannedTargets {
+			cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("[dry-run] Would scan: %s", target)))
 		}
-	}
-
-	if fetchErrors == 3 {
-		return coreerr.E("security.createJobForTarget", fmt.Sprintf("failed to fetch any alerts for %s", target), nil)
-	}
-
-	if summary.Total == 0 {
-		cli.Print("%s %s: %s\n", cli.SuccessStyle.Render(">>"), target, "No open findings")
+		if issueRepoTarget.FullName != "" {
+			cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("[dry-run] Would create summary issue in: %s", issueRepoTarget.FullName)))
+		}
+		cli.Blank()
 		return nil
 	}
 
-	// Build issue body
-	title := fmt.Sprintf("Security scan: %s", target)
-	body := buildJobIssueBody(target, summary, findings)
+	// Validate the target specification before any gh invocation.
+	if _, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry); err != nil {
+		return err
+	}
 
-	for i := range jobsCopies {
-		issueTitle := title
-		if jobsCopies > 1 {
-			issueTitle = fmt.Sprintf("%s (#%d)", title, i+1)
-		}
+	if err := checkGitHubCLI(); err != nil {
+		return err
+	}
 
-		if jobsDryRun {
-			cli.Blank()
-			cli.Print("%s %s\n", cli.DimStyle.Render("[dry-run] Would create issue:"), issueTitle)
-			cli.Print("%s %s\n", cli.DimStyle.Render("  Repo:"), jobsIssueRepo)
-			cli.Print("%s %s\n", cli.DimStyle.Render("  Labels:"), "type:security-scan,repo:"+target)
-			cli.Print("%s %d findings\n", cli.DimStyle.Render("  Findings:"), summary.Total)
+	targets, err := resolveJobTargets(commandOptions.Targets, registry)
+	if err != nil {
+		return err
+	}
+	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
+
+	results := runJobWorkers(targets, workerCount)
+	var successful []jobRepoResult
+	overall := &AlertSummary{}
+	targetErrors := map[string]error{}
+	for _, result := range results {
+		if result.err != nil {
+			targetErrors[result.repo.Repo] = result.err
 			continue
 		}
 
-		// Create issue via gh CLI
-		cmd := exec.Command("gh", "issue", "create",
-			"--repo", jobsIssueRepo,
-			"--title", issueTitle,
-			"--body", body,
-			"--label", "type:security-scan,repo:"+target,
-		)
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return cli.Wrap(err, fmt.Sprintf("create issue for %s: %s", target, string(output)))
-		}
-
-		issueURL := strings.TrimSpace(string(output))
-		cli.Print("%s %s: %s\n", cli.SuccessStyle.Render(">>"), issueTitle, issueURL)
-
-		// Record metrics
-		_ = ai.Record(ai.Event{
-			Type:      "security.job_created",
-			Timestamp: time.Now(),
-			Repo:      target,
-			Data: map[string]any{
-				"issue_repo": jobsIssueRepo,
-				"issue_url":  issueURL,
-				"total":      summary.Total,
-				"critical":   summary.Critical,
-				"high":       summary.High,
-			},
-		})
+		successful = append(successful, result.repo)
+		mergeAlertSummary(overall, &result.repo.Summary)
+	}
+	if err := combineSecurityTargetErrors("security jobs", targetErrors); err != nil {
+		return err
+	}
+	if len(successful) == 0 {
+		return cli.Err("all targets failed to process")
 	}
 
+	cli.Blank()
+	cli.Print("%s %s\n", cli.DimStyle.Render("Security jobs summary:"), overall.String())
+	for _, repo := range successful {
+		cli.Print("  %-32s %s\n", repo.Repo, repo.Summary.PlainString())
+	}
+	cli.Blank()
+
+	if issueRepoTarget.FullName != "" {
+		title := "Security scan summary: " + time.Now().Format("2006-01-02")
+		body := buildJobsIssueBody(overall, successful)
+		issueURL, err := createJobsIssue(issueRepoTarget.FullName, title, body)
+		if err != nil {
+			return err
+		}
+
+		cli.Print("%s %s\n", cli.SuccessStyle.Render(">>"), issueURL)
+		event := buildJobsMetricsEvent(commandOptions, overall, successful, issueURL)
+		event.Duration = time.Since(startedAt)
+		recordSecurityMetricsEvent(event)
+		return nil
+	}
+
+	event := buildJobsMetricsEvent(commandOptions, overall, successful, "")
+	event.Duration = time.Since(startedAt)
+	recordSecurityMetricsEvent(event)
 	return nil
 }
 
-func buildJobIssueBody(target string, summary *AlertSummary, findings []string) string {
-	var sb strings.Builder
+func validateJobsIssueRepository(issueRepository string) (SecurityTarget, error) {
+	if core.Trim(issueRepository) == "" {
+		return SecurityTarget{}, nil
+	}
 
-	fmt.Fprintf(&sb, "## Security Scan: %s\n\n", target)
-	fmt.Fprintf(&sb, "**Summary:** %s\n\n", summary.String())
+	target, err := parseSecurityTarget(issueRepository)
+	if err != nil {
+		return SecurityTarget{}, cli.Err("invalid --issue-repo format: use owner/repo")
+	}
+	return target, nil
+}
 
-	sb.WriteString("### Findings\n\n")
-	if len(findings) > 50 {
-		// Truncate long lists
-		for _, f := range findings[:50] {
-			sb.WriteString(f + "\n")
+func normalizeJobWorkerCount(requested, targetCount int) int {
+	workerCount := requested
+	if workerCount > targetCount {
+		workerCount = targetCount
+	}
+	if workerCount > maxSecurityJobWorkers {
+		workerCount = maxSecurityJobWorkers
+	}
+	if workerCount < 1 {
+		return 1
+	}
+	return workerCount
+}
+
+func loadRegistryForJobs(commandOptions JobsCommandOptions) (*repos.Registry, error) {
+	if core.Trim(commandOptions.Targets) == "" {
+		return nil, nil
+	}
+	if !jobsNeedRegistry(commandOptions.Targets) {
+		return nil, nil
+	}
+	registry, err := loadRegistry(commandOptions.RegistryPath)
+	if err != nil {
+		return nil, err
+	}
+	return registry, nil
+}
+
+func resolveJobTargetsForDryRun(targets string, registry *repos.Registry) ([]string, error) {
+	trimmed := core.Trim(targets)
+	if trimmed == "" {
+		return nil, cli.Err("at least one --targets value required (comma-separated repo list or all)")
+	}
+
+	seen := map[string]struct{}{}
+	var resolved []string
+	addTarget := func(target string) {
+		if _, ok := seen[target]; ok {
+			return
 		}
-		fmt.Fprintf(&sb, "\n... and %d more\n", len(findings)-50)
-	} else {
-		for _, f := range findings {
-			sb.WriteString(f + "\n")
+		seen[target] = struct{}{}
+		resolved = append(resolved, target)
+	}
+
+	if trimmed == "all" {
+		if registry == nil {
+			return nil, cli.Err("--targets=all requires a repository registry for dry-run")
+		}
+		if len(registry.List()) == 0 {
+			return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
+		}
+		for _, repo := range registry.List() {
+			addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
+		}
+		return resolved, nil
+	}
+
+	for _, part := range core.Split(trimmed, ",") {
+		token := core.Trim(part)
+		if token == "" {
+			continue
+		}
+		if core.Contains(token, "/") {
+			target, err := parseSecurityTarget(token)
+			if err != nil {
+				return nil, cli.Err("invalid target format: use owner/repo")
+			}
+			addTarget(target.FullName)
+			continue
+		}
+		if registry == nil {
+			return nil, cli.Err("registry-backed target %q requires a repository registry", token)
+		}
+		repo, ok := registry.Get(token)
+		if !ok {
+			return nil, cli.Err("repo not found: %s", token)
+		}
+		addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
+	}
+
+	if len(resolved) == 0 {
+		return nil, cli.Err("no targets resolved from --targets")
+	}
+	return resolved, nil
+}
+
+func jobsNeedRegistry(targets string) bool {
+	trimmed := core.Trim(targets)
+	if trimmed == "" || trimmed == "all" {
+		return true
+	}
+
+	for _, part := range core.Split(trimmed, ",") {
+		token := core.Trim(part)
+		if token == "" {
+			continue
+		}
+		if !core.Contains(token, "/") {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveJobTargets(targets string, registry *repos.Registry) ([]string, error) {
+	trimmed := core.Trim(targets)
+	if trimmed == "" {
+		return nil, cli.Err("at least one --targets value required (comma-separated repo list or all)")
+	}
+
+	seen := map[string]struct{}{}
+	var resolved []string
+	addTarget := func(target string) {
+		if _, ok := seen[target]; ok {
+			return
+		}
+		seen[target] = struct{}{}
+		resolved = append(resolved, target)
+	}
+
+	if trimmed == "all" {
+		if registry == nil {
+			return nil, cli.Err("--targets=all requires a repository registry")
+		}
+		liveTargets, err := listGitHubOrgTargets(registry.Org)
+		if err != nil {
+			return nil, err
+		}
+		if len(liveTargets) == 0 {
+			return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
+		}
+		return liveTargets, nil
+	}
+
+	for _, part := range core.Split(trimmed, ",") {
+		token := core.Trim(part)
+		if token == "" {
+			continue
+		}
+		if core.Contains(token, "/") {
+			target, err := parseSecurityTarget(token)
+			if err != nil {
+				return nil, cli.Err("invalid target format: use owner/repo")
+			}
+			addTarget(target.FullName)
+			continue
+		}
+		if registry == nil {
+			return nil, cli.Err("registry-backed target %q requires a repository registry", token)
+		}
+		repo, ok := registry.Get(token)
+		if !ok {
+			return nil, cli.Err("repo not found: %s", token)
+		}
+		addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
+	}
+
+	if len(resolved) == 0 {
+		return nil, cli.Err("no targets resolved from --targets")
+	}
+	return resolved, nil
+}
+
+func runJobWorkers(targets []string, workers int) []jobResult {
+	jobCh := make(chan string)
+	resultCh := make(chan jobResult, len(targets))
+
+	for range workers {
+		go func() {
+			for target := range jobCh {
+				repo, err := collectJobRepoResult(target)
+				resultCh <- jobResult{repo: repo, err: err}
+			}
+		}()
+	}
+
+	for _, target := range targets {
+		jobCh <- target
+	}
+	close(jobCh)
+
+	results := make([]jobResult, 0, len(targets))
+	for range targets {
+		results = append(results, <-resultCh)
+	}
+
+	slices.SortFunc(results, func(a, b jobResult) int {
+		return cmp.Compare(a.repo.Repo, b.repo.Repo)
+	})
+	return results
+}
+
+func collectJobRepoResult(target string) (jobRepoResult, error) {
+	securityTarget, err := parseSecurityTarget(target)
+	if err != nil {
+		return jobRepoResult{}, coreerr.E("security", "invalid target format: use owner/repo", nil)
+	}
+
+	repo := jobRepoResult{Repo: target}
+	dependabotAlerts, dependabotError := collectDependabotAlertsForJobs(securityTarget, "")
+	codeScanningAlerts, codeScanningError := collectCodeScanningAlertsForJobs(securityTarget, ScanCommandOptions{})
+	secretScanningAlerts, secretScanningError := collectSecretScanningAlertsForJobs(securityTarget)
+
+	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
+		return jobRepoResult{}, combineSecurityCollectorErrors(target, map[string]error{
+			"dependabot":      dependabotError,
+			"code-scanning":   codeScanningError,
+			"secret-scanning": secretScanningError,
+		})
+	}
+
+	for _, alert := range buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, "") {
+		repo.Summary.Add(alert.Severity)
+	}
+
+	for _, alert := range codeScanningAlerts {
+		repo.Findings = append(repo.Findings, core.Sprintf("[%s] code-scanning: %s (%s:%d)",
+			core.Upper(alert.Severity),
+			alert.Description,
+			alert.Path,
+			alert.Line,
+		))
+	}
+
+	for _, alert := range dependabotAlerts {
+		repo.Findings = append(repo.Findings, core.Sprintf("[%s] dependabot: %s (%s)",
+			core.Upper(alert.Severity),
+			alert.Summary,
+			alert.CVE,
+		))
+	}
+
+	for _, alert := range secretScanningAlerts {
+		repo.Findings = append(repo.Findings, core.Sprintf("[HIGH] secret-scanning: %s (#%d)", alert.SecretType, alert.Number))
+	}
+
+	return repo, nil
+}
+
+func mergeAlertSummary(dst, src *AlertSummary) {
+	dst.Critical += src.Critical
+	dst.High += src.High
+	dst.Medium += src.Medium
+	dst.Low += src.Low
+	dst.Unknown += src.Unknown
+	dst.Total += src.Total
+}
+
+func buildJobsMetricsEvent(commandOptions JobsCommandOptions, summary *AlertSummary, repos []jobRepoResult, issueURL string) ai.Event {
+	repositoryNames := make([]string, 0, len(repos))
+	for _, repository := range repos {
+		repositoryNames = append(repositoryNames, repository.Repo)
+	}
+
+	eventRepository := ""
+	switch {
+	case commandOptions.IssueRepository != "":
+		eventRepository = commandOptions.IssueRepository
+	case len(repositoryNames) == 1:
+		eventRepository = repositoryNames[0]
+	}
+
+	data := map[string]any{
+		"target_spec": commandOptions.Targets,
+		"targets":     len(repos),
+		"repos":       repositoryNames,
+		"total":       summary.Total,
+		"critical":    summary.Critical,
+		"high":        summary.High,
+		"medium":      summary.Medium,
+		"low":         summary.Low,
+		"unknown":     summary.Unknown,
+	}
+	if commandOptions.IssueRepository != "" {
+		data["issue_repo"] = commandOptions.IssueRepository
+	}
+	if issueURL != "" {
+		data["issue_url"] = issueURL
+	}
+
+	return ai.Event{
+		Type: "security.jobs",
+		Repo: eventRepository,
+		Data: data,
+	}
+}
+
+func createJobsIssue(issueRepo, title, body string) (string, error) {
+	c := jobsProcessCore()
+	result := c.Process().Run(context.Background(), "gh",
+		"issue", "create",
+		"--repo", issueRepo,
+		"--title", title,
+		"--body", body,
+		"--label", "type:security-scan",
+	)
+
+	output := processResultOutput(result.Value)
+	if !result.OK {
+		message := "create summary issue"
+		if output != "" {
+			message += ": " + output
+		}
+		return "", cli.Wrap(coreResultError(result), message)
+	}
+	return core.Trim(output), nil
+}
+
+func processResultOutput(value any) string {
+	switch output := value.(type) {
+	case string:
+		return output
+	case []byte:
+		return string(output)
+	case nil:
+		return ""
+	default:
+		return core.Sprint(output)
+	}
+}
+
+func buildJobsIssueBody(summary *AlertSummary, repos []jobRepoResult) string {
+	builder := core.NewBuilder()
+
+	builder.WriteString("## Security Scan Summary\n\n")
+	builder.WriteString("Summary: " + summary.PlainString() + "\n\n")
+	builder.WriteString("### Repositories\n\n")
+	for _, repository := range repos {
+		builder.WriteString("- " + repository.Repo + " — " + repository.Summary.PlainString() + "\n")
+		for findingIndex, finding := range repository.Findings {
+			if findingIndex == 3 {
+				builder.WriteString("  - ...\n")
+				break
+			}
+			builder.WriteString("  - " + finding + "\n")
 		}
 	}
 
-	sb.WriteString("\n### Checklist\n\n")
-	sb.WriteString("- [ ] Review findings above\n")
-	sb.WriteString("- [ ] Triage by severity (critical/high first)\n")
-	sb.WriteString("- [ ] Create PRs for fixes\n")
-	sb.WriteString("- [ ] Verify fixes resolve alerts\n")
+	builder.WriteString("\n### Checklist\n\n")
+	builder.WriteString("- [ ] Triage critical and high findings first\n")
+	builder.WriteString("- [ ] Create fix PRs for affected repositories\n")
+	builder.WriteString("- [ ] Re-run security scans after remediation\n")
 
-	sb.WriteString("\n### Instructions\n\n")
-	sb.WriteString("1. Claim this issue by assigning yourself\n")
-	fmt.Fprintf(&sb, "2. Run `core security alerts --target %s` for the latest findings\n", target)
-	sb.WriteString("3. Work through the checklist above\n")
-	sb.WriteString("4. Close this issue when all findings are addressed\n")
-
-	return sb.String()
+	return builder.String()
 }

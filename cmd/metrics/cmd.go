@@ -1,74 +1,84 @@
-// Package metrics implements the metrics viewing command.
+// Package metrics exposes `core ai metrics`, for example:
+//
+//	core ai metrics --since 7d
+//	core ai metrics --json
 package metrics
 
 import (
-	"encoding/json"
-	"fmt"
+	"cmp"
+	"slices"
 	"time"
 
-	"dappco.re/go/core/ai/ai"
-	"dappco.re/go/core/i18n"
-	coreerr "dappco.re/go/core/log"
-	"forge.lthn.ai/core/cli/pkg/cli"
+	"dappco.re/go/ai/ai"
+	"dappco.re/go/cli/pkg/cli"
+	"dappco.re/go/core"
+	"dappco.re/go/i18n"
+	coreerr "dappco.re/go/log"
 )
 
-var (
-	metricsSince string
-	metricsJSON  bool
-)
-
-var metricsCmd = &cli.Command{
-	Use:   "metrics",
-	Short: i18n.T("cmd.ai.metrics.short"),
-	Long:  i18n.T("cmd.ai.metrics.long"),
-	RunE: func(cmd *cli.Command, args []string) error {
-		return runMetrics()
-	},
+// MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures one `core ai metrics` invocation.
+type MetricsCommandOptions struct {
+	SinceWindow time.Duration
+	JSONOutput  bool
 }
 
-func initMetricsFlags() {
-	metricsCmd.Flags().StringVar(&metricsSince, "since", "7d", i18n.T("cmd.ai.metrics.flag.since"))
-	metricsCmd.Flags().BoolVar(&metricsJSON, "json", false, i18n.T("common.flag.json"))
-}
-
-// AddMetricsCommand adds the 'metrics' command to the parent.
+// core ai metrics --since 7d
+// core ai metrics --json
 func AddMetricsCommand(parent *cli.Command) {
-	initMetricsFlags()
-	parent.AddCommand(metricsCmd)
-}
-
-func runMetrics() error {
-	since, err := parseDuration(metricsSince)
-	if err != nil {
-		return cli.Err("invalid --since value %q: %v", metricsSince, err)
+	if commandExists(parent, "metrics") {
+		return
 	}
 
-	sinceTime := time.Now().Add(-since)
-	events, err := ai.ReadEvents(sinceTime)
+	options := &MetricsCommandOptions{
+		SinceWindow: 168 * time.Hour,
+	}
+
+	metricsCommand := &cli.Command{
+		Use:   "metrics",
+		Short: i18n.T("cmd.ai.metrics.short"),
+		Long:  i18n.T("cmd.ai.metrics.long"),
+		RunE: func(cmd *cli.Command, args []string) error {
+			return runMetrics(*options)
+		},
+	}
+
+	metricsCommand.Flags().Var(&sinceDurationFlagValue{target: &options.SinceWindow}, "since", i18n.T("cmd.ai.metrics.flag.since"))
+	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, i18n.T("common.flag.json"))
+
+	parent.AddCommand(metricsCommand)
+}
+
+func commandExists(parent *cli.Command, name string) bool {
+	for _, child := range parent.Commands() {
+		if child.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
+func runMetrics(options MetricsCommandOptions) error {
+	events, err := ai.ReadEvents(time.Now().Add(-options.SinceWindow))
 	if err != nil {
 		return cli.WrapVerb(err, "read", "metrics")
 	}
 
-	if metricsJSON {
-		summary := ai.Summary(events)
-		output, err := json.MarshalIndent(summary, "", "  ")
+	summary := ai.Summary(events)
+	if options.JSONOutput {
+		output, err := marshalMetricsSummaryJSON(summary)
 		if err != nil {
-			return cli.Wrap(err, "marshal JSON output")
+			return cli.Wrap(err, "marshal metrics JSON")
 		}
 		cli.Text(string(output))
 		return nil
 	}
 
-	summary := ai.Summary(events)
-
 	cli.Blank()
-	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), metricsSince)
-	total, _ := summary["total"].(int)
-	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), total)
+	cli.Print("%s %s\n", cli.DimStyle.Render("Period:"), formatDurationShort(options.SinceWindow))
+	cli.Print("%s %d\n", cli.DimStyle.Render("Total events:"), len(events))
 	cli.Blank()
 
-	// By type
-	if byType, ok := summary["by_type"].([]map[string]any); ok && len(byType) > 0 {
+	if byType := summaryCountPairs(summary, "by_type"); len(byType) > 0 {
 		cli.Print("%s\n", cli.DimStyle.Render("By type:"))
 		for _, entry := range byType {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
@@ -76,8 +86,7 @@ func runMetrics() error {
 		cli.Blank()
 	}
 
-	// By repo
-	if byRepo, ok := summary["by_repo"].([]map[string]any); ok && len(byRepo) > 0 {
+	if byRepo := summaryCountPairs(summary, "by_repo"); len(byRepo) > 0 {
 		cli.Print("%s\n", cli.DimStyle.Render("By repo:"))
 		for _, entry := range byRepo {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
@@ -85,27 +94,22 @@ func runMetrics() error {
 		cli.Blank()
 	}
 
-	// By agent
-	if byAgent, ok := summary["by_agent"].([]map[string]any); ok && len(byAgent) > 0 {
-		cli.Print("%s\n", cli.DimStyle.Render("By contributor:"))
+	if byAgent := summaryCountPairs(summary, "by_agent"); len(byAgent) > 0 {
+		cli.Print("%s\n", cli.DimStyle.Render("By agent:"))
 		for _, entry := range byAgent {
 			cli.Print("  %-30s %v\n", entry["key"], entry["count"])
 		}
 		cli.Blank()
 	}
 
-	// Recent events
-	if recent, ok := summary["events"].([]map[string]any); ok && len(recent) > 0 {
+	if recent, ok := summary["recent"].([]ai.Event); ok && len(recent) > 0 {
 		cli.Print("%s\n", cli.DimStyle.Render("Recent events:"))
-		for _, entry := range recent {
-			ts, _ := entry["timestamp"].(time.Time)
-			agent, _ := entry["agent_id"].(string)
-			repo, _ := entry["repo"].(string)
+		for _, event := range recent {
 			cli.Print("  %-20s %-24s %-20s %-20s\n",
-				ts.Format(time.RFC3339),
-				entry["type"],
-				agent,
-				repo,
+				event.Timestamp.Format(time.RFC3339),
+				event.Type,
+				event.AgentID,
+				event.Repo,
 			)
 		}
 		cli.Blank()
@@ -118,32 +122,131 @@ func runMetrics() error {
 	return nil
 }
 
-// parseDuration parses a human-friendly duration like "7d", "24h", "30d".
-func parseDuration(s string) (time.Duration, error) {
-	if len(s) < 2 {
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("invalid duration: %s", s), nil)
+// parseSinceDuration("7d") returns 168 hours for the default metrics window shorthand.
+func parseSinceDuration(input string) (time.Duration, error) {
+	trimmed := core.Trim(input)
+	if trimmed == "" {
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
 
-	unit := s[len(s)-1]
-	value := s[:len(s)-1]
-
-	var n int
-	if _, err := fmt.Sscanf(value, "%d", &n); err != nil {
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("invalid duration: %s", s), nil)
+	if duration, err := time.ParseDuration(trimmed); err == nil {
+		if duration <= 0 {
+			return 0, coreerr.E("metrics", "duration must be positive: "+input, nil)
+		}
+		return duration, nil
 	}
 
+	if len(trimmed) < 2 {
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
+	}
+
+	unit := trimmed[len(trimmed)-1]
+	value := trimmed[:len(trimmed)-1]
+
+	n, ok := parseShorthandDurationValue(value)
+	if !ok {
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
+	}
 	if n <= 0 {
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("duration must be positive: %s", s), nil)
+		return 0, coreerr.E("metrics", "duration must be positive: "+input, nil)
 	}
 
 	switch unit {
 	case 'd':
 		return time.Duration(n) * 24 * time.Hour, nil
-	case 'h':
-		return time.Duration(n) * time.Hour, nil
-	case 'm':
-		return time.Duration(n) * time.Minute, nil
 	default:
-		return 0, coreerr.E("metrics.parseDuration", fmt.Sprintf("unknown unit %c in duration: %s", unit, s), nil)
+		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
 	}
+}
+
+func parseShorthandDurationValue(value string) (int, bool) {
+	if value == "" {
+		return 0, false
+	}
+
+	maxInt := int(^uint(0) >> 1)
+	n := 0
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		digit := int(c - '0')
+		if n > (maxInt-digit)/10 {
+			return 0, false
+		}
+		n = n*10 + digit
+	}
+	return n, true
+}
+
+func formatDurationShort(duration time.Duration) string {
+	switch {
+	case duration == 0:
+		return "0s"
+	case duration%time.Hour == 0:
+		return core.Sprintf("%dh", duration/time.Hour)
+	case duration%time.Minute == 0:
+		return core.Sprintf("%dm", duration/time.Minute)
+	default:
+		return duration.String()
+	}
+}
+
+type sinceDurationFlagValue struct {
+	target *time.Duration
+}
+
+func (v *sinceDurationFlagValue) String() string {
+	if v == nil || v.target == nil {
+		return ""
+	}
+	return v.target.String()
+}
+
+func (v *sinceDurationFlagValue) Set(input string) error {
+	duration, err := parseSinceDuration(input)
+	if err != nil {
+		return err
+	}
+	*v.target = duration
+	return nil
+}
+
+func (v *sinceDurationFlagValue) Type() string {
+	return "duration"
+}
+
+func summaryCountPairs(summary map[string]any, key string) []map[string]any {
+	counts, ok := summary[key].(map[string]int)
+	if !ok || len(counts) == 0 {
+		return nil
+	}
+
+	type entry struct {
+		key   string
+		count int
+	}
+
+	entries := make([]entry, 0, len(counts))
+	for k, v := range counts {
+		entries = append(entries, entry{key: k, count: v})
+	}
+
+	slices.SortFunc(entries, func(a, b entry) int {
+		if result := cmp.Compare(b.count, a.count); result != 0 {
+			return result
+		}
+		return cmp.Compare(a.key, b.key)
+	})
+
+	result := make([]map[string]any, len(entries))
+	for i, entry := range entries {
+		result[i] = map[string]any{"key": entry.key, "count": entry.count}
+	}
+	return result
+}
+
+func marshalMetricsSummaryJSON(summary map[string]any) ([]byte, error) {
+	return []byte(core.JSONMarshalString(summary)), nil
 }
