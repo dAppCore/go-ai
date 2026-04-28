@@ -2,13 +2,13 @@ package security
 
 import (
 	"cmp"
-	"context"
+	"os/exec"
 	"slices"
 	"time"
 
+	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/core"
 	"dappco.re/go/i18n"
 	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
@@ -18,7 +18,6 @@ var (
 	collectDependabotAlertsForJobs     = collectDepAlerts
 	collectCodeScanningAlertsForJobs   = collectScanAlerts
 	collectSecretScanningAlertsForJobs = collectSecretAlerts
-	jobsProcessCore                    = cli.Core
 )
 
 const maxSecurityJobWorkers = 32
@@ -457,37 +456,22 @@ func buildJobsMetricsEvent(commandOptions JobsCommandOptions, summary *AlertSumm
 }
 
 func createJobsIssue(issueRepo, title, body string) (string, error) {
-	c := jobsProcessCore()
-	result := c.Process().Run(context.Background(), "gh",
+	cmd := exec.Command("gh",
 		"issue", "create",
 		"--repo", issueRepo,
 		"--title", title,
 		"--body", body,
 		"--label", "type:security-scan",
 	)
-
-	output := processResultOutput(result.Value)
-	if !result.OK {
+	output, err := cmd.CombinedOutput()
+	if err != nil {
 		message := "create summary issue"
-		if output != "" {
-			message += ": " + output
+		if text := core.Trim(string(output)); text != "" {
+			message += ": " + text
 		}
-		return "", cli.Wrap(coreResultError(result), message)
+		return "", cli.Wrap(err, message)
 	}
-	return core.Trim(output), nil
-}
-
-func processResultOutput(value any) string {
-	switch output := value.(type) {
-	case string:
-		return output
-	case []byte:
-		return string(output)
-	case nil:
-		return ""
-	default:
-		return core.Sprint(output)
-	}
+	return core.Trim(string(output)), nil
 }
 
 func buildJobsIssueBody(summary *AlertSummary, repos []jobRepoResult) string {

@@ -9,9 +9,9 @@ import (
 	"slices"
 	"time"
 
+	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/core"
 	"dappco.re/go/i18n"
 	coreerr "dappco.re/go/log"
 )

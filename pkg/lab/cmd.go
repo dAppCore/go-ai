@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/core"
 )
 
 const defaultBindAddr = "127.0.0.1:8080"

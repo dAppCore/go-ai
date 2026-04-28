@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"dappco.re/go/core"
+	"dappco.re/go"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
