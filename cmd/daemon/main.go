@@ -48,7 +48,9 @@ func runWithContext(ctx context.Context, cfg Config) error {
 	}
 	defer func() {
 		if cfg.PIDFile != "" {
-			_ = os.Remove(cfg.PIDFile)
+			if err := os.Remove(cfg.PIDFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+				fmt.Fprintln(os.Stderr, "daemon pid cleanup:", err)
+			}
 		}
 	}()
 
@@ -59,7 +61,9 @@ func runWithContext(ctx context.Context, cfg Config) error {
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = svc.Shutdown(shutdownCtx)
+		if err := svc.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintln(os.Stderr, "daemon mcp shutdown:", err)
+		}
 	}()
 
 	errCh := make(chan error, 4)
@@ -95,7 +99,9 @@ func runWithContext(ctx context.Context, cfg Config) error {
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			_ = healthServer.Shutdown(shutdownCtx)
+			if err := healthServer.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fmt.Fprintln(os.Stderr, "daemon health shutdown:", err)
+			}
 		}()
 	}
 
@@ -176,7 +182,9 @@ func startHealth(ctx context.Context, addr string) (*http.Server, error) {
 	server := &http.Server{Handler: mux}
 	go func() {
 		<-ctx.Done()
-		_ = server.Shutdown(context.Background())
+		if err := server.Shutdown(context.Background()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Fprintln(os.Stderr, "daemon health shutdown:", err)
+		}
 	}()
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

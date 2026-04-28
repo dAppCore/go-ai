@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -19,20 +20,28 @@ func (s *Service) ServeUnix(ctx context.Context, socketPath string) error {
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
 		return err
 	}
-	_ = os.Remove(socketPath)
+	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = listener.Close()
-		_ = os.Remove(socketPath)
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			fmt.Fprintln(os.Stderr, "MCP Unix listener close error:", err)
+		}
+		if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintln(os.Stderr, "MCP Unix socket cleanup error:", err)
+		}
 	}()
 
 	go func() {
 		<-ctx.Done()
-		_ = listener.Close()
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			fmt.Fprintln(os.Stderr, "MCP Unix listener close error:", err)
+		}
 	}()
 
 	for {
