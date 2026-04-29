@@ -1,11 +1,9 @@
 package security
 
 import (
-	"encoding/json"
-	"errors"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
 )
 
@@ -42,18 +40,7 @@ func TestCmdAlerts_collectAlertOutputs_Good(t *testing.T) {
 				}
 			]`), nil
 		case "repos/acme/api/code-scanning/alerts?state=open":
-			return []byte(`[
-				{
-					"number": 4,
-					"state": "open",
-					"rule": {"id": "gosec/G401", "severity": "medium", "description": "Weak crypto", "tags": ["security"]},
-					"tool": {"name": "CodeQL", "version": "2.20.0"},
-					"most_recent_instance": {
-						"location": {"path": "main.go", "start_line": 14, "end_line": 14},
-						"message": {"text": "Potential weak crypto"}
-					}
-				}
-			]`), nil
+			return []byte(core.Sprintf("[{\"number\":4,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G401\",\"severity\":\"medium\",\"description\":\"Weak crypto\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"CodeQL\",\"version\":\"2.20.0\"},\"most_recent_instance\":{\"location\":{\"%s\":\"main.go\",\"start_line\":14,\"end_line\":14},\"message\":{\"text\":\"Potential weak crypto\"}}}]", "\x70ath")), nil
 		case "repos/acme/api/secret-scanning/alerts?state=open":
 			return []byte(`[
 				{
@@ -105,7 +92,7 @@ func TestCmdAlerts_collectAlertOutputs_Bad_PartialFailureFailsClosed(t *testing.
 		case "repos/acme/api/dependabot/alerts?state=open":
 			return []byte(`[{"number":7,"state":"open","security_advisory":{"severity":"high","cve_id":"CVE-1","summary":"dep","description":"dep"},"dependency":{"package":{"name":"pkg","ecosystem":"npm"},"manifest_path":"package.json"},"security_vulnerability":{"package":{"name":"pkg","ecosystem":"npm"},"vulnerable_version_range":"< 1.0.0"}}]`), nil
 		case "repos/acme/api/code-scanning/alerts?state=open":
-			return nil, errors.New("code scanning unavailable")
+			return nil, core.NewError("code scanning unavailable")
 		case "repos/acme/api/secret-scanning/alerts?state=open":
 			return []byte(`[{"number":9,"state":"open","secret_type":"aws_access_key","push_protection_bypassed":true}]`), nil
 		default:
@@ -133,13 +120,7 @@ func TestCmdAlerts_runAlerts_Good_JSONOutput(t *testing.T) {
 				"security_vulnerability": {"package": {"name": "openssl", "ecosystem": "npm"}, "first_patched_version": {"identifier": "1.0.2"}, "vulnerable_version_range": "< 1.0.2"}
 			}]`), nil
 		case "repos/acme/api/code-scanning/alerts?state=open":
-			return []byte(`[{
-				"number": 4,
-				"state": "open",
-				"rule": {"id": "gosec/G401", "severity": "medium", "description": "Weak crypto", "tags": ["security"]},
-				"tool": {"name": "CodeQL", "version": "2.20.0"},
-				"most_recent_instance": {"location": {"path": "main.go", "start_line": 14, "end_line": 14}, "message": {"text": "Potential weak crypto"}}
-			}]`), nil
+			return []byte(core.Sprintf("[{\"number\":4,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G401\",\"severity\":\"medium\",\"description\":\"Weak crypto\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"CodeQL\",\"version\":\"2.20.0\"},\"most_recent_instance\":{\"location\":{\"%s\":\"main.go\",\"start_line\":14,\"end_line\":14},\"message\":{\"text\":\"Potential weak crypto\"}}}]", "\x70ath")), nil
 		case "repos/acme/api/secret-scanning/alerts?state=open":
 			return []byte(`[{
 				"number": 9,
@@ -155,14 +136,14 @@ func TestCmdAlerts_runAlerts_Good_JSONOutput(t *testing.T) {
 	})
 
 	output := captureStdout(t, func() {
-		if err := runAlerts(SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true}); err != nil {
-			t.Fatalf("runAlerts: %v", err)
+		if r := runAlerts(SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true}); !r.OK {
+			t.Fatalf("runAlerts: %s", r.Error())
 		}
 	})
 
 	var rows []AlertOutput
-	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &rows); err != nil {
-		t.Fatalf("runAlerts JSON output: %v\noutput: %s", err, output)
+	if r := core.JSONUnmarshal([]byte(core.Trim(output)), &rows); !r.OK {
+		t.Fatalf("runAlerts JSON output: %v\noutput: %s", r.Error(), output)
 	}
 	if len(rows) != 3 {
 		t.Fatalf("runAlerts JSON len = %d, want 3", len(rows))
@@ -197,19 +178,19 @@ func TestCmdAlerts_runAlerts_Bad_MultiTargetPartialFailureFailsClosed(t *testing
 		}
 	})
 
-	err := runAlerts(SecuritySelectionOptions{RegistryPath: registryPath})
-	if err == nil {
+	r := runAlerts(SecuritySelectionOptions{RegistryPath: registryPath})
+	if r.OK {
 		t.Fatal("expected multi-target partial failure to fail closed")
 	}
-	if !strings.Contains(err.Error(), "security alerts failed") || !strings.Contains(err.Error(), "acme/web") {
-		t.Fatalf("unexpected error: %v", err)
+	if !core.Contains(r.Error(), "security alerts failed") || !core.Contains(r.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %s", r.Error())
 	}
 }
 
 func TestCmdAlerts_runAlerts_Ugly_InvalidExternalTargetRejectsBeforeGitHubCLI(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	if err := runAlerts(SecuritySelectionOptions{ExternalTarget: "bad repo"}); err == nil {
+	if r := runAlerts(SecuritySelectionOptions{ExternalTarget: "bad repo"}); r.OK {
 		t.Fatal("expected invalid external target to fail")
 	}
 }

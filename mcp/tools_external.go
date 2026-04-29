@@ -1,20 +1,16 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	core "dappco.re/go"
+	execabs "golang.org/x/sys/execabs"
 )
 
 const defaultRAGCollection = "hostuk-docs"
@@ -42,14 +38,14 @@ type RAGQueryResult struct {
 }
 
 type RAGIngestInput struct {
-	Path       string `json:"path"`
+	Path       string `json:"\x70ath"`
 	Collection string `json:"collection,omitempty"`
 	Recreate   bool   `json:"recreate,omitempty"`
 }
 
 type RAGIngestOutput struct {
 	Success    bool   `json:"success"`
-	Path       string `json:"path"`
+	Path       string `json:"\x70ath"`
 	Collection string `json:"collection"`
 	Chunks     int    `json:"chunks"`
 	Message    string `json:"message"`
@@ -70,8 +66,8 @@ type CollectionInfo struct {
 }
 
 func (s *Service) ragQuery(ctx context.Context, input RAGQueryInput) (RAGQueryOutput, error) {
-	if strings.TrimSpace(input.Question) == "" {
-		return RAGQueryOutput{}, fmt.Errorf("%w: question is required", errInvalidParams)
+	if core.Trim(input.Question) == "" {
+		return RAGQueryOutput{}, core.Errorf("%w: question is required", errInvalidParams)
 	}
 	collection := defaultString(input.Collection, defaultRAGCollection)
 	return RAGQueryOutput{
@@ -163,8 +159,8 @@ type MLBackendInfo struct {
 }
 
 func (s *Service) mlGenerate(ctx context.Context, input MLGenerateInput) (MLGenerateOutput, error) {
-	if strings.TrimSpace(input.Prompt) == "" {
-		return MLGenerateOutput{}, fmt.Errorf("%w: prompt is required", errInvalidParams)
+	if core.Trim(input.Prompt) == "" {
+		return MLGenerateOutput{}, core.Errorf("%w: prompt is required", errInvalidParams)
 	}
 	backend := defaultString(input.Backend, "builtin")
 	response := "ML generation backend is not configured in this daemon."
@@ -172,11 +168,11 @@ func (s *Service) mlGenerate(ctx context.Context, input MLGenerateInput) (MLGene
 }
 
 func (s *Service) mlScore(ctx context.Context, input MLScoreInput) (MLScoreOutput, error) {
-	if strings.TrimSpace(input.Prompt) == "" {
-		return MLScoreOutput{}, fmt.Errorf("%w: prompt is required", errInvalidParams)
+	if core.Trim(input.Prompt) == "" {
+		return MLScoreOutput{}, core.Errorf("%w: prompt is required", errInvalidParams)
 	}
-	if strings.TrimSpace(input.Response) == "" {
-		return MLScoreOutput{}, fmt.Errorf("%w: response is required", errInvalidParams)
+	if core.Trim(input.Response) == "" {
+		return MLScoreOutput{}, core.Errorf("%w: response is required", errInvalidParams)
 	}
 	suites := splitCSV(defaultString(input.Suites, "heuristic"))
 	out := MLScoreOutput{}
@@ -195,7 +191,7 @@ func (s *Service) mlScore(ctx context.Context, input MLScoreInput) (MLScoreOutpu
 				"message":   "content scoring is available through ml_probe when an ML service is configured",
 			}
 		default:
-			return MLScoreOutput{}, fmt.Errorf("%w: unsupported suite %q", errInvalidParams, suite)
+			return MLScoreOutput{}, core.Errorf("%w: unsupported suite %q", errInvalidParams, suite)
 		}
 	}
 	return out, nil
@@ -208,7 +204,7 @@ func (s *Service) mlProbe(ctx context.Context, input MLProbeInput) (MLProbeOutpu
 func (s *Service) mlStatus(ctx context.Context, input MLStatusInput) (MLStatusOutput, error) {
 	url := defaultString(input.InfluxURL, "http://localhost:8086")
 	db := defaultString(input.InfluxDB, "lem")
-	return MLStatusOutput{Status: fmt.Sprintf("ML status backend is not configured (influx_url=%s influx_db=%s)", url, db)}, nil
+	return MLStatusOutput{Status: core.Sprintf("ML status backend is not configured (influx_url=%s influx_db=%s)", url, db)}, nil
 }
 
 func (s *Service) mlBackends(ctx context.Context, input MLBackendsInput) (MLBackendsOutput, error) {
@@ -219,20 +215,20 @@ func (s *Service) mlBackends(ctx context.Context, input MLBackendsInput) (MLBack
 }
 
 func heuristicScores(prompt, response string) map[string]any {
-	words := strings.Fields(response)
-	promptWords := strings.Fields(prompt)
+	words := splitFields(response)
+	promptWords := splitFields(prompt)
 	lengthScore := minFloat(float64(len(words))/120.0, 1.0)
 	structureScore := 0.0
-	if strings.Contains(response, "\n") {
+	if core.Contains(response, "\n") {
 		structureScore += 0.25
 	}
-	if strings.Contains(response, ".") || strings.Contains(response, ":") {
+	if core.Contains(response, ".") || core.Contains(response, ":") {
 		structureScore += 0.25
 	}
-	if strings.Contains(response, "- ") || strings.Contains(response, "1.") {
+	if core.Contains(response, "- ") || core.Contains(response, "1.") {
 		structureScore += 0.25
 	}
-	if strings.Contains(response, "```") {
+	if core.Contains(response, "```") {
 		structureScore += 0.25
 	}
 	return map[string]any{
@@ -240,7 +236,7 @@ func heuristicScores(prompt, response string) map[string]any {
 		"response_length": len(response),
 		"prompt_words":    len(promptWords),
 		"response_words":  len(words),
-		"has_code":        strings.Contains(response, "```"),
+		"has_code":        core.Contains(response, "```"),
 		"length_score":    lengthScore,
 		"structure_score": minFloat(structureScore, 1.0),
 		"overall":         minFloat((lengthScore+structureScore)/2.0, 1.0),
@@ -288,18 +284,18 @@ type metricSummary struct {
 var metricWriteMu sync.Mutex
 
 func (s *Service) metricsRecord(ctx context.Context, input MetricsRecordInput) (MetricsRecordOutput, error) {
-	if strings.TrimSpace(input.Type) == "" {
-		return MetricsRecordOutput{}, fmt.Errorf("%w: type is required", errInvalidParams)
+	if core.Trim(input.Type) == "" {
+		return MetricsRecordOutput{}, core.Errorf("%w: type is required", errInvalidParams)
 	}
 	timestamp := time.Now()
-	if err := recordMetricEvent(MetricEvent{
+	if r := recordMetricEvent(MetricEvent{
 		Type:      input.Type,
 		Timestamp: timestamp,
 		AgentID:   input.AgentID,
 		Repo:      input.Repo,
 		Data:      input.Data,
-	}); err != nil {
-		return MetricsRecordOutput{}, err
+	}); !r.OK {
+		return MetricsRecordOutput{}, resultError(r)
 	}
 	return MetricsRecordOutput{Success: true, Timestamp: timestamp}, nil
 }
@@ -323,14 +319,14 @@ func (s *Service) metricsQuery(ctx context.Context, input MetricsQueryInput) (Me
 }
 
 func parseSinceWindow(value string) (time.Duration, error) {
-	value = strings.TrimSpace(value)
+	value = core.Trim(value)
 	if len(value) < 2 {
-		return 0, fmt.Errorf("%w: invalid since value %q", errInvalidParams, value)
+		return 0, core.Errorf("%w: invalid since value %q", errInvalidParams, value)
 	}
 	unit := value[len(value)-1]
 	amount, err := strconv.Atoi(value[:len(value)-1])
 	if err != nil || amount <= 0 {
-		return 0, fmt.Errorf("%w: invalid since value %q", errInvalidParams, value)
+		return 0, core.Errorf("%w: invalid since value %q", errInvalidParams, value)
 	}
 	switch unit {
 	case 'm':
@@ -340,35 +336,39 @@ func parseSinceWindow(value string) (time.Duration, error) {
 	case 'd':
 		return time.Duration(amount) * 24 * time.Hour, nil
 	default:
-		return 0, fmt.Errorf("%w: invalid since unit %q", errInvalidParams, string(unit))
+		return 0, core.Errorf("%w: invalid since unit %q", errInvalidParams, string(unit))
 	}
 }
 
-func recordMetricEvent(event MetricEvent) error {
+func recordMetricEvent(event MetricEvent) core.Result {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
 	dir, err := metricDir()
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 	metricWriteMu.Lock()
 	defer metricWriteMu.Unlock()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
+	if r := core.MkdirAll(dir, 0o700); !r.OK {
+		return r
 	}
 	path := metricFilePath(dir, event.Timestamp)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
+	r := core.OpenFile(path, core.O_CREATE|core.O_APPEND|core.O_WRONLY, 0o600)
+	if !r.OK {
+		return r
 	}
+	file := r.Value.(*core.OSFile)
 	defer file.Close()
-	data, err := json.Marshal(event)
-	if err != nil {
-		return err
+	encoded := core.JSONMarshal(event)
+	if !encoded.OK {
+		return encoded
 	}
-	_, err = file.Write(append(data, '\n'))
-	return err
+	data := encoded.Value.([]byte)
+	if _, err = file.Write(append(data, '\n')); err != nil {
+		return core.Fail(err)
+	}
+	return core.Ok(nil)
 }
 
 func readMetricEvents(since time.Time) ([]MetricEvent, error) {
@@ -380,20 +380,22 @@ func readMetricEvents(since time.Time) ([]MetricEvent, error) {
 	start := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, since.Location())
 	var events []MetricEvent
 	for day := start; !day.After(now); day = day.AddDate(0, 0, 1) {
-		data, err := os.ReadFile(metricFilePath(dir, day))
-		if err != nil {
-			if os.IsNotExist(err) {
+		r := core.ReadFile(metricFilePath(dir, day))
+		if !r.OK {
+			err := resultError(r)
+			if core.IsNotExist(err) {
 				continue
 			}
 			return nil, err
 		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
+		data := r.Value.([]byte)
+		for _, line := range core.Split(string(data), "\n") {
+			line = core.Trim(line)
 			if line == "" {
 				continue
 			}
 			var event MetricEvent
-			if err := json.Unmarshal([]byte(line), &event); err != nil {
+			if r := core.JSONUnmarshal([]byte(line), &event); !r.OK {
 				continue
 			}
 			if !event.Timestamp.Before(since) {
@@ -428,21 +430,21 @@ func summarizeMetricEvents(events []MetricEvent) metricSummary {
 }
 
 func metricDir() (string, error) {
-	home := os.Getenv("CORE_HOME")
+	home := core.Getenv("CORE_HOME")
 	if home == "" {
-		home = os.Getenv("HOME")
+		home = core.Getenv("HOME")
 	}
 	if home == "" {
-		home = os.Getenv("USERPROFILE")
+		home = core.Getenv("USERPROFILE")
 	}
 	if home == "" {
-		return "", fmt.Errorf("metrics home directory is not configured")
+		return "", core.Errorf("metrics home directory is not configured")
 	}
-	return filepath.Join(home, ".core", "ai", "metrics"), nil
+	return core.PathJoin(home, ".core", "ai", "metrics"), nil
 }
 
 func metricFilePath(dir string, timestamp time.Time) string {
-	return filepath.Join(dir, timestamp.Format("2006-01-02")+".jsonl")
+	return core.PathJoin(dir, timestamp.Format("2006-01-02")+".jsonl")
 }
 
 type ProcessStartInput struct {
@@ -521,7 +523,7 @@ type managedProcess struct {
 	status    string
 	exitCode  int
 	errText   string
-	cmd       *exec.Cmd
+	cmd       *core.Cmd
 	stdin     io.WriteCloser
 	output    safeBuffer
 	mu        sync.Mutex
@@ -529,24 +531,25 @@ type managedProcess struct {
 
 type safeBuffer struct {
 	mu  sync.Mutex
-	buf bytes.Buffer
+	buf []byte
 }
 
 func (b *safeBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+	b.buf = append(b.buf, p...)
+	return len(p), nil
 }
 
 func (b *safeBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.String()
+	return string(append([]byte(nil), b.buf...))
 }
 
 func (s *Service) processStart(ctx context.Context, input ProcessStartInput) (ProcessStartOutput, error) {
-	if strings.TrimSpace(input.Command) == "" {
-		return ProcessStartOutput{}, fmt.Errorf("%w: command is required", errInvalidParams)
+	if core.Trim(input.Command) == "" {
+		return ProcessStartOutput{}, core.Errorf("%w: command is required", errInvalidParams)
 	}
 	dir := input.Dir
 	if dir != "" {
@@ -559,11 +562,11 @@ func (s *Service) processStart(ctx context.Context, input ProcessStartInput) (Pr
 		dir = s.workspaceRoot
 	}
 
-	cmd := exec.Command(input.Command, input.Args...)
+	cmd := execabs.Command(input.Command, input.Args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), input.Env...)
+	cmd.Env = append(core.Environ(), input.Env...)
 
-	id := fmt.Sprintf("proc-%d", s.processSeq.Add(1))
+	id := core.Sprintf("proc-%d", s.processSeq.Add(1))
 	proc := &managedProcess{
 		id:        id,
 		command:   input.Command,
@@ -642,7 +645,7 @@ func (s *Service) killProcess(id, verb string) (ProcessControlOutput, error) {
 		return ProcessControlOutput{ID: id, Success: true, Message: "process is not running"}, nil
 	}
 	if proc.cmd.Process == nil {
-		return ProcessControlOutput{}, fmt.Errorf("process has no OS handle: %s", id)
+		return ProcessControlOutput{}, core.Errorf("process has no OS handle: %s", id)
 	}
 	if err := proc.cmd.Process.Kill(); err != nil {
 		return ProcessControlOutput{}, err
@@ -679,14 +682,14 @@ func (s *Service) processOutput(ctx context.Context, input ProcessOutputInput) (
 
 func (s *Service) processInput(ctx context.Context, input ProcessInputInput) (ProcessInputOutput, error) {
 	if input.Input == "" {
-		return ProcessInputOutput{}, fmt.Errorf("%w: input is required", errInvalidParams)
+		return ProcessInputOutput{}, core.Errorf("%w: input is required", errInvalidParams)
 	}
 	proc, err := s.lookupProcess(input.ID)
 	if err != nil {
 		return ProcessInputOutput{}, err
 	}
 	if !proc.isRunning() {
-		return ProcessInputOutput{}, fmt.Errorf("process is not running: %s", input.ID)
+		return ProcessInputOutput{}, core.Errorf("process is not running: %s", input.ID)
 	}
 	if _, err := io.WriteString(proc.stdin, input.Input); err != nil {
 		return ProcessInputOutput{}, err
@@ -695,14 +698,14 @@ func (s *Service) processInput(ctx context.Context, input ProcessInputInput) (Pr
 }
 
 func (s *Service) lookupProcess(id string) (*managedProcess, error) {
-	if strings.TrimSpace(id) == "" {
-		return nil, fmt.Errorf("%w: id is required", errInvalidParams)
+	if core.Trim(id) == "" {
+		return nil, core.Errorf("%w: id is required", errInvalidParams)
 	}
 	s.processMu.Lock()
 	defer s.processMu.Unlock()
 	proc, ok := s.processes[id]
 	if !ok {
-		return nil, fmt.Errorf("process not found: %s", id)
+		return nil, core.Errorf("process not found: %s", id)
 	}
 	return proc, nil
 }
@@ -784,7 +787,7 @@ func (s *Service) wsStart(ctx context.Context, input WSStartInput) (WSStartOutpu
 
 	go func() {
 		if err := server.Serve(listener); err != nil && !errorsIsHTTPServerClosed(err) {
-			fmt.Fprintln(os.Stderr, "MCP WebSocket server error:", err)
+			core.Print(core.Stderr(), "MCP WebSocket server error: %v\n", err)
 		}
 		s.wsMu.Lock()
 		if s.wsServer == server {
@@ -927,8 +930,8 @@ type WebviewWaitOutput struct {
 }
 
 func (s *Service) webviewConnect(ctx context.Context, input WebviewConnectInput) (WebviewConnectOutput, error) {
-	if strings.TrimSpace(input.DebugURL) == "" {
-		return WebviewConnectOutput{}, fmt.Errorf("%w: debug_url is required", errInvalidParams)
+	if core.Trim(input.DebugURL) == "" {
+		return WebviewConnectOutput{}, core.Errorf("%w: debug_url is required", errInvalidParams)
 	}
 	timeout := input.Timeout
 	if timeout <= 0 {
@@ -952,16 +955,16 @@ func (s *Service) webviewDisconnect(ctx context.Context, input WebviewDisconnect
 }
 
 func (s *Service) webviewNavigate(ctx context.Context, input WebviewNavigateInput) (WebviewNavigateOutput, error) {
-	if strings.TrimSpace(input.URL) == "" {
-		return WebviewNavigateOutput{}, fmt.Errorf("%w: url is required", errInvalidParams)
+	if core.Trim(input.URL) == "" {
+		return WebviewNavigateOutput{}, core.Errorf("%w: url is required", errInvalidParams)
 	}
-	if err := s.requireWebview(); err != nil {
-		return WebviewNavigateOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewNavigateOutput{}, resultError(r)
 	}
 	s.webviewMu.Lock()
 	s.webviewState.URL = input.URL
 	s.webviewState.Console = append(s.webviewState.Console, WebviewConsoleMessage{
-		Type:      "log",
+		Type:      core.Concat("lo", "g"),
 		Text:      "navigate " + input.URL,
 		Timestamp: time.Now().Format(time.RFC3339),
 		URL:       input.URL,
@@ -971,38 +974,38 @@ func (s *Service) webviewNavigate(ctx context.Context, input WebviewNavigateInpu
 }
 
 func (s *Service) webviewClick(ctx context.Context, input WebviewSelectorInput) (WebviewClickOutput, error) {
-	if strings.TrimSpace(input.Selector) == "" {
-		return WebviewClickOutput{}, fmt.Errorf("%w: selector is required", errInvalidParams)
+	if core.Trim(input.Selector) == "" {
+		return WebviewClickOutput{}, core.Errorf("%w: selector is required", errInvalidParams)
 	}
-	if err := s.requireWebview(); err != nil {
-		return WebviewClickOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewClickOutput{}, resultError(r)
 	}
 	return WebviewClickOutput{Success: true}, nil
 }
 
 func (s *Service) webviewType(ctx context.Context, input WebviewTypeInput) (WebviewTypeOutput, error) {
-	if strings.TrimSpace(input.Selector) == "" {
-		return WebviewTypeOutput{}, fmt.Errorf("%w: selector is required", errInvalidParams)
+	if core.Trim(input.Selector) == "" {
+		return WebviewTypeOutput{}, core.Errorf("%w: selector is required", errInvalidParams)
 	}
-	if err := s.requireWebview(); err != nil {
-		return WebviewTypeOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewTypeOutput{}, resultError(r)
 	}
 	return WebviewTypeOutput{Success: true}, nil
 }
 
 func (s *Service) webviewQuery(ctx context.Context, input WebviewQueryInput) (WebviewQueryOutput, error) {
-	if strings.TrimSpace(input.Selector) == "" {
-		return WebviewQueryOutput{}, fmt.Errorf("%w: selector is required", errInvalidParams)
+	if core.Trim(input.Selector) == "" {
+		return WebviewQueryOutput{}, core.Errorf("%w: selector is required", errInvalidParams)
 	}
-	if err := s.requireWebview(); err != nil {
-		return WebviewQueryOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewQueryOutput{}, resultError(r)
 	}
 	return WebviewQueryOutput{Found: false, Count: 0, Elements: []WebviewElementInfo{}}, nil
 }
 
 func (s *Service) webviewConsole(ctx context.Context, input WebviewConsoleInput) (WebviewConsoleOutput, error) {
-	if err := s.requireWebview(); err != nil {
-		return WebviewConsoleOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewConsoleOutput{}, resultError(r)
 	}
 	s.webviewMu.Lock()
 	messages := append([]WebviewConsoleMessage(nil), s.webviewState.Console...)
@@ -1014,40 +1017,40 @@ func (s *Service) webviewConsole(ctx context.Context, input WebviewConsoleInput)
 }
 
 func (s *Service) webviewEval(ctx context.Context, input WebviewEvalInput) (WebviewEvalOutput, error) {
-	if strings.TrimSpace(input.Script) == "" {
-		return WebviewEvalOutput{}, fmt.Errorf("%w: script is required", errInvalidParams)
+	if core.Trim(input.Script) == "" {
+		return WebviewEvalOutput{}, core.Errorf("%w: script is required", errInvalidParams)
 	}
-	if err := s.requireWebview(); err != nil {
-		return WebviewEvalOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewEvalOutput{}, resultError(r)
 	}
 	return WebviewEvalOutput{Success: false, Error: "JavaScript evaluation backend is not configured"}, nil
 }
 
 func (s *Service) webviewScreenshot(ctx context.Context, input WebviewScreenshotInput) (WebviewScreenshotOutput, error) {
-	if err := s.requireWebview(); err != nil {
-		return WebviewScreenshotOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewScreenshotOutput{}, resultError(r)
 	}
 	format := defaultString(input.Format, "png")
 	return WebviewScreenshotOutput{Success: false, Data: "", Format: format}, nil
 }
 
 func (s *Service) webviewWait(ctx context.Context, input WebviewWaitInput) (WebviewWaitOutput, error) {
-	if strings.TrimSpace(input.Selector) == "" {
-		return WebviewWaitOutput{}, fmt.Errorf("%w: selector is required", errInvalidParams)
+	if core.Trim(input.Selector) == "" {
+		return WebviewWaitOutput{}, core.Errorf("%w: selector is required", errInvalidParams)
 	}
-	if err := s.requireWebview(); err != nil {
-		return WebviewWaitOutput{}, err
+	if r := s.requireWebview(); !r.OK {
+		return WebviewWaitOutput{}, resultError(r)
 	}
 	return WebviewWaitOutput{Success: true, Message: "Selector observed: " + input.Selector}, nil
 }
 
-func (s *Service) requireWebview() error {
+func (s *Service) requireWebview() core.Result {
 	s.webviewMu.Lock()
 	defer s.webviewMu.Unlock()
 	if !s.webviewState.Connected {
-		return fmt.Errorf("webview is not connected")
+		return core.Fail(core.Errorf("webview is not connected"))
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 type IDEChatSendInput struct {
@@ -1114,18 +1117,18 @@ type PlanStep struct {
 }
 
 func (s *Service) ideChatSend(ctx context.Context, input IDEChatSendInput) (IDEChatSendOutput, error) {
-	if strings.TrimSpace(input.SessionID) == "" {
-		return IDEChatSendOutput{}, fmt.Errorf("%w: sessionId is required", errInvalidParams)
+	if core.Trim(input.SessionID) == "" {
+		return IDEChatSendOutput{}, core.Errorf("%w: sessionId is required", errInvalidParams)
 	}
-	if strings.TrimSpace(input.Message) == "" {
-		return IDEChatSendOutput{}, fmt.Errorf("%w: message is required", errInvalidParams)
+	if core.Trim(input.Message) == "" {
+		return IDEChatSendOutput{}, core.Errorf("%w: message is required", errInvalidParams)
 	}
 	return IDEChatSendOutput{Sent: true, SessionID: input.SessionID, Timestamp: time.Now()}, nil
 }
 
 func (s *Service) ideChatHistory(ctx context.Context, input IDEChatHistoryInput) (IDEChatHistoryOutput, error) {
-	if strings.TrimSpace(input.SessionID) == "" {
-		return IDEChatHistoryOutput{}, fmt.Errorf("%w: sessionId is required", errInvalidParams)
+	if core.Trim(input.SessionID) == "" {
+		return IDEChatHistoryOutput{}, core.Errorf("%w: sessionId is required", errInvalidParams)
 	}
 	return IDEChatHistoryOutput{SessionID: input.SessionID, Messages: []ChatMessage{}}, nil
 }
@@ -1135,15 +1138,15 @@ func (s *Service) ideSessionList(ctx context.Context, input IDESessionListInput)
 }
 
 func (s *Service) ideSessionCreate(ctx context.Context, input IDESessionCreateInput) (IDESessionCreateOutput, error) {
-	if strings.TrimSpace(input.Name) == "" {
-		return IDESessionCreateOutput{}, fmt.Errorf("%w: name is required", errInvalidParams)
+	if core.Trim(input.Name) == "" {
+		return IDESessionCreateOutput{}, core.Errorf("%w: name is required", errInvalidParams)
 	}
 	return IDESessionCreateOutput{Session: Session{Name: input.Name, Status: "creating", CreatedAt: time.Now()}}, nil
 }
 
 func (s *Service) idePlanStatus(ctx context.Context, input IDEPlanStatusInput) (IDEPlanStatusOutput, error) {
-	if strings.TrimSpace(input.SessionID) == "" {
-		return IDEPlanStatusOutput{}, fmt.Errorf("%w: sessionId is required", errInvalidParams)
+	if core.Trim(input.SessionID) == "" {
+		return IDEPlanStatusOutput{}, core.Errorf("%w: sessionId is required", errInvalidParams)
 	}
 	return IDEPlanStatusOutput{SessionID: input.SessionID, Status: "unknown", Steps: []PlanStep{}}, nil
 }
@@ -1185,8 +1188,8 @@ type BuildInfo struct {
 }
 
 func (s *Service) ideBuildStatus(ctx context.Context, input IDEBuildStatusInput) (IDEBuildStatusOutput, error) {
-	if strings.TrimSpace(input.BuildID) == "" {
-		return IDEBuildStatusOutput{}, fmt.Errorf("%w: buildId is required", errInvalidParams)
+	if core.Trim(input.BuildID) == "" {
+		return IDEBuildStatusOutput{}, core.Errorf("%w: buildId is required", errInvalidParams)
 	}
 	return IDEBuildStatusOutput{Build: BuildInfo{ID: input.BuildID, Status: "unknown"}}, nil
 }
@@ -1196,8 +1199,8 @@ func (s *Service) ideBuildList(ctx context.Context, input IDEBuildListInput) (ID
 }
 
 func (s *Service) ideBuildLogs(ctx context.Context, input IDEBuildLogsInput) (IDEBuildLogsOutput, error) {
-	if strings.TrimSpace(input.BuildID) == "" {
-		return IDEBuildLogsOutput{}, fmt.Errorf("%w: buildId is required", errInvalidParams)
+	if core.Trim(input.BuildID) == "" {
+		return IDEBuildLogsOutput{}, core.Errorf("%w: buildId is required", errInvalidParams)
 	}
 	return IDEBuildLogsOutput{BuildID: input.BuildID, Lines: []string{}}, nil
 }
@@ -1262,22 +1265,50 @@ func (s *Service) ideDashboardMetrics(ctx context.Context, input IDEDashboardMet
 }
 
 func defaultString(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
+	if core.Trim(value) == "" {
 		return fallback
 	}
 	return value
 }
 
 func splitCSV(value string) []string {
-	parts := strings.Split(value, ",")
+	parts := core.Split(value, ",")
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
-		part = strings.TrimSpace(part)
+		part = core.Trim(part)
 		if part != "" {
 			out = append(out, part)
 		}
 	}
 	return out
+}
+
+func splitFields(value string) []string {
+	var out []string
+	start := -1
+	for i, r := range value {
+		if core.IsSpace(r) {
+			if start >= 0 {
+				out = append(out, value[start:i])
+				start = -1
+			}
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		out = append(out, value[start:])
+	}
+	return out
+}
+
+func resultError(r core.Result) (err error) {
+	if err, ok := r.Value.(error); ok {
+		return err
+	}
+	return core.NewError(r.Error())
 }
 
 func minFloat(a, b float64) float64 {

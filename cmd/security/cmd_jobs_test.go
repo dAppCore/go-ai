@@ -1,14 +1,10 @@
 package security
 
 import (
-	"bytes"
-	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
 	"dappco.re/go/scm/repos"
 )
@@ -38,13 +34,13 @@ func TestAlertSummaryString_Good(t *testing.T) {
 	}
 
 	got := summary.String()
-	want := strings.Join([]string{
+	want := core.Join(" | ",
 		cli.ErrorStyle.Render("1 critical"),
 		cli.WarningStyle.Render("2 high"),
 		cli.ValueStyle.Render("3 medium"),
 		cli.DimStyle.Render("4 low"),
 		cli.DimStyle.Render("5 unknown"),
-	}, " | ")
+	)
 	if got != want {
 		t.Fatalf("String = %q, want %q", got, want)
 	}
@@ -352,7 +348,7 @@ func TestCollectJobRepoResult_Bad_PartialFailureFailsClosed(t *testing.T) {
 		return []DepAlert{{Repo: "api", Severity: "critical", CVE: "CVE-1", Summary: "dep"}}, nil
 	}
 	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) ([]ScanAlert, error) {
-		return nil, errors.New("code scanning unavailable")
+		return nil, core.NewError("code scanning unavailable")
 	}
 	collectSecretScanningAlertsForJobs = func(SecurityTarget) ([]SecretAlert, error) {
 		return []SecretAlert{{Repo: "api", Number: 1, SecretType: "token"}}, nil
@@ -429,13 +425,13 @@ func TestBuildJobsIssueBody_Good_TruncatesFindingsAfterThree(t *testing.T) {
 		}},
 	)
 
-	if !strings.Contains(body, "## Security Scan Summary") || !strings.Contains(body, "Summary: 1 critical | 2 high") {
+	if !core.Contains(body, "## Security Scan Summary") || !core.Contains(body, "Summary: 1 critical | 2 high") {
 		t.Fatalf("issue body missing summary text: %s", body)
 	}
-	if !strings.Contains(body, "- acme/api — 1 critical | 1 high") {
+	if !core.Contains(body, "- acme/api — 1 critical | 1 high") {
 		t.Fatalf("issue body missing repo summary: %s", body)
 	}
-	if !strings.Contains(body, "  - ...") {
+	if !core.Contains(body, "  - ...") {
 		t.Fatalf("issue body should truncate findings after three entries: %s", body)
 	}
 }
@@ -473,22 +469,22 @@ func TestRunJobs_Good_DryRunPrintsPlannedTargets(t *testing.T) {
 	withSecurityTempHome(t)
 
 	output := captureStdout(t, func() {
-		if err := runJobs(JobsCommandOptions{
+		if r := runJobs(JobsCommandOptions{
 			Targets:     "acme/api, acme/web",
 			DryRun:      true,
 			WorkerCount: 4,
-		}); err != nil {
-			t.Fatalf("runJobs dry-run: %v", err)
+		}); !r.OK {
+			t.Fatalf("runJobs dry-run: %s", r.Error())
 		}
 	})
 
-	if !strings.Contains(output, "Workers:") || !strings.Contains(output, "[dry-run] Would scan: acme/api") || !strings.Contains(output, "[dry-run] Would scan: acme/web") {
+	if !core.Contains(output, "Workers:") || !core.Contains(output, "[dry-run] Would scan: acme/api") || !core.Contains(output, "[dry-run] Would scan: acme/web") {
 		t.Fatalf("dry-run output missing planned targets: %s", output)
 	}
 }
 
 func TestRunJobs_Bad_InvalidWorkerCount(t *testing.T) {
-	if err := runJobs(JobsCommandOptions{Targets: "acme/api", WorkerCount: 0}); err == nil {
+	if r := runJobs(JobsCommandOptions{Targets: "acme/api", WorkerCount: 0}); r.OK {
 		t.Fatal("expected invalid worker count error")
 	}
 }
@@ -508,7 +504,7 @@ func TestRunJobs_Bad_PartialFailureFailsClosedBeforeIssueCreation(t *testing.T) 
 
 	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) ([]DepAlert, error) {
 		if target.FullName == "acme/web" {
-			return nil, errors.New("dependabot unavailable")
+			return nil, core.NewError("dependabot unavailable")
 		}
 		return []DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}}, nil
 	}
@@ -519,16 +515,16 @@ func TestRunJobs_Bad_PartialFailureFailsClosedBeforeIssueCreation(t *testing.T) 
 		return []SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}}, nil
 	}
 
-	err := runJobs(JobsCommandOptions{
+	r := runJobs(JobsCommandOptions{
 		Targets:         "acme/api,acme/web",
 		IssueRepository: "acme/security",
 		WorkerCount:     2,
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected partial failure to abort jobs")
 	}
-	if !strings.Contains(err.Error(), "security jobs failed") || !strings.Contains(err.Error(), "acme/web") {
-		t.Fatalf("unexpected error: %v", err)
+	if !core.Contains(r.Error(), "security jobs failed") || !core.Contains(r.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %s", r.Error())
 	}
 }
 
@@ -539,7 +535,7 @@ func TestCreateJobsIssue_Good_ReturnsTrimmedOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createJobsIssue: %v", err)
 	}
-	if !bytes.Equal([]byte(got), []byte("https://github.com/acme/security/issues/1")) {
+	if got != "https://github.com/acme/security/issues/1" {
 		t.Fatalf("createJobsIssue = %q, want trimmed issue URL", got)
 	}
 }
@@ -555,26 +551,26 @@ func TestRunJobs_Good_DryRunDoesNotRequireGitHubCLI(t *testing.T) {
 		return nil, nil
 	}
 
-	if err := runJobs(JobsCommandOptions{
+	if r := runJobs(JobsCommandOptions{
 		Targets:     "acme/api",
 		DryRun:      true,
 		WorkerCount: 1,
-	}); err != nil {
-		t.Fatalf("runJobs dry-run: %v", err)
+	}); !r.OK {
+		t.Fatalf("runJobs dry-run: %s", r.Error())
 	}
 }
 
 func TestRunJobs_Bad_EmptyTargetsFailsBeforeRegistryLookup(t *testing.T) {
-	err := runJobs(JobsCommandOptions{
+	r := runJobs(JobsCommandOptions{
 		Targets:     "",
 		DryRun:      true,
 		WorkerCount: 1,
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected empty --targets error, got nil")
 	}
-	if !strings.Contains(err.Error(), "--targets") {
-		t.Fatalf("expected --targets validation error, got %v", err)
+	if !core.Contains(r.Error(), "--targets") {
+		t.Fatalf("expected --targets validation error, got %s", r.Error())
 	}
 }
 
@@ -629,8 +625,8 @@ func TestJobsNeedRegistry_Good(t *testing.T) {
 
 func TestLoadRegistryForJobs_Good_LoadsRegistryWhenNeeded(t *testing.T) {
 	dir := t.TempDir()
-	registryPath := filepath.Join(dir, "repos.yaml")
-	if err := os.WriteFile(registryPath, []byte(`
+	registryPath := core.PathJoin(dir, "repos.yaml")
+	if r := core.WriteFile(registryPath, []byte(`
 version: 1
 org: acme
 base_path: `+dir+`
@@ -638,8 +634,8 @@ repos:
   api:
     type: module
     description: API
-`), 0o644); err != nil {
-		t.Fatalf("write registry: %v", err)
+`), 0o644); !r.OK {
+		t.Fatalf("write registry: %v", r.Error())
 	}
 
 	registry, err := loadRegistryForJobs(JobsCommandOptions{
@@ -670,16 +666,16 @@ func TestLoadRegistryForJobs_Ugly_SkipsRegistryForFullyQualifiedTargets(t *testi
 func TestRunJobs_Ugly_InvalidIssueRepoRejectsBeforeGitHubCLI(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	err := runJobs(JobsCommandOptions{
+	r := runJobs(JobsCommandOptions{
 		Targets:         "acme/api",
 		IssueRepository: "bad repo",
 		WorkerCount:     1,
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected invalid issue repository to fail")
 	}
-	if !strings.Contains(err.Error(), "invalid --issue-repo format") {
-		t.Fatalf("unexpected error: %v", err)
+	if !core.Contains(r.Error(), "invalid --issue-repo format") {
+		t.Fatalf("unexpected error: %s", r.Error())
 	}
 }
 

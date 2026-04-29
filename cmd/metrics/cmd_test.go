@@ -1,14 +1,10 @@
 package metrics
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
+	core "dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
 	"dappco.re/go/i18n"
@@ -198,13 +194,13 @@ func TestRunMetrics_Good_PrintsHumanSummary(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		if err := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour}); err != nil {
-			t.Fatalf("runMetrics: %v", err)
+		if r := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour}); !r.OK {
+			t.Fatalf("runMetrics: %s", r.Error())
 		}
 	})
 
 	for _, want := range []string{"Period:", "Total events:", "By type:", "Recent events:"} {
-		if !strings.Contains(output, want) {
+		if !core.Contains(output, want) {
 			t.Fatalf("human output %q missing %q", output, want)
 		}
 	}
@@ -221,15 +217,16 @@ func TestRunMetrics_Bad_PrintsJSONSummary(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		if err := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour, JSONOutput: true}); err != nil {
-			t.Fatalf("runMetrics JSON: %v", err)
+		if r := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour, JSONOutput: true}); !r.OK {
+			t.Fatalf("runMetrics JSON: %s", r.Error())
 		}
 	})
 
-	if !json.Valid(bytes.TrimSpace([]byte(output))) {
+	var decoded any
+	if r := core.JSONUnmarshal([]byte(core.Trim(output)), &decoded); !r.OK {
 		t.Fatalf("expected JSON output, got %q", output)
 	}
-	if !strings.Contains(output, `"by_type"`) || !strings.Contains(output, `"recent"`) {
+	if !core.Contains(output, `"by_type"`) || !core.Contains(output, `"recent"`) {
 		t.Fatalf("JSON output missing expected fields: %q", output)
 	}
 }
@@ -241,12 +238,12 @@ func TestCmdMetrics_runMetrics_Good_PrintsNoEventsMessage(t *testing.T) {
 	t.Setenv("HOME", tempHome)
 
 	output := captureStdout(t, func() {
-		if err := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour}); err != nil {
-			t.Fatalf("runMetrics empty: %v", err)
+		if r := runMetrics(MetricsCommandOptions{SinceWindow: 24 * time.Hour}); !r.OK {
+			t.Fatalf("runMetrics empty: %s", r.Error())
 		}
 	})
 
-	if !strings.Contains(output, i18n.T("cmd.ai.metrics.none_found")) {
+	if !core.Contains(output, i18n.T("cmd.ai.metrics.none_found")) {
 		t.Fatalf("empty metrics output %q missing none-found message", output)
 	}
 }
@@ -254,27 +251,12 @@ func TestCmdMetrics_runMetrics_Good_PrintsNoEventsMessage(t *testing.T) {
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
-	originalStdout := os.Stdout
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stdout = writer
+	buf := core.NewBuilder()
+	cli.SetStdout(buf)
+	defer cli.SetStdout(nil)
 
 	fn()
 
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-	os.Stdout = originalStdout
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, reader); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("close reader: %v", err)
-	}
 	return buf.String()
 }
 
@@ -289,10 +271,116 @@ func TestMarshalMetricsSummaryJSON_Good_CompactOutput(t *testing.T) {
 		t.Fatalf("marshalMetricsSummaryJSON: %v", err)
 	}
 
-	if json.Valid(got) == false {
+	var decoded any
+	if r := core.JSONUnmarshal(got, &decoded); !r.OK {
 		t.Fatalf("marshalMetricsSummaryJSON returned invalid JSON: %s", string(got))
 	}
 	if string(got) != `{"by_type":{"scan":2},"recent":[]}` {
 		t.Fatalf("marshalMetricsSummaryJSON = %s, want compact JSON", string(got))
 	}
+}
+
+// --- AX-7 canonical triplets ---
+
+func TestCmd_DurationFlagValue_String_Good(t *core.T) {
+	value := 2 * time.Hour
+	flag := &sinceDurationFlagValue{target: &value}
+	got := flag.String()
+
+	core.AssertEqual(t, "2h0m0s", got)
+}
+
+func TestCmd_DurationFlagValue_String_Bad(t *core.T) {
+	flag := &sinceDurationFlagValue{}
+	got := flag.String()
+	want := ""
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmd_DurationFlagValue_String_Ugly(t *core.T) {
+	var flag *sinceDurationFlagValue
+	got := flag.String()
+	want := ""
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmd_DurationFlagValue_Set_Good(t *core.T) {
+	value := time.Duration(0)
+	flag := &sinceDurationFlagValue{target: &value}
+	err := flag.Set("2d")
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, 48*time.Hour, value)
+}
+
+func TestCmd_DurationFlagValue_Set_Bad(t *core.T) {
+	value := time.Hour
+	flag := &sinceDurationFlagValue{target: &value}
+	err := flag.Set("bad")
+
+	core.AssertError(t, err)
+	core.AssertEqual(t, time.Hour, value)
+}
+
+func TestCmd_DurationFlagValue_Set_Ugly(t *core.T) {
+	value := time.Hour
+	flag := &sinceDurationFlagValue{target: &value}
+	err := flag.Set("0s")
+
+	core.AssertError(t, err)
+	core.AssertEqual(t, time.Hour, value)
+}
+
+func TestCmd_DurationFlagValue_Type_Good(t *core.T) {
+	value := time.Minute
+	flag := &sinceDurationFlagValue{target: &value}
+	got := flag.Type()
+
+	core.AssertEqual(t, "duration", got)
+}
+
+func TestCmd_DurationFlagValue_Type_Bad(t *core.T) {
+	flag := &sinceDurationFlagValue{}
+	got := flag.Type()
+	want := "duration"
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmd_DurationFlagValue_Type_Ugly(t *core.T) {
+	var flag *sinceDurationFlagValue
+	got := flag.Type()
+	want := "duration"
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmd_AddMetricsCommand_Good(t *core.T) {
+	root := &cli.Command{Use: "core"}
+	AddMetricsCommand(root)
+	cmd, _, err := root.Find([]string{"metrics"})
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, "metrics", cmd.Name())
+}
+
+func TestCmd_AddMetricsCommand_Bad(t *core.T) {
+	root := &cli.Command{Use: "core"}
+	AddMetricsCommand(root)
+	AddMetricsCommand(root)
+
+	core.AssertLen(t, root.Commands(), 1)
+	core.AssertEqual(t, "metrics", root.Commands()[0].Name())
+}
+
+func TestCmd_AddMetricsCommand_Ugly(t *core.T) {
+	first := &cli.Command{Use: "core"}
+	second := &cli.Command{Use: "core"}
+	AddMetricsCommand(first)
+	AddMetricsCommand(second)
+
+	core.AssertLen(t, first.Commands(), 1)
+	core.AssertLen(t, second.Commands(), 1)
 }

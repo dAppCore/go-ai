@@ -1,11 +1,10 @@
 package security
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
+	core "dappco.re/go"
 	"dappco.re/go/scm/repos"
 )
 
@@ -140,8 +139,8 @@ func TestListGitHubOrgTargets_Bad_InvalidRepositoryReturnedByGitHub(t *testing.T
 
 func TestResolveSecurityTargets_Good_RegistryPath(t *testing.T) {
 	dir := t.TempDir()
-	registryPath := filepath.Join(dir, "repos.yaml")
-	if err := os.WriteFile(registryPath, []byte(`
+	registryPath := core.PathJoin(dir, "repos.yaml")
+	if r := core.WriteFile(registryPath, []byte(`
 version: 1
 org: acme
 base_path: `+dir+`
@@ -152,8 +151,8 @@ repos:
   web:
     type: module
     description: Web
-`), 0o644); err != nil {
-		t.Fatalf("write registry: %v", err)
+`), 0o644); !r.OK {
+		t.Fatalf("write registry: %v", r.Error())
 	}
 
 	got, err := resolveSecurityTargets(registryPath, "api", "")
@@ -168,16 +167,16 @@ repos:
 
 func TestResolveSecurityTargets_Bad_RegistryRepoMissing(t *testing.T) {
 	dir := t.TempDir()
-	registryPath := filepath.Join(dir, "repos.yaml")
-	if err := os.WriteFile(registryPath, []byte(`
+	registryPath := core.PathJoin(dir, "repos.yaml")
+	if r := core.WriteFile(registryPath, []byte(`
 version: 1
 org: acme
 base_path: `+dir+`
 repos:
   api:
     type: module
-`), 0o644); err != nil {
-		t.Fatalf("write registry: %v", err)
+`), 0o644); !r.OK {
+		t.Fatalf("write registry: %v", r.Error())
 	}
 
 	if _, err := resolveSecurityTargets(registryPath, "missing", ""); err == nil {

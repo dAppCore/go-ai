@@ -2,20 +2,15 @@ package mcp
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	core "dappco.re/go"
 )
 
 const (
@@ -25,8 +20,8 @@ const (
 )
 
 var (
-	errInvalidRequest = errors.New("invalid JSON-RPC request")
-	errInvalidParams  = errors.New("invalid JSON-RPC params")
+	errInvalidRequest = core.NewError("invalid JSON-RPC request")
+	errInvalidParams  = core.NewError("invalid JSON-RPC params")
 )
 
 // Option configures a Service before tools are registered.
@@ -53,9 +48,28 @@ type SubsystemWithShutdown interface {
 	Shutdown(context.Context) error
 }
 
+// RawMessage preserves raw JSON arguments without requiring a direct
+// encoding/json import in MCP surface types.
+type RawMessage []byte
+
+func (m RawMessage) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return []byte("null"), nil
+	}
+	return []byte(m), nil
+}
+
+func (m *RawMessage) UnmarshalJSON(data []byte) (err error) {
+	if m == nil {
+		return core.NewError("mcp: nil raw message")
+	}
+	*m = append((*m)[0:0], data...)
+	return nil
+}
+
 // ToolHandler receives the raw JSON arguments from tools/call and returns a
 // JSON-serialisable structured response.
-type ToolHandler func(context.Context, json.RawMessage) (any, error)
+type ToolHandler func(context.Context, RawMessage) (any, error)
 
 // Tool describes one MCP tool.
 type Tool struct {
@@ -101,14 +115,16 @@ type Service struct {
 //	mcp.New(mcp.WithWorkspaceRoot("/repo"))
 //	mcp.New(mcp.Options{WorkspaceRoot: "/repo"})
 func New(args ...any) (*Service, error) {
-	root, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("mcp: get working directory: %w", err)
+	rootResult := core.Getwd()
+	if !rootResult.OK {
+		return nil, core.Errorf("mcp: get working directory: %s", rootResult.Error())
 	}
-	root, err = filepath.Abs(root)
-	if err != nil {
-		return nil, fmt.Errorf("mcp: resolve working directory: %w", err)
+	root := rootResult.Value.(string)
+	absResult := core.PathAbs(root)
+	if !absResult.OK {
+		return nil, core.Errorf("mcp: resolve working directory: %s", absResult.Error())
 	}
+	root = absResult.Value.(string)
 
 	s := &Service{
 		workspaceRoot: root,
@@ -126,16 +142,16 @@ func New(args ...any) (*Service, error) {
 				return nil, err
 			}
 		case Options:
-			if err := applyOptionsStruct(s, v); err != nil {
-				return nil, err
+			if r := applyOptionsStruct(s, v); !r.OK {
+				return nil, resultError(r)
 			}
 		default:
-			return nil, fmt.Errorf("mcp: unsupported New option %T", arg)
+			return nil, core.Errorf("mcp: unsupported New option %T", arg)
 		}
 	}
 
-	if err := s.registerBuiltInTools(); err != nil {
-		return nil, err
+	if r := s.registerBuiltInTools(); !r.OK {
+		return nil, resultError(r)
 	}
 	for _, sub := range s.subsystems {
 		if sub != nil {
@@ -146,14 +162,14 @@ func New(args ...any) (*Service, error) {
 	return s, nil
 }
 
-func applyOptionsStruct(s *Service, opts Options) error {
+func applyOptionsStruct(s *Service, opts Options) core.Result {
 	if opts.Unrestricted {
 		if err := WithWorkspaceRoot("")(s); err != nil {
-			return err
+			return core.Fail(err)
 		}
 	} else if opts.WorkspaceRoot != "" {
 		if err := WithWorkspaceRoot(opts.WorkspaceRoot)(s); err != nil {
-			return err
+			return core.Fail(err)
 		}
 	}
 	if opts.ProcessService != nil {
@@ -167,7 +183,7 @@ func applyOptionsStruct(s *Service, opts Options) error {
 			s.subsystems = append(s.subsystems, sub)
 		}
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 // WithWorkspaceRoot restricts file operations to root. Passing an empty string
@@ -178,11 +194,11 @@ func WithWorkspaceRoot(root string) Option {
 			s.workspaceRoot = ""
 			return nil
 		}
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return fmt.Errorf("mcp: resolve workspace root: %w", err)
+		abs := core.PathAbs(root)
+		if !abs.OK {
+			return core.Errorf("mcp: resolve workspace root: %s", abs.Error())
 		}
-		s.workspaceRoot = abs
+		s.workspaceRoot = abs.Value.(string)
 		return nil
 	}
 }
@@ -241,27 +257,27 @@ func (s *Service) ToolNames() []string {
 }
 
 // RegisterTool adds a tool to the service.
-func (s *Service) RegisterTool(tool Tool) error {
-	tool.Name = strings.TrimSpace(tool.Name)
+func (s *Service) RegisterTool(tool Tool) core.Result {
+	tool.Name = core.Trim(tool.Name)
 	if tool.Name == "" {
-		return fmt.Errorf("mcp: tool name is required")
+		return core.Fail(core.Errorf("mcp: tool name is required"))
 	}
 	if tool.Handler == nil {
-		return fmt.Errorf("mcp: handler is required for tool %q", tool.Name)
+		return core.Fail(core.Errorf("mcp: handler is required for tool %q", tool.Name))
 	}
 	if _, exists := s.tools[tool.Name]; exists {
-		return fmt.Errorf("mcp: tool %q already registered", tool.Name)
+		return core.Fail(core.Errorf("mcp: tool %q already registered", tool.Name))
 	}
 	if tool.InputSchema == nil {
 		tool.InputSchema = objectSchema()
 	}
 	s.tools[tool.Name] = tool
 	s.toolOrder = append(s.toolOrder, tool.Name)
-	return nil
+	return core.Ok(nil)
 }
 
 // RegisterToolFunc adds a tool with a raw JSON argument handler.
-func (s *Service) RegisterToolFunc(group, name, description string, handler ToolHandler) error {
+func (s *Service) RegisterToolFunc(group, name, description string, handler ToolHandler) core.Result {
 	return s.RegisterTool(Tool{
 		Name:        name,
 		Description: description,
@@ -271,7 +287,7 @@ func (s *Service) RegisterToolFunc(group, name, description string, handler Tool
 }
 
 // Shutdown gracefully stops subsystems, local WebSocket serving, and managed processes.
-func (s *Service) Shutdown(ctx context.Context) error {
+func (s *Service) Shutdown(ctx context.Context) core.Result {
 	var errs []error
 	for _, sub := range s.subsystems {
 		if sh, ok := sub.(SubsystemWithShutdown); ok {
@@ -304,20 +320,23 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	return errors.Join(errs...)
+	if err := core.ErrorJoin(errs...); err != nil {
+		return core.Fail(err)
+	}
+	return core.Ok(nil)
 }
 
 type typedToolFunc[I any, O any] func(context.Context, I) (O, error)
 
 func typedHandler[I any, O any](fn typedToolFunc[I, O]) ToolHandler {
-	return func(ctx context.Context, raw json.RawMessage) (any, error) {
+	return func(ctx context.Context, raw RawMessage) (any, error) {
 		var input I
-		raw = bytes.TrimSpace(raw)
-		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-			raw = []byte("{}")
+		raw = RawMessage(core.Trim(string(raw)))
+		if len(raw) == 0 || string(raw) == "null" {
+			raw = RawMessage("{}")
 		}
-		if err := json.Unmarshal(raw, &input); err != nil {
-			return nil, fmt.Errorf("%w: %v", errInvalidParams, err)
+		if r := core.JSONUnmarshal([]byte(raw), &input); !r.OK {
+			return nil, core.Errorf("%w: %s", errInvalidParams, r.Error())
 		}
 		return fn(ctx, input)
 	}
@@ -341,13 +360,13 @@ func cloneStringAnyMap(input map[string]any) map[string]any {
 	return out
 }
 
-func serveReaderWriter(ctx context.Context, r io.Reader, w io.Writer, handle func(context.Context, []byte) ([]byte, error)) error {
+func serveReaderWriter(ctx context.Context, r io.Reader, w io.Writer, handle func(context.Context, []byte) ([]byte, error)) core.Result {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), maxMCPMessageSize)
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			return nil
+			return core.Ok(nil)
 		default:
 		}
 
@@ -356,11 +375,11 @@ func serveReaderWriter(ctx context.Context, r io.Reader, w io.Writer, handle fun
 			continue
 		}
 		if _, err := w.Write(append(response, '\n')); err != nil {
-			return err
+			return core.Fail(err)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return err
+		return core.Fail(err)
 	}
-	return nil
+	return core.Ok(nil)
 }

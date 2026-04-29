@@ -1,10 +1,9 @@
 package security
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
 )
 
@@ -69,14 +68,14 @@ func TestCmdDeps_runDeps_Good_JSONOutput(t *testing.T) {
 	})
 
 	output := captureStdout(t, func() {
-		if err := runDeps(SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true}); err != nil {
-			t.Fatalf("runDeps: %v", err)
+		if r := runDeps(SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true}); !r.OK {
+			t.Fatalf("runDeps: %s", r.Error())
 		}
 	})
 
 	var rows []DepAlert
-	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &rows); err != nil {
-		t.Fatalf("runDeps JSON output: %v\noutput: %s", err, output)
+	if r := core.JSONUnmarshal([]byte(core.Trim(output)), &rows); !r.OK {
+		t.Fatalf("runDeps JSON output: %v\noutput: %s", r.Error(), output)
 	}
 	if len(rows) != 1 || rows[0].CVE != "CVE-2026-0001" || rows[0].Repo != "api" {
 		t.Fatalf("unexpected JSON rows: %+v", rows)
@@ -100,12 +99,12 @@ func TestCmdDeps_runDeps_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) 
 		}
 	})
 
-	err := runDeps(SecuritySelectionOptions{RegistryPath: registryPath})
-	if err == nil {
+	r := runDeps(SecuritySelectionOptions{RegistryPath: registryPath})
+	if r.OK {
 		t.Fatal("expected multi-target partial failure to fail closed")
 	}
-	if !strings.Contains(err.Error(), "security deps failed") || !strings.Contains(err.Error(), "acme/web") {
-		t.Fatalf("unexpected error: %v", err)
+	if !core.Contains(r.Error(), "security deps failed") || !core.Contains(r.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %s", r.Error())
 	}
 }
 

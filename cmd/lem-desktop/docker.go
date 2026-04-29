@@ -2,16 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
+	core "dappco.re/go"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	execabs "golang.org/x/sys/execabs"
 )
 
 // DockerService manages the LEM Docker compose stack.
@@ -43,7 +39,7 @@ type StackStatus struct {
 // composeDir should point to the deploy/ directory containing docker-compose.yml.
 func NewDockerService(composeDir string) *DockerService {
 	return &DockerService{
-		composeFile: filepath.Join(composeDir, "docker-compose.yml"),
+		composeFile: core.PathJoin(composeDir, "docker-compose.yml"),
 		services:    make(map[string]ContainerStatus),
 	}
 }
@@ -54,44 +50,44 @@ func (d *DockerService) ServiceName() string {
 }
 
 // ServiceStartup is called when the Wails app starts.
-func (d *DockerService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
-	log.Println("DockerService started")
+func (d *DockerService) ServiceStartup(ctx context.Context, options application.ServiceOptions) core.Result {
+	core.Print(core.Stderr(), "DockerService started\n")
 	go d.statusLoop(ctx)
-	return nil
+	return core.Ok(nil)
 }
 
 // Start brings up the full Docker compose stack.
-func (d *DockerService) Start() error {
-	log.Println("Starting LEM stack...")
+func (d *DockerService) Start() core.Result {
+	core.Print(core.Stderr(), "Starting LEM stack...\n")
 	return d.compose("up", "-d")
 }
 
 // Stop takes down the Docker compose stack.
-func (d *DockerService) Stop() error {
-	log.Println("Stopping LEM stack...")
+func (d *DockerService) Stop() core.Result {
+	core.Print(core.Stderr(), "Stopping LEM stack...\n")
 	return d.compose("down")
 }
 
 // Restart restarts the full stack.
-func (d *DockerService) Restart() error {
-	if err := d.Stop(); err != nil {
-		return err
+func (d *DockerService) Restart() core.Result {
+	if r := d.Stop(); !r.OK {
+		return r
 	}
 	return d.Start()
 }
 
 // StartService starts a single service.
-func (d *DockerService) StartService(name string) error {
+func (d *DockerService) StartService(name string) core.Result {
 	return d.compose("up", "-d", name)
 }
 
 // StopService stops a single service.
-func (d *DockerService) StopService(name string) error {
+func (d *DockerService) StopService(name string) core.Result {
 	return d.compose("stop", name)
 }
 
 // RestartService restarts a single service.
-func (d *DockerService) RestartService(name string) error {
+func (d *DockerService) RestartService(name string) core.Result {
 	return d.compose("restart", name)
 }
 
@@ -100,7 +96,7 @@ func (d *DockerService) Logs(name string, lines int) (string, error) {
 	if lines <= 0 {
 		lines = 50
 	}
-	out, err := d.composeOutput("logs", "--tail", fmt.Sprintf("%d", lines), "--no-color", name)
+	out, err := d.composeOutput("logs", "--tail", core.Sprintf("%d", lines), "--no-color", name)
 	if err != nil {
 		return "", err
 	}
@@ -123,7 +119,7 @@ func (d *DockerService) GetStatus() StackStatus {
 	return StackStatus{
 		Running:    running,
 		Services:   d.services,
-		ComposeDir: filepath.Dir(d.composeFile),
+		ComposeDir: desktopPathDir(d.composeFile),
 	}
 }
 
@@ -140,26 +136,26 @@ func (d *DockerService) IsRunning() bool {
 }
 
 // Pull pulls latest images for all services.
-func (d *DockerService) Pull() error {
+func (d *DockerService) Pull() core.Result {
 	return d.compose("pull")
 }
 
-func (d *DockerService) compose(args ...string) error {
+func (d *DockerService) compose(args ...string) core.Result {
 	fullArgs := append([]string{"compose", "-f", d.composeFile}, args...)
-	cmd := exec.Command("docker", fullArgs...)
+	cmd := execabs.Command("docker", fullArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("docker compose %s: %w: %s", strings.Join(args, " "), err, string(out))
+		return core.Fail(core.Errorf("docker compose %s: %w: %s", core.Join(" ", args...), err, string(out)))
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 func (d *DockerService) composeOutput(args ...string) (string, error) {
 	fullArgs := append([]string{"compose", "-f", d.composeFile}, args...)
-	cmd := exec.Command("docker", fullArgs...)
+	cmd := execabs.Command("docker", fullArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("docker compose %s: %w: %s", strings.Join(args, " "), err, string(out))
+		return "", core.Errorf("docker compose %s: %w: %s", core.Join(" ", args...), err, string(out))
 	}
 	return string(out), nil
 }
@@ -176,7 +172,7 @@ func (d *DockerService) refreshStatus() {
 	d.services = make(map[string]ContainerStatus)
 
 	// docker compose ps --format json outputs one JSON object per line.
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for _, line := range core.Split(core.Trim(out), "\n") {
 		if line == "" {
 			continue
 		}
@@ -189,7 +185,7 @@ func (d *DockerService) refreshStatus() {
 			State   string `json:"State"`
 			Ports   string `json:"Ports"`
 		}
-		if err := json.Unmarshal([]byte(line), &container); err != nil {
+		if r := core.JSONUnmarshal([]byte(line), &container); !r.OK {
 			continue
 		}
 

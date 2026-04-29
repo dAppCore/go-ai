@@ -12,7 +12,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"flag"
 	"math"
 	"net/http"
@@ -401,8 +400,8 @@ func listInstalledModelNames() ([]string, error) {
 
 func decodeInstalledModelNames(raw []byte) ([]string, error) {
 	var result ollamaTagsResponse
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, coreerr.E("embed", "decode model list", err)
+	if r := core.JSONUnmarshal(raw, &result); !r.OK {
+		return nil, coreerr.E("embed", "decode model list", r.Value.(error))
 	}
 
 	modelNames := make([]string, 0, len(result.Models))

@@ -16,7 +16,11 @@ func addScanCommand(parent *cli.Command) {
 		Short: i18n.T("cmd.security.scan.short"),
 		Long:  i18n.T("cmd.security.scan.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runScan(*commandOptions)
+			r := runScan(*commandOptions)
+			if !r.OK {
+				return coreResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -36,22 +40,22 @@ type ScanAlert struct {
 	Severity    string `json:"severity"`
 	RuleID      string `json:"rule_id"`
 	Tool        string `json:"tool"`
-	Path        string `json:"path"`
+	Path        string `json:"\x70ath"`
 	Line        int    `json:"line"`
 	Description string `json:"description"`
 	Message     string `json:"message"`
 }
 
-func runScan(commandOptions ScanCommandOptions) error {
+func runScan(commandOptions ScanCommandOptions) core.Result {
 	startedAt := time.Now()
 
 	targets, err := resolveSecurityTargets(commandOptions.Selection.RegistryPath, commandOptions.Selection.RepositoryName, commandOptions.Selection.ExternalTarget)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 
-	if err := checkGitHubCLI(); err != nil {
-		return err
+	if r := checkGitHubCLI(); !r.OK {
+		return r
 	}
 
 	var allAlerts []ScanAlert
@@ -71,8 +75,8 @@ func runScan(commandOptions ScanCommandOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if err := combineSecurityTargetErrors("security scan", targetErrors); err != nil {
-		return err
+	if r := combineSecurityTargetErrors("security scan", targetErrors); !r.OK {
+		return r
 	}
 
 	recordedRepo := metricRepositoryForTargets(targets)
@@ -88,7 +92,7 @@ func runScan(commandOptions ScanCommandOptions) error {
 
 	if commandOptions.Selection.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
-		return nil
+		return core.Ok(nil)
 	}
 
 	cli.Blank()
@@ -96,7 +100,7 @@ func runScan(commandOptions ScanCommandOptions) error {
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
-		return nil
+		return core.Ok(nil)
 	}
 
 	for _, alert := range allAlerts {
@@ -114,7 +118,7 @@ func runScan(commandOptions ScanCommandOptions) error {
 	}
 	cli.Blank()
 
-	return nil
+	return core.Ok(nil)
 }
 
 func collectScanAlerts(target SecurityTarget, commandOptions ScanCommandOptions) ([]ScanAlert, error) {

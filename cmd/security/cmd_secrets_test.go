@@ -1,10 +1,9 @@
 package security
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
 )
 
@@ -58,14 +57,14 @@ func TestCmdSecrets_runSecrets_Good_JSONOutput(t *testing.T) {
 	})
 
 	output := captureStdout(t, func() {
-		if err := runSecrets(SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true}); err != nil {
-			t.Fatalf("runSecrets: %v", err)
+		if r := runSecrets(SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true}); !r.OK {
+			t.Fatalf("runSecrets: %s", r.Error())
 		}
 	})
 
 	var rows []SecretAlert
-	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &rows); err != nil {
-		t.Fatalf("runSecrets JSON output: %v\noutput: %s", err, output)
+	if r := core.JSONUnmarshal([]byte(core.Trim(output)), &rows); !r.OK {
+		t.Fatalf("runSecrets JSON output: %v\noutput: %s", r.Error(), output)
 	}
 	if len(rows) != 1 || rows[0].Number != 9 || !rows[0].PushProtection {
 		t.Fatalf("unexpected secret rows: %+v", rows)
@@ -89,12 +88,12 @@ func TestCmdSecrets_runSecrets_Bad_MultiTargetPartialFailureFailsClosed(t *testi
 		}
 	})
 
-	err := runSecrets(SecuritySelectionOptions{RegistryPath: registryPath})
-	if err == nil {
+	r := runSecrets(SecuritySelectionOptions{RegistryPath: registryPath})
+	if r.OK {
 		t.Fatal("expected multi-target partial failure to fail closed")
 	}
-	if !strings.Contains(err.Error(), "security secrets failed") || !strings.Contains(err.Error(), "acme/web") {
-		t.Fatalf("unexpected error: %v", err)
+	if !core.Contains(r.Error(), "security secrets failed") || !core.Contains(r.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %s", r.Error())
 	}
 }
 

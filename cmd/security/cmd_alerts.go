@@ -16,7 +16,11 @@ func addAlertsCommand(parent *cli.Command) {
 		Short: i18n.T("cmd.security.alerts.short"),
 		Long:  i18n.T("cmd.security.alerts.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runAlerts(*selectionOptions)
+			r := runAlerts(*selectionOptions)
+			if !r.OK {
+				return coreResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -41,16 +45,16 @@ type AlertOutput struct {
 	Message  string `json:"message"`
 }
 
-func runAlerts(selectionOptions SecuritySelectionOptions) error {
+func runAlerts(selectionOptions SecuritySelectionOptions) core.Result {
 	startedAt := time.Now()
 
 	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 
-	if err := checkGitHubCLI(); err != nil {
-		return err
+	if r := checkGitHubCLI(); !r.OK {
+		return r
 	}
 
 	var allAlerts []AlertOutput
@@ -70,8 +74,8 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if err := combineSecurityTargetErrors("security alerts", targetErrors); err != nil {
-		return err
+	if r := combineSecurityTargetErrors("security alerts", targetErrors); !r.OK {
+		return r
 	}
 
 	recordedRepo := metricRepositoryForTargets(targets)
@@ -88,7 +92,7 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 
 	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
-		return nil
+		return core.Ok(nil)
 	}
 
 	cli.Blank()
@@ -96,7 +100,7 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
-		return nil
+		return core.Ok(nil)
 	}
 
 	for _, alert := range allAlerts {
@@ -121,7 +125,7 @@ func runAlerts(selectionOptions SecuritySelectionOptions) error {
 	}
 	cli.Blank()
 
-	return nil
+	return core.Ok(nil)
 }
 
 func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertOutput, error) {
@@ -134,11 +138,12 @@ func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertO
 	secretScanningAlerts, secretScanningError := collectSecretAlerts(target)
 
 	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
-		return nil, combineSecurityCollectorErrors(target.FullName, map[string]error{
+		r := combineSecurityCollectorErrors(target.FullName, map[string]error{
 			"dependabot":      dependabotError,
 			"code-scanning":   codeScanningError,
 			"secret-scanning": secretScanningError,
 		})
+		return nil, coreResultError(r)
 	}
 
 	return buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, severityFilter), nil

@@ -3,12 +3,11 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -76,7 +75,7 @@ func TestHandlers_Good(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("expected status %d, got %d with body %s", tt.wantStatus, rec.Code, rec.Body.String())
 			}
-			if !strings.Contains(rec.Body.String(), tt.wantBody) {
+			if !core.Contains(rec.Body.String(), tt.wantBody) {
 				t.Fatalf("expected body to contain %q, got %s", tt.wantBody, rec.Body.String())
 			}
 		})
@@ -124,18 +123,18 @@ func TestHandlers_Ugly(t *testing.T) {
 	}
 }
 
-func TestHandlers_NotImplementedBody_Good(t *testing.T) {
+func TestHandlersNotImplementedBody(t *testing.T) {
 	router := setupTestRouter()
 	rec := performRequest(router, http.MethodPost, "/v1/score/content")
 
 	var body map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if r := core.JSONUnmarshal(rec.Body.Bytes(), &body); !r.OK {
+		t.Fatalf("decode response: %v", r.Error())
 	}
 	if body["error"] != "not_implemented" {
 		t.Fatalf("expected not_implemented error, got %q", body["error"])
 	}
-	if !strings.Contains(body["todo"], "architectural-decision-needed") {
+	if !core.Contains(body["todo"], "architectural-decision-needed") {
 		t.Fatalf("expected architecture TODO, got %q", body["todo"])
 	}
 }

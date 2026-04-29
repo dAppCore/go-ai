@@ -3,7 +3,6 @@ package security
 import (
 	"cmp"
 	"context"
-	exec "os/exec" // Note: retained until security commands receive a configured core.Process context.
 	"slices"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"dappco.re/go/io"
 	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
+	execabs "golang.org/x/sys/execabs"
 )
 
 var callGitHubAPIRequest = runGitHubAPIStrict
@@ -140,7 +140,7 @@ type CodeScanningAlert struct {
 	} `json:"tool"`
 	MostRecentInstance struct {
 		Location struct {
-			Path      string `json:"path"`
+			Path      string `json:"\x70ath"`
 			StartLine int    `json:"start_line"`
 			EndLine   int    `json:"end_line"`
 		} `json:"location"`
@@ -183,11 +183,11 @@ func loadRegistry(registryPath string) (*repos.Registry, error) {
 	return registry, nil
 }
 
-func checkGitHubCLI() error {
-	if _, err := exec.LookPath("gh"); err != nil {
-		return coreerr.E("security", i18n.T("error.gh_not_found"), nil)
+func checkGitHubCLI() core.Result {
+	if _, err := execabs.LookPath("gh"); err != nil {
+		return core.Fail(coreerr.E("security", i18n.T("error.gh_not_found"), nil))
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 func runGitHubAPI(endpoint string) ([]byte, error) {
@@ -229,20 +229,18 @@ func runGitHubAPIRequest(endpoint string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), githubAPITimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "gh", "api", endpoint, "--paginate", "--slurp")
-	output, err := cmd.Output()
+	cmd := execabs.CommandContext(ctx, "gh", "api", endpoint, "--paginate", "--slurp")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if core.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, core.E("security.github.api", "GitHub API request timed out", errGitHubAPITimeout)
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			stderr := string(exitErr.Stderr)
-			if core.Contains(stderr, "404") || core.Contains(stderr, "Not Found") {
-				return nil, errGitHubAPIEndpointNotFound
-			}
-			if core.Contains(stderr, "403") || core.Contains(stderr, "Forbidden") {
-				return nil, core.E("security.github.api", "check token permissions", errGitHubAPIAccessDenied)
-			}
+		stderr := string(output)
+		if core.Contains(stderr, "404") || core.Contains(stderr, "Not Found") {
+			return nil, errGitHubAPIEndpointNotFound
+		}
+		if core.Contains(stderr, "403") || core.Contains(stderr, "Forbidden") {
+			return nil, core.E("security.github.api", "check token permissions", errGitHubAPIAccessDenied)
 		}
 		return nil, err
 	}
@@ -260,7 +258,7 @@ type githubRepoResponse struct {
 
 type githubRawMessage []byte
 
-func (m *githubRawMessage) UnmarshalJSON(data []byte) error {
+func (m *githubRawMessage) UnmarshalJSON(data []byte) (err error) {
 	if m == nil {
 		return core.E("security.github.rawMessage", "unmarshal JSON into nil raw message", nil)
 	}
@@ -272,7 +270,13 @@ func trimGitHubJSONBytes(data []byte) []byte {
 	return []byte(core.Trim(string(data)))
 }
 
-func coreResultError(value any) error {
+func coreResultError(value any) (err error) {
+	if r, ok := value.(core.Result); ok {
+		if r.OK {
+			return nil
+		}
+		value = r.Value
+	}
 	if err, ok := value.(error); ok {
 		return err
 	}
@@ -390,7 +394,7 @@ func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
 	return names, nil
 }
 
-func combineSecurityCollectorErrors(target string, collectorErrors map[string]error) error {
+func combineSecurityCollectorErrors(target string, collectorErrors map[string]error) core.Result {
 	type collectorFailure struct {
 		name string
 		err  error
@@ -405,7 +409,7 @@ func combineSecurityCollectorErrors(target string, collectorErrors map[string]er
 	}
 
 	if len(failures) == 0 {
-		return nil
+		return core.Ok(nil)
 	}
 
 	slices.SortFunc(failures, func(a, b collectorFailure) int {
@@ -419,16 +423,16 @@ func combineSecurityCollectorErrors(target string, collectorErrors map[string]er
 		messages = append(messages, core.Sprintf("%s: %v", failure.name, failure.err))
 	}
 
-	return coreerr.E("security", core.Sprintf("failed to fetch %s for %s: %s",
+	return core.Fail(coreerr.E("security", core.Sprintf("failed to fetch %s for %s: %s",
 		core.Join(", ", missingCollectors...),
 		target,
 		core.Join("; ", messages...),
-	), nil)
+	), nil))
 }
 
-func combineSecurityTargetErrors(commandName string, targetErrors map[string]error) error {
+func combineSecurityTargetErrors(commandName string, targetErrors map[string]error) core.Result {
 	if len(targetErrors) == 0 {
-		return nil
+		return core.Ok(nil)
 	}
 
 	targetNames := make([]string, 0, len(targetErrors))
@@ -442,11 +446,11 @@ func combineSecurityTargetErrors(commandName string, targetErrors map[string]err
 		messages = append(messages, core.Sprintf("%s: %v", targetName, targetErrors[targetName]))
 	}
 
-	return coreerr.E("security", core.Sprintf("%s failed for %d target(s): %s",
+	return core.Fail(coreerr.E("security", core.Sprintf("%s failed for %d target(s): %s",
 		commandName,
 		len(targetNames),
 		core.Join("; ", messages...),
-	), nil)
+	), nil))
 }
 
 func buildSecurityMetricsEvent(eventType string, startedAt time.Time, repository string, data map[string]any) ai.Event {

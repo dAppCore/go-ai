@@ -83,8 +83,8 @@ func Record(event Event) (err error) {
 	if err := coreio.Local.EnsureDir(dir); err != nil {
 		return coreerr.E("ai", "record event", err)
 	}
-	if err := chmodMetricsPath(dir, metricsDirMode); err != nil {
-		return coreerr.E("ai", "record event", err)
+	if r := chmodMetricsPath(dir, metricsDirMode); !r.OK {
+		return coreerr.E("ai", "record event", core.NewError(r.Error()))
 	}
 
 	path := metricsFilePath(dir, recordedAt)
@@ -206,15 +206,18 @@ func openMetricsEventFile(path string) (goio.WriteCloser, error) {
 		return nil, err
 	}
 
-	if err := chmodMetricsPath(path, metricsFileMode); err != nil {
+	if r := chmodMetricsPath(path, metricsFileMode); !r.OK {
 		file.Close()
-		return nil, err
+		return nil, core.NewError(r.Error())
 	}
 	return file, nil
 }
 
-func chmodMetricsPath(path string, mode uint32) error {
-	return syscall.Chmod(path, mode)
+func chmodMetricsPath(path string, mode uint32) core.Result {
+	if err := syscall.Chmod(path, mode); err != nil {
+		return core.Fail(err)
+	}
+	return core.Ok(nil)
 }
 
 var sensitiveMetricKeys = []string{

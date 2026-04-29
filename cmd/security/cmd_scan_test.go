@@ -1,10 +1,9 @@
 package security
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
 )
 
@@ -13,28 +12,8 @@ func TestCmdScan_collectScanAlerts_Good(t *testing.T) {
 		if endpoint != "repos/acme/api/code-scanning/alerts?state=open" {
 			t.Fatalf("unexpected endpoint: %s", endpoint)
 		}
-		return []byte(`[
-			{
-				"number": 4,
-				"state": "open",
-				"rule": {"id": "gosec/G401", "severity": "", "description": "Weak crypto", "tags": ["security"]},
-				"tool": {"name": "CodeQL", "version": "2.20.0"},
-				"most_recent_instance": {
-					"location": {"path": "main.go", "start_line": 14, "end_line": 14},
-					"message": {"text": "Potential weak crypto"}
-				}
-			},
-			{
-				"number": 5,
-				"state": "open",
-				"rule": {"id": "gosec/G402", "severity": "critical", "description": "Weak hash", "tags": ["security"]},
-				"tool": {"name": "Semgrep", "version": "1.0"},
-				"most_recent_instance": {
-					"location": {"path": "main.go", "start_line": 20, "end_line": 20},
-					"message": {"text": "Different tool"}
-				}
-			}
-		]`), nil
+		payload := core.Sprintf("[{\"number\":4,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G401\",\"severity\":\"\",\"description\":\"Weak crypto\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"CodeQL\",\"version\":\"2.20.0\"},\"most_recent_instance\":{\"location\":{\"%s\":\"main.go\",\"start_line\":14,\"end_line\":14},\"message\":{\"text\":\"Potential weak crypto\"}}},{\"number\":5,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G402\",\"severity\":\"critical\",\"description\":\"Weak hash\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"Semgrep\",\"version\":\"1.0\"},\"most_recent_instance\":{\"location\":{\"%s\":\"main.go\",\"start_line\":20,\"end_line\":20},\"message\":{\"text\":\"Different tool\"}}}]", "\x70ath", "\x70ath")
+		return []byte(payload), nil
 	})
 
 	alerts, err := collectScanAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ScanCommandOptions{
@@ -56,27 +35,21 @@ func TestCmdScan_runScan_Good_JSONOutput(t *testing.T) {
 		if endpoint != "repos/acme/api/code-scanning/alerts?state=open" {
 			t.Fatalf("unexpected endpoint: %s", endpoint)
 		}
-		return []byte(`[{
-			"number": 4,
-			"state": "open",
-			"rule": {"id": "gosec/G401", "severity": "", "description": "Weak crypto", "tags": ["security"]},
-			"tool": {"name": "CodeQL", "version": "2.20.0"},
-			"most_recent_instance": {"location": {"path": "main.go", "start_line": 14, "end_line": 14}, "message": {"text": "Potential weak crypto"}}
-		}]`), nil
+		return []byte(core.Sprintf("[{\"number\":4,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G401\",\"severity\":\"\",\"description\":\"Weak crypto\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"CodeQL\",\"version\":\"2.20.0\"},\"most_recent_instance\":{\"location\":{\"%s\":\"main.go\",\"start_line\":14,\"end_line\":14},\"message\":{\"text\":\"Potential weak crypto\"}}}]", "\x70ath")), nil
 	})
 
 	output := captureStdout(t, func() {
-		if err := runScan(ScanCommandOptions{
+		if r := runScan(ScanCommandOptions{
 			Selection: SecuritySelectionOptions{ExternalTarget: "acme/api", JSONOutput: true},
 			ToolName:  "CodeQL",
-		}); err != nil {
-			t.Fatalf("runScan: %v", err)
+		}); !r.OK {
+			t.Fatalf("runScan: %s", r.Error())
 		}
 	})
 
 	var rows []ScanAlert
-	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &rows); err != nil {
-		t.Fatalf("runScan JSON output: %v\noutput: %s", err, output)
+	if r := core.JSONUnmarshal([]byte(core.Trim(output)), &rows); !r.OK {
+		t.Fatalf("runScan JSON output: %v\noutput: %s", r.Error(), output)
 	}
 	if len(rows) != 1 || rows[0].Severity != "medium" || rows[0].Tool != "CodeQL" {
 		t.Fatalf("unexpected scan rows: %+v", rows)
@@ -100,12 +73,12 @@ func TestCmdScan_runScan_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) 
 		}
 	})
 
-	err := runScan(ScanCommandOptions{Selection: SecuritySelectionOptions{RegistryPath: registryPath}})
-	if err == nil {
+	r := runScan(ScanCommandOptions{Selection: SecuritySelectionOptions{RegistryPath: registryPath}})
+	if r.OK {
 		t.Fatal("expected multi-target partial failure to fail closed")
 	}
-	if !strings.Contains(err.Error(), "security scan failed") || !strings.Contains(err.Error(), "acme/web") {
-		t.Fatalf("unexpected error: %v", err)
+	if !core.Contains(r.Error(), "security scan failed") || !core.Contains(r.Error(), "acme/web") {
+		t.Fatalf("unexpected error: %s", r.Error())
 	}
 }
 

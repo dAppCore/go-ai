@@ -1,12 +1,10 @@
 package security
 
 import (
-	"bytes"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
+
+	core "dappco.re/go"
+	"dappco.re/go/cli/pkg/cli"
 )
 
 func withSecurityTempHome(t *testing.T) string {
@@ -29,45 +27,28 @@ func withFakeGitHubScript(t *testing.T, script string) {
 	t.Helper()
 
 	binDir := t.TempDir()
-	ghPath := filepath.Join(binDir, "gh")
-	if err := os.WriteFile(ghPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake gh: %v", err)
+	ghPath := core.PathJoin(binDir, "gh")
+	if r := core.WriteFile(ghPath, []byte(script), 0o755); !r.OK {
+		t.Fatalf("write fake gh: %v", r.Error())
 	}
 
-	path := os.Getenv("PATH")
+	path := core.Getenv("PATH")
 	if path == "" {
 		t.Setenv("PATH", binDir)
 		return
 	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
+	t.Setenv("PATH", binDir+string(core.PathListSeparator)+path)
 }
 
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
-	originalStdout := os.Stdout
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stdout = writer
-	defer func() {
-		os.Stdout = originalStdout
-	}()
+	buf := core.NewBuilder()
+	cli.SetStdout(buf)
+	defer cli.SetStdout(nil)
 
 	fn()
 
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, reader); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("close reader: %v", err)
-	}
 	return buf.String()
 }
 
@@ -82,16 +63,16 @@ func stubGitHubAPI(t *testing.T, fn func(endpoint string) ([]byte, error)) {
 }
 
 func normalizeWhitespace(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+	return core.Join(" ", securityFields(s)...)
 }
 
 func writeSecurityRegistry(t *testing.T, org string, repoNames ...string) string {
 	t.Helper()
 
 	registryDir := t.TempDir()
-	registryPath := filepath.Join(registryDir, "repos.yaml")
+	registryPath := core.PathJoin(registryDir, "repos.yaml")
 
-	var builder strings.Builder
+	builder := core.NewBuilder()
 	builder.WriteString("version: 1\n")
 	builder.WriteString("org: " + org + "\n")
 	builder.WriteString("base_path: " + registryDir + "\n")
@@ -101,9 +82,41 @@ func writeSecurityRegistry(t *testing.T, org string, repoNames ...string) string
 		builder.WriteString("    type: module\n")
 	}
 
-	if err := os.WriteFile(registryPath, []byte(builder.String()), 0o644); err != nil {
-		t.Fatalf("write registry: %v", err)
+	if r := core.WriteFile(registryPath, []byte(builder.String()), 0o644); !r.OK {
+		t.Fatalf("write registry: %v", r.Error())
 	}
 
 	return registryPath
+}
+
+func securityFields(value string) []string {
+	var out []string
+	start := -1
+	for i, r := range value {
+		if core.IsSpace(r) {
+			if start >= 0 {
+				out = append(out, value[start:i])
+				start = -1
+			}
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		out = append(out, value[start:])
+	}
+	return out
+}
+
+func securityIndex(value, needle string) int {
+	if needle == "" {
+		return 0
+	}
+	parts := core.SplitN(value, needle, 2)
+	if len(parts) != 2 {
+		return -1
+	}
+	return len(parts[0])
 }

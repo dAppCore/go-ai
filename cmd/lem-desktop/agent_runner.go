@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"sync"
 
+	core "dappco.re/go"
 	"dappco.re/lthn/lem/pkg/lem"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -43,9 +43,9 @@ func (a *AgentRunner) ServiceName() string {
 }
 
 // ServiceStartup is called when the Wails app starts.
-func (a *AgentRunner) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
-	log.Println("AgentRunner started")
-	return nil
+func (a *AgentRunner) ServiceStartup(ctx context.Context, options application.ServiceOptions) core.Result {
+	core.Print(core.Stderr(), "AgentRunner started\n")
+	return core.Ok(nil)
 }
 
 // IsRunning returns whether the agent is currently running.
@@ -63,11 +63,11 @@ func (a *AgentRunner) CurrentTask() string {
 }
 
 // Start begins the scoring agent in a background goroutine.
-func (a *AgentRunner) Start() error {
+func (a *AgentRunner) Start() core.Result {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return nil
+		return core.Ok(nil)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,7 +85,7 @@ func (a *AgentRunner) Start() error {
 			a.mu.Unlock()
 		}()
 
-		log.Println("Scoring agent started via desktop")
+		core.Print(core.Stderr(), "Scoring agent started via desktop\n")
 
 		// Use the same RunAgent function from pkg/lem.
 		// Build args matching the CLI flags.
@@ -105,7 +105,7 @@ func (a *AgentRunner) Start() error {
 		lem.RunAgent(args)
 	}()
 
-	return nil
+	return core.Ok(nil)
 }
 
 // Stop stops the scoring agent.
@@ -118,5 +118,5 @@ func (a *AgentRunner) Stop() {
 	}
 	a.running = false
 	a.task = ""
-	log.Println("Scoring agent stopped via desktop")
+	core.Print(core.Stderr(), "Scoring agent stopped via desktop\n")
 }

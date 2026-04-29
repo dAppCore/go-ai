@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
-	"os/exec"
 	"runtime"
 
-	"dappco.re/go"
+	core "dappco.re/go"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	execabs "golang.org/x/sys/execabs"
 )
 
 // TrayService provides system tray bindings for the LEM desktop.
@@ -37,15 +36,15 @@ func (t *TrayService) ServiceName() string {
 }
 
 // ServiceStartup is called when the Wails app starts.
-func (t *TrayService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
-	log.Println("TrayService started")
-	return nil
+func (t *TrayService) ServiceStartup(ctx context.Context, options application.ServiceOptions) core.Result {
+	core.Print(core.Stderr(), "TrayService started\n")
+	return core.Ok(nil)
 }
 
 // ServiceShutdown is called on app exit.
-func (t *TrayService) ServiceShutdown() error {
-	log.Println("TrayService shutdown")
-	return nil
+func (t *TrayService) ServiceShutdown() core.Result {
+	core.Print(core.Stderr(), "TrayService shutdown\n")
+	return core.Ok(nil)
 }
 
 // TraySnapshot is the complete tray state for the frontend.
@@ -85,25 +84,25 @@ func (t *TrayService) GetSnapshot() TraySnapshot {
 }
 
 // StartStack starts the Docker compose stack.
-func (t *TrayService) StartStack() error {
+func (t *TrayService) StartStack() core.Result {
 	if t.docker == nil {
-		return core.E("lem.desktop.tray", "docker service not available", nil)
+		return core.Fail(core.E("lem.desktop.tray", "docker service not available", nil))
 	}
 	return t.docker.Start()
 }
 
 // StopStack stops the Docker compose stack.
-func (t *TrayService) StopStack() error {
+func (t *TrayService) StopStack() core.Result {
 	if t.docker == nil {
-		return core.E("lem.desktop.tray", "docker service not available", nil)
+		return core.Fail(core.E("lem.desktop.tray", "docker service not available", nil))
 	}
 	return t.docker.Stop()
 }
 
 // StartAgent starts the scoring agent.
-func (t *TrayService) StartAgent() error {
+func (t *TrayService) StartAgent() core.Result {
 	if t.agent == nil {
-		return core.E("lem.desktop.tray", "agent service not available", nil)
+		return core.Fail(core.E("lem.desktop.tray", "agent service not available", nil))
 	}
 	return t.agent.Start()
 }
@@ -272,6 +271,13 @@ func openBrowser(url string) {
 		cmd = "rundll32"
 		args = []string{"url.dll,FileProtocolHandler"}
 	}
+	if cmd == "" {
+		return
+	}
 	args = append(args, url)
-	go exec.Command(cmd, args...).Start()
+	go func() {
+		if err := execabs.Command(cmd, args...).Start(); err != nil {
+			core.Print(core.Stderr(), "open browser: %v\n", err)
+		}
+	}()
 }

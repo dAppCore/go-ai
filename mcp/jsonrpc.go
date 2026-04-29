@@ -1,26 +1,23 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strings"
+
+	core "dappco.re/go"
 )
 
 type rpcRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+	JSONRPC string     `json:"jsonrpc"`
+	ID      RawMessage `json:"id,omitempty"`
+	Method  string     `json:"method"`
+	Params  RawMessage `json:"params,omitempty"`
 }
 
 type rpcResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
-	Result  any             `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
+	JSONRPC string     `json:"jsonrpc"`
+	ID      RawMessage `json:"id"`
+	Result  any        `json:"result,omitempty"`
+	Error   *rpcError  `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -29,25 +26,25 @@ type rpcError struct {
 }
 
 type callToolParams struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Name      string     `json:"name"`
+	Arguments RawMessage `json:"arguments,omitempty"`
 }
 
 // HandleFrame handles one newline-delimited JSON-RPC frame.
 func (s *Service) HandleFrame(ctx context.Context, frame []byte) ([]byte, error) {
-	frame = bytes.TrimSpace(frame)
+	frame = []byte(core.Trim(string(frame)))
 	if len(frame) == 0 {
 		return nil, nil
 	}
 
 	var req rpcRequest
-	if err := json.Unmarshal(frame, &req); err != nil {
+	if r := core.JSONUnmarshal(frame, &req); !r.OK {
 		response := marshalRPCResponse(rpcResponse{
 			JSONRPC: "2.0",
-			ID:      json.RawMessage("null"),
+			ID:      RawMessage("null"),
 			Error:   &rpcError{Code: -32700, Message: "parse error"},
 		})
-		return response, err
+		return response, core.NewError(r.Error())
 	}
 
 	if req.JSONRPC != "2.0" || req.Method == "" {
@@ -93,29 +90,29 @@ func (s *Service) handleMethod(ctx context.Context, req rpcRequest) (any, error)
 	case "tools/call":
 		return s.handleToolCall(ctx, req.Params)
 	default:
-		return nil, fmt.Errorf("method not found: %s", req.Method)
+		return nil, core.Errorf("method not found: %s", req.Method)
 	}
 }
 
-func (s *Service) handleToolCall(ctx context.Context, raw json.RawMessage) (any, error) {
+func (s *Service) handleToolCall(ctx context.Context, raw RawMessage) (any, error) {
 	var params callToolParams
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return nil, fmt.Errorf("%w: missing tools/call params", errInvalidParams)
+	raw = RawMessage(core.Trim(string(raw)))
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, core.Errorf("%w: missing tools/call params", errInvalidParams)
 	}
-	if err := json.Unmarshal(raw, &params); err != nil {
-		return nil, fmt.Errorf("%w: %v", errInvalidParams, err)
+	if r := core.JSONUnmarshal([]byte(raw), &params); !r.OK {
+		return nil, core.Errorf("%w: %s", errInvalidParams, r.Error())
 	}
-	params.Name = strings.TrimSpace(params.Name)
+	params.Name = core.Trim(params.Name)
 	if params.Name == "" {
-		return nil, fmt.Errorf("%w: tool name is required", errInvalidParams)
+		return nil, core.Errorf("%w: tool name is required", errInvalidParams)
 	}
 	tool, ok := s.tools[params.Name]
 	if !ok {
-		return nil, fmt.Errorf("tool not found: %s", params.Name)
+		return nil, core.Errorf("tool not found: %s", params.Name)
 	}
-	if len(bytes.TrimSpace(params.Arguments)) == 0 {
-		params.Arguments = []byte("{}")
+	if len(core.Trim(string(params.Arguments))) == 0 {
+		params.Arguments = RawMessage("{}")
 	}
 
 	output, err := tool.Handler(ctx, params.Arguments)
@@ -123,7 +120,7 @@ func (s *Service) handleToolCall(ctx context.Context, raw json.RawMessage) (any,
 		return nil, err
 	}
 
-	outputJSON, _ := json.Marshal(output)
+	outputJSON := core.JSONMarshalString(output)
 	return map[string]any{
 		"content": []map[string]any{{
 			"type": "text",
@@ -134,9 +131,9 @@ func (s *Service) handleToolCall(ctx context.Context, raw json.RawMessage) (any,
 	}, nil
 }
 
-func (s *Service) errorResponse(id json.RawMessage, code int, message string) []byte {
+func (s *Service) errorResponse(id RawMessage, code int, message string) []byte {
 	if len(id) == 0 {
-		id = json.RawMessage("null")
+		id = RawMessage("null")
 	}
 	return marshalRPCResponse(rpcResponse{
 		JSONRPC: "2.0",
@@ -146,27 +143,30 @@ func (s *Service) errorResponse(id json.RawMessage, code int, message string) []
 }
 
 func rpcCodeForError(err error) int {
-	if errors.Is(err, errInvalidRequest) {
+	if core.Is(err, errInvalidRequest) {
 		return -32600
 	}
-	if errors.Is(err, errInvalidParams) {
+	if core.Is(err, errInvalidParams) {
 		return -32602
 	}
-	if strings.HasPrefix(err.Error(), "method not found:") {
+	if core.HasPrefix(err.Error(), "method not found:") {
 		return -32601
 	}
 	return -32000
 }
 
 func marshalRPCResponse(response rpcResponse) []byte {
-	data, err := json.Marshal(response)
-	if err != nil {
-		fallback, _ := json.Marshal(rpcResponse{
+	data := core.JSONMarshal(response)
+	if !data.OK {
+		fallback := core.JSONMarshal(rpcResponse{
 			JSONRPC: "2.0",
-			ID:      json.RawMessage("null"),
+			ID:      RawMessage("null"),
 			Error:   &rpcError{Code: -32603, Message: "internal error"},
 		})
-		return fallback
+		if !fallback.OK {
+			return []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"internal error"}}`)
+		}
+		return fallback.Value.([]byte)
 	}
-	return data
+	return data.Value.([]byte)
 }

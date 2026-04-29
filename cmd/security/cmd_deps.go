@@ -16,7 +16,11 @@ func addDepsCommand(parent *cli.Command) {
 		Short: i18n.T("cmd.security.deps.short"),
 		Long:  i18n.T("cmd.security.deps.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runDeps(*selectionOptions)
+			r := runDeps(*selectionOptions)
+			if !r.OK {
+				return coreResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -42,16 +46,16 @@ type DepAlert struct {
 	Summary        string `json:"summary"`
 }
 
-func runDeps(selectionOptions SecuritySelectionOptions) error {
+func runDeps(selectionOptions SecuritySelectionOptions) core.Result {
 	startedAt := time.Now()
 
 	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 
-	if err := checkGitHubCLI(); err != nil {
-		return err
+	if r := checkGitHubCLI(); !r.OK {
+		return r
 	}
 
 	var allAlerts []DepAlert
@@ -71,8 +75,8 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if err := combineSecurityTargetErrors("security deps", targetErrors); err != nil {
-		return err
+	if r := combineSecurityTargetErrors("security deps", targetErrors); !r.OK {
+		return r
 	}
 
 	recordedRepo := metricRepositoryForTargets(targets)
@@ -89,7 +93,7 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 
 	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
-		return nil
+		return core.Ok(nil)
 	}
 
 	cli.Blank()
@@ -97,7 +101,7 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
-		return nil
+		return core.Ok(nil)
 	}
 
 	for _, alert := range allAlerts {
@@ -119,7 +123,7 @@ func runDeps(selectionOptions SecuritySelectionOptions) error {
 	}
 	cli.Blank()
 
-	return nil
+	return core.Ok(nil)
 }
 
 func collectDepAlerts(target SecurityTarget, severityFilter string) ([]DepAlert, error) {

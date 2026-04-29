@@ -6,21 +6,21 @@ import (
 	"context"
 	"crypto/subtle"
 	"flag"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"os/signal"
-	"strings"
+	"syscall"
 	"time"
+
+	core "dappco.re/go"
 )
 
 func main() {
-	if err := runLabCommand(os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+	if r := runLabCommand(core.Args()[1:], core.Stdout(), core.Stderr()); !r.OK {
+		core.Print(core.Stderr(), "%s\n", r.Error())
+		core.Exit(2)
 	}
 }
 
@@ -32,24 +32,24 @@ type LabCommandOptions struct {
 
 const defaultLabBindAddr = "127.0.0.1:8080"
 
-func runLabCommand(args []string, stdout io.Writer, stderr io.Writer) error {
+func runLabCommand(args []string, stdout io.Writer, stderr io.Writer) core.Result {
 	if len(args) == 0 {
 		printLabUsage(stdout)
-		return nil
+		return core.Ok(nil)
 	}
 
 	switch args[0] {
 	case "help", "-h", "--help":
 		printLabUsage(stdout)
-		return nil
+		return core.Ok(nil)
 	case "serve":
 		options, err := parseLabServeOptions(args[1:], stderr)
 		if err != nil {
-			return err
+			return core.Fail(err)
 		}
 		return runServe(options)
 	default:
-		return fmt.Errorf("unknown go-ai command %q", args[0])
+		return core.Fail(core.Errorf("unknown go-ai command %q", args[0]))
 	}
 }
 
@@ -70,7 +70,7 @@ func parseLabServeOptions(args []string, output io.Writer) (LabCommandOptions, e
 		return options, err
 	}
 	if flags.NArg() > 0 {
-		return options, fmt.Errorf("unexpected argument %q", flags.Arg(0))
+		return options, core.Errorf("unexpected argument %q", flags.Arg(0))
 	}
 	return options, nil
 }
@@ -79,21 +79,21 @@ func printLabUsage(output io.Writer) {
 	if output == nil {
 		return
 	}
-	_, _ = fmt.Fprintln(output, "Usage: go-ai serve [--bind address] [--allow-remote]")
+	core.WriteString(output, "Usage: go-ai serve [--bind address] [--allow-remote]\n")
 }
 
-func runServe(options LabCommandOptions) error {
-	if err := validateLabBindAddress(options.Bind, options.AllowRemote); err != nil {
-		return err
+func runServe(options LabCommandOptions) core.Result {
+	if r := validateLabBindAddress(options.Bind, options.AllowRemote); !r.OK {
+		return r
 	}
 
-	authToken := strings.TrimSpace(os.Getenv("CORE_LAB_API_TOKEN"))
-	if err := validateLabRemoteAuth(options.AllowRemote, authToken); err != nil {
-		return err
+	authToken := core.Trim(core.Getenv("CORE_LAB_API_TOKEN"))
+	if r := validateLabRemoteAuth(options.AllowRemote, authToken); !r.OK {
+		return r
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	logger := slog.New(slog.NewJSONHandler(core.Stdout(), nil))
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer cancel()
 
 	srv := &http.Server{
@@ -113,9 +113,9 @@ func runServe(options LabCommandOptions) error {
 
 	logger.Info("lab dashboard starting", "addr", options.Bind)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return err
+		return core.Fail(err)
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 func newLabServeMux(authToken string) *http.ServeMux {
@@ -142,20 +142,20 @@ func labHealthz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
 }
 
-func validateLabBindAddress(addr string, allowRemote bool) error {
+func validateLabBindAddress(addr string, allowRemote bool) core.Result {
 	if allowRemote {
-		return nil
+		return core.Ok(nil)
 	}
 
 	if isLoopbackBindAddress(addr) {
-		return nil
+		return core.Ok(nil)
 	}
 
-	return fmt.Errorf("refusing to bind lab dashboard to non-loopback address %q without --allow-remote", addr)
+	return core.Fail(core.Errorf("refusing to bind lab dashboard to non-loopback address %q without --allow-remote", addr))
 }
 
 func isLoopbackBindAddress(addr string) bool {
-	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	host, _, err := net.SplitHostPort(core.Trim(addr))
 	if err != nil {
 		if err.Error() == "missing port in address" {
 			return false
@@ -182,7 +182,7 @@ func requireLabAuth(handler http.HandlerFunc, token string) http.HandlerFunc {
 			return
 		}
 
-		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+		authHeader := core.Trim(r.Header.Get("Authorization"))
 		expected := "Bearer " + token
 		if len(authHeader) != len(expected) || subtle.ConstantTimeCompare([]byte(authHeader), []byte(expected)) != 1 {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -193,12 +193,12 @@ func requireLabAuth(handler http.HandlerFunc, token string) http.HandlerFunc {
 	}
 }
 
-func validateLabRemoteAuth(allowRemote bool, authToken string) error {
+func validateLabRemoteAuth(allowRemote bool, authToken string) core.Result {
 	if !allowRemote {
-		return nil
+		return core.Ok(nil)
 	}
-	if strings.TrimSpace(authToken) != "" {
-		return nil
+	if core.Trim(authToken) != "" {
+		return core.Ok(nil)
 	}
-	return fmt.Errorf("refusing to start lab dashboard with --allow-remote without CORE_LAB_API_TOKEN")
+	return core.Fail(core.Errorf("refusing to start lab dashboard with --allow-remote without CORE_LAB_API_TOKEN"))
 }

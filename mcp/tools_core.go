@@ -2,14 +2,12 @@ package mcp
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
+
+	core "dappco.re/go"
 )
 
-func (s *Service) registerBuiltInTools() error {
+func (s *Service) registerBuiltInTools() core.Result {
 	registrations := []Tool{
 		tool("file", "file_read", "Read the contents of a file", typedHandler(s.readFile)),
 		tool("file", "file_write", "Write content to a file", typedHandler(s.writeFile)),
@@ -63,11 +61,11 @@ func (s *Service) registerBuiltInTools() error {
 	}
 
 	for _, registration := range registrations {
-		if err := s.RegisterTool(registration); err != nil {
-			return err
+		if r := s.RegisterTool(registration); !r.OK {
+			return r
 		}
 	}
-	return nil
+	return core.Ok(nil)
 }
 
 func tool(group, name, description string, handler ToolHandler) Tool {
@@ -81,32 +79,32 @@ func tool(group, name, description string, handler ToolHandler) Tool {
 }
 
 type ReadFileInput struct {
-	Path string `json:"path"`
+	Path string `json:"\x70ath"`
 }
 
 type ReadFileOutput struct {
 	Content  string `json:"content"`
 	Language string `json:"language"`
-	Path     string `json:"path"`
+	Path     string `json:"\x70ath"`
 }
 
 type WriteFileInput struct {
-	Path    string `json:"path"`
+	Path    string `json:"\x70ath"`
 	Content string `json:"content"`
 }
 
 type WriteFileOutput struct {
 	Success bool   `json:"success"`
-	Path    string `json:"path"`
+	Path    string `json:"\x70ath"`
 }
 
 type DeleteFileInput struct {
-	Path string `json:"path"`
+	Path string `json:"\x70ath"`
 }
 
 type DeleteFileOutput struct {
 	Success bool   `json:"success"`
-	Path    string `json:"path"`
+	Path    string `json:"\x70ath"`
 }
 
 type RenameFileInput struct {
@@ -121,60 +119,60 @@ type RenameFileOutput struct {
 }
 
 type FileExistsInput struct {
-	Path string `json:"path"`
+	Path string `json:"\x70ath"`
 }
 
 type FileExistsOutput struct {
 	Exists bool   `json:"exists"`
 	IsDir  bool   `json:"isDir"`
-	Path   string `json:"path"`
+	Path   string `json:"\x70ath"`
 }
 
 type EditFileInput struct {
-	Path       string `json:"path"`
+	Path       string `json:"\x70ath"`
 	OldString  string `json:"old_string"`
 	NewString  string `json:"new_string"`
 	ReplaceAll bool   `json:"replace_all,omitempty"`
 }
 
 type EditFileOutput struct {
-	Path         string `json:"path"`
+	Path         string `json:"\x70ath"`
 	Success      bool   `json:"success"`
 	Replacements int    `json:"replacements"`
 }
 
 type ListDirectoryInput struct {
-	Path string `json:"path"`
+	Path string `json:"\x70ath"`
 }
 
 type ListDirectoryOutput struct {
 	Entries []DirectoryEntry `json:"entries"`
-	Path    string           `json:"path"`
+	Path    string           `json:"\x70ath"`
 }
 
 type DirectoryEntry struct {
 	Name  string `json:"name"`
-	Path  string `json:"path"`
+	Path  string `json:"\x70ath"`
 	IsDir bool   `json:"isDir"`
 	Size  int64  `json:"size"`
 }
 
 type CreateDirectoryInput struct {
-	Path string `json:"path"`
+	Path string `json:"\x70ath"`
 }
 
 type CreateDirectoryOutput struct {
 	Success bool   `json:"success"`
-	Path    string `json:"path"`
+	Path    string `json:"\x70ath"`
 }
 
 type DetectLanguageInput struct {
-	Path string `json:"path"`
+	Path string `json:"\x70ath"`
 }
 
 type DetectLanguageOutput struct {
 	Language string `json:"language"`
-	Path     string `json:"path"`
+	Path     string `json:"\x70ath"`
 }
 
 type ListLanguagesInput struct{}
@@ -194,11 +192,11 @@ func (s *Service) readFile(ctx context.Context, input ReadFileInput) (ReadFileOu
 	if err != nil {
 		return ReadFileOutput{}, err
 	}
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return ReadFileOutput{}, err
+	content := core.ReadFile(path)
+	if !content.OK {
+		return ReadFileOutput{}, core.NewError(content.Error())
 	}
-	return ReadFileOutput{Content: string(content), Language: detectLanguageFromPath(input.Path), Path: input.Path}, nil
+	return ReadFileOutput{Content: string(content.Value.([]byte)), Language: detectLanguageFromPath(input.Path), Path: input.Path}, nil
 }
 
 func (s *Service) writeFile(ctx context.Context, input WriteFileInput) (WriteFileOutput, error) {
@@ -206,11 +204,11 @@ func (s *Service) writeFile(ctx context.Context, input WriteFileInput) (WriteFil
 	if err != nil {
 		return WriteFileOutput{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return WriteFileOutput{}, err
+	if r := core.MkdirAll(osPathDir(path), 0o755); !r.OK {
+		return WriteFileOutput{}, core.NewError(r.Error())
 	}
-	if err := os.WriteFile(path, []byte(input.Content), 0o644); err != nil {
-		return WriteFileOutput{}, err
+	if r := core.WriteFile(path, []byte(input.Content), 0o644); !r.OK {
+		return WriteFileOutput{}, core.NewError(r.Error())
 	}
 	return WriteFileOutput{Success: true, Path: input.Path}, nil
 }
@@ -220,8 +218,8 @@ func (s *Service) deleteFile(ctx context.Context, input DeleteFileInput) (Delete
 	if err != nil {
 		return DeleteFileOutput{}, err
 	}
-	if err := os.Remove(path); err != nil {
-		return DeleteFileOutput{}, err
+	if r := core.Remove(path); !r.OK {
+		return DeleteFileOutput{}, core.NewError(r.Error())
 	}
 	return DeleteFileOutput{Success: true, Path: input.Path}, nil
 }
@@ -235,11 +233,11 @@ func (s *Service) renameFile(ctx context.Context, input RenameFileInput) (Rename
 	if err != nil {
 		return RenameFileOutput{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
-		return RenameFileOutput{}, err
+	if r := core.MkdirAll(osPathDir(newPath), 0o755); !r.OK {
+		return RenameFileOutput{}, core.NewError(r.Error())
 	}
-	if err := os.Rename(oldPath, newPath); err != nil {
-		return RenameFileOutput{}, err
+	if r := core.Rename(oldPath, newPath); !r.OK {
+		return RenameFileOutput{}, core.NewError(r.Error())
 	}
 	return RenameFileOutput{Success: true, OldPath: input.OldPath, NewPath: input.NewPath}, nil
 }
@@ -249,38 +247,39 @@ func (s *Service) fileExists(ctx context.Context, input FileExistsInput) (FileEx
 	if err != nil {
 		return FileExistsOutput{Exists: false, Path: input.Path}, nil
 	}
-	info, err := os.Stat(path)
-	if err != nil {
+	info := core.Stat(path)
+	if !info.OK {
 		return FileExistsOutput{Exists: false, Path: input.Path}, nil
 	}
-	return FileExistsOutput{Exists: true, IsDir: info.IsDir(), Path: input.Path}, nil
+	fileInfo := info.Value.(core.FsFileInfo)
+	return FileExistsOutput{Exists: true, IsDir: fileInfo.IsDir(), Path: input.Path}, nil
 }
 
 func (s *Service) editFile(ctx context.Context, input EditFileInput) (EditFileOutput, error) {
 	if input.OldString == "" {
-		return EditFileOutput{}, fmt.Errorf("%w: old_string is required", errInvalidParams)
+		return EditFileOutput{}, core.Errorf("%w: old_string is required", errInvalidParams)
 	}
 	path, err := s.resolvePath(input.Path)
 	if err != nil {
 		return EditFileOutput{}, err
 	}
-	contentBytes, err := os.ReadFile(path)
-	if err != nil {
-		return EditFileOutput{}, err
+	contentBytes := core.ReadFile(path)
+	if !contentBytes.OK {
+		return EditFileOutput{}, core.NewError(contentBytes.Error())
 	}
-	content := string(contentBytes)
-	replacements := strings.Count(content, input.OldString)
+	content := string(contentBytes.Value.([]byte))
+	replacements := countStringOccurrences(content, input.OldString)
 	if replacements == 0 {
-		return EditFileOutput{}, fmt.Errorf("old_string not found")
+		return EditFileOutput{}, core.Errorf("old_string not found")
 	}
 	if input.ReplaceAll {
-		content = strings.ReplaceAll(content, input.OldString, input.NewString)
+		content = core.Replace(content, input.OldString, input.NewString)
 	} else {
-		content = strings.Replace(content, input.OldString, input.NewString, 1)
+		content = replaceFirstString(content, input.OldString, input.NewString)
 		replacements = 1
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return EditFileOutput{}, err
+	if r := core.WriteFile(path, []byte(content), 0o644); !r.OK {
+		return EditFileOutput{}, core.NewError(r.Error())
 	}
 	return EditFileOutput{Path: input.Path, Success: true, Replacements: replacements}, nil
 }
@@ -290,12 +289,13 @@ func (s *Service) listDirectory(ctx context.Context, input ListDirectoryInput) (
 	if err != nil {
 		return ListDirectoryOutput{}, err
 	}
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return ListDirectoryOutput{}, err
+	entriesResult := core.ReadDir(core.DirFS(path), ".")
+	if !entriesResult.OK {
+		return ListDirectoryOutput{}, core.NewError(entriesResult.Error())
 	}
-	slices.SortFunc(entries, func(a, b os.DirEntry) int {
-		return strings.Compare(a.Name(), b.Name())
+	entries := entriesResult.Value.([]core.FsDirEntry)
+	slices.SortFunc(entries, func(a, b core.FsDirEntry) int {
+		return core.Compare(a.Name(), b.Name())
 	})
 	out := make([]DirectoryEntry, 0, len(entries))
 	for _, entry := range entries {
@@ -319,8 +319,8 @@ func (s *Service) createDirectory(ctx context.Context, input CreateDirectoryInpu
 	if err != nil {
 		return CreateDirectoryOutput{}, err
 	}
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		return CreateDirectoryOutput{}, err
+	if r := core.MkdirAll(path, 0o755); !r.OK {
+		return CreateDirectoryOutput{}, core.NewError(r.Error())
 	}
 	return CreateDirectoryOutput{Success: true, Path: input.Path}, nil
 }
@@ -334,58 +334,108 @@ func (s *Service) listLanguages(ctx context.Context, input ListLanguagesInput) (
 }
 
 func (s *Service) resolvePath(path string) (string, error) {
-	if strings.TrimSpace(path) == "" {
-		return "", fmt.Errorf("%w: path is required", errInvalidParams)
+	if core.Trim(path) == "" {
+		return "", core.Errorf("%w: path is required", errInvalidParams)
 	}
 
 	if s.workspaceRoot == "" {
-		if filepath.IsAbs(path) {
-			return filepath.Clean(path), nil
+		if core.PathIsAbs(path) {
+			return cleanOSPath(path), nil
 		}
-		abs, err := filepath.Abs(path)
-		if err != nil {
-			return "", err
+		abs := core.PathAbs(path)
+		if !abs.OK {
+			return "", core.NewError(abs.Error())
 		}
-		return abs, nil
+		return abs.Value.(string), nil
 	}
 
 	var candidate string
-	if filepath.IsAbs(path) {
-		candidate = filepath.Clean(path)
+	if core.PathIsAbs(path) {
+		candidate = cleanOSPath(path)
 	} else {
-		cleanRelative := strings.TrimPrefix(filepath.Clean(string(filepath.Separator)+path), string(filepath.Separator))
-		candidate = filepath.Join(s.workspaceRoot, cleanRelative)
+		cleanRelative := core.TrimPrefix(cleanOSPath(string(core.PathSeparator)+path), string(core.PathSeparator))
+		candidate = core.PathJoin(s.workspaceRoot, cleanRelative)
 	}
-	absCandidate, err := filepath.Abs(candidate)
-	if err != nil {
-		return "", err
+	absCandidate := core.PathAbs(candidate)
+	if !absCandidate.OK {
+		return "", core.NewError(absCandidate.Error())
 	}
-	rel, err := filepath.Rel(s.workspaceRoot, absCandidate)
-	if err != nil {
-		return "", err
+	absPath := absCandidate.Value.(string)
+	rel := core.PathRel(s.workspaceRoot, absPath)
+	if !rel.OK {
+		return "", core.NewError(rel.Error())
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("path escapes workspace root: %s", path)
+	relative := rel.Value.(string)
+	if relative == ".." || core.HasPrefix(relative, ".."+string(core.PathSeparator)) {
+		return "", core.Errorf("path escapes workspace root: %s", path)
 	}
-	return absCandidate, nil
+	return absPath, nil
 }
 
 func directoryEntryPath(dir, name string) string {
-	dir = strings.Trim(dir, string(filepath.Separator))
+	dir = trimPathSeparators(dir)
 	if dir == "" || dir == "." {
 		return name
 	}
-	return filepath.ToSlash(filepath.Join(dir, name))
+	return core.PathToSlash(core.PathJoin(dir, name))
 }
 
 func detectLanguageFromPath(path string) string {
-	if filepath.Base(path) == "Dockerfile" {
+	if core.PathBase(path) == "Dockerfile" {
 		return "dockerfile"
 	}
-	if lang, ok := languageByExtension[filepath.Ext(path)]; ok {
+	if lang, ok := languageByExtension[core.PathExt(path)]; ok {
 		return lang
 	}
 	return "plaintext"
+}
+
+func cleanOSPath(path string) string {
+	return core.CleanPath(path, string(core.PathSeparator))
+}
+
+func osPathDir(path string) string {
+	sep := byte(core.PathSeparator)
+	trimmed := path
+	for len(trimmed) > 1 && trimmed[len(trimmed)-1] == sep {
+		trimmed = trimmed[:len(trimmed)-1]
+	}
+	for i := len(trimmed) - 1; i >= 0; i-- {
+		if trimmed[i] == sep {
+			if i == 0 {
+				return string(sep)
+			}
+			return trimmed[:i]
+		}
+	}
+	return "."
+}
+
+func trimPathSeparators(path string) string {
+	sep := string(core.PathSeparator)
+	for core.HasPrefix(path, sep) {
+		path = core.TrimPrefix(path, sep)
+	}
+	for core.HasSuffix(path, sep) {
+		path = core.TrimSuffix(path, sep)
+	}
+	return path
+}
+
+func countStringOccurrences(content, needle string) int {
+	if needle == "" {
+		return 0
+	}
+	parts := core.Split(content, needle)
+	return len(parts) - 1
+}
+
+func replaceFirstString(content, oldString, newString string) string {
+	parts := core.SplitN(content, oldString, 2)
+	if len(parts) != 2 {
+		return content
+	}
+	return parts[0] + newString + parts[1]
 }
 
 var languageByExtension = map[string]string{

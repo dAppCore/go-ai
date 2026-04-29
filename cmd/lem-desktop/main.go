@@ -13,12 +13,9 @@ package main
 import (
 	"embed"
 	"io/fs"
-	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 
+	core "dappco.re/go"
 	"dappco.re/lthn/lem/cmd/lem-desktop/icons"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -38,7 +35,8 @@ func main() {
 	// Strip embed prefix so files serve from root.
 	staticAssets, err := fs.Sub(assets, "frontend")
 	if err != nil {
-		log.Fatal(err)
+		core.Print(core.Stderr(), "%v\n", err)
+		core.Exit(1)
 	}
 
 	// ── Configuration ──
@@ -48,7 +46,7 @@ func main() {
 	m3Host := envOr("M3_HOST", "10.69.69.108")
 	baseModel := envOr("BASE_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
 	dbPath := envOr("LEM_DB", "")
-	workDir := envOr("WORK_DIR", filepath.Join(os.TempDir(), "scoring-agent"))
+	workDir := envOr("WORK_DIR", core.PathJoin(core.TempDir(), "scoring-agent"))
 	deployDir := envOr("LEM_DEPLOY_DIR", findDeployDir())
 
 	// ── Services ──
@@ -92,14 +90,15 @@ func main() {
 		}
 	})
 
-	log.Println("Starting LEM Desktop...")
-	log.Println("  - System tray active")
-	log.Println("  - Dashboard ready")
-	log.Printf("  - InfluxDB: %s/%s", influxURL, influxDB)
-	log.Printf("  - Inference: %s", apiURL)
+	core.Print(core.Stderr(), "Starting LEM Desktop...\n")
+	core.Print(core.Stderr(), "  - System tray active\n")
+	core.Print(core.Stderr(), "  - Dashboard ready\n")
+	core.Print(core.Stderr(), "  - InfluxDB: %s/%s\n", influxURL, influxDB)
+	core.Print(core.Stderr(), "  - Inference: %s\n", apiURL)
 
 	if err := app.Run(); err != nil {
-		log.Fatal(err)
+		core.Print(core.Stderr(), "%v\n", err)
+		core.Exit(1)
 	}
 }
 
@@ -107,7 +106,7 @@ func main() {
 func spaHandler(fsys fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(fsys))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
+		path := core.TrimPrefix(r.URL.Path, "/")
 		if path == "" {
 			path = "index.html"
 		}
@@ -121,17 +120,20 @@ func spaHandler(fsys fs.FS) http.Handler {
 // findDeployDir locates the deploy/ directory relative to the binary.
 func findDeployDir() string {
 	// Check relative to executable.
-	exe, err := os.Executable()
-	if err == nil {
-		dir := filepath.Join(filepath.Dir(exe), "deploy")
-		if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err == nil {
+	if args := core.Args(); len(args) > 0 && args[0] != "" {
+		exe := args[0]
+		if abs := core.PathAbs(exe); abs.OK {
+			exe = abs.Value.(string)
+		}
+		dir := core.PathJoin(desktopPathDir(exe), "deploy")
+		if core.Stat(core.PathJoin(dir, "docker-compose.yml")).OK {
 			return dir
 		}
 	}
 	// Check relative to working directory.
-	if cwd, err := os.Getwd(); err == nil {
-		dir := filepath.Join(cwd, "deploy")
-		if _, err := os.Stat(filepath.Join(dir, "docker-compose.yml")); err == nil {
+	if cwd := core.Getwd(); cwd.OK {
+		dir := core.PathJoin(cwd.Value.(string), "deploy")
+		if core.Stat(core.PathJoin(dir, "docker-compose.yml")).OK {
 			return dir
 		}
 	}
@@ -139,8 +141,25 @@ func findDeployDir() string {
 }
 
 func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+	if v := core.Getenv(key); v != "" {
 		return v
 	}
 	return fallback
+}
+
+func desktopPathDir(path string) string {
+	sep := byte(core.PathSeparator)
+	trimmed := path
+	for len(trimmed) > 1 && trimmed[len(trimmed)-1] == sep {
+		trimmed = trimmed[:len(trimmed)-1]
+	}
+	for i := len(trimmed) - 1; i >= 0; i-- {
+		if trimmed[i] == sep {
+			if i == 0 {
+				return string(sep)
+			}
+			return trimmed[:i]
+		}
+	}
+	return "."
 }

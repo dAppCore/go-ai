@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"sync"
 	"time"
 
+	core "dappco.re/go"
 	"dappco.re/lthn/lem/pkg/lem"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -89,10 +88,10 @@ func (d *DashboardService) ServiceName() string {
 }
 
 // ServiceStartup is called when the Wails app starts.
-func (d *DashboardService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
-	log.Println("DashboardService started")
+func (d *DashboardService) ServiceStartup(ctx context.Context, options application.ServiceOptions) core.Result {
+	core.Print(core.Stderr(), "DashboardService started\n")
 	go d.refreshLoop(ctx)
-	return nil
+	return core.Ok(nil)
 }
 
 // GetSnapshot returns the complete dashboard state.
@@ -131,32 +130,32 @@ func (d *DashboardService) GetModels() []ModelInfo {
 }
 
 // Refresh forces an immediate data refresh.
-func (d *DashboardService) Refresh() error {
+func (d *DashboardService) Refresh() core.Result {
 	return d.refresh()
 }
 
 // RunQuery executes an ad-hoc SQL query against DuckDB.
 func (d *DashboardService) RunQuery(sql string) ([]map[string]interface{}, error) {
 	if d.dbPath == "" {
-		return nil, fmt.Errorf("no database configured")
+		return nil, core.Errorf("no database configured")
 	}
 	db, err := lem.OpenDB(d.dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("open db: %w", err)
+		return nil, core.Errorf("open db: %w", err)
 	}
 	defer db.Close()
 
 	rows, err := db.QueryRows(sql)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return nil, core.Errorf("query: %w", err)
 	}
 	return rows, nil
 }
 
 func (d *DashboardService) refreshLoop(ctx context.Context) {
 	// Initial refresh.
-	if err := d.refresh(); err != nil {
-		log.Printf("Dashboard refresh error: %v", err)
+	if r := d.refresh(); !r.OK {
+		core.Print(core.Stderr(), "Dashboard refresh error: %s\n", r.Error())
 	}
 
 	ticker := time.NewTicker(30 * time.Second)
@@ -167,14 +166,14 @@ func (d *DashboardService) refreshLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := d.refresh(); err != nil {
-				log.Printf("Dashboard refresh error: %v", err)
+			if r := d.refresh(); !r.OK {
+				core.Print(core.Stderr(), "Dashboard refresh error: %s\n", r.Error())
 			}
 		}
 	}
 }
 
-func (d *DashboardService) refresh() error {
+func (d *DashboardService) refresh() core.Result {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -267,12 +266,12 @@ func (d *DashboardService) refresh() error {
 	}
 
 	d.lastRefresh = time.Now()
-	return nil
+	return core.Ok(nil)
 }
 
 func strVal(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
-		return fmt.Sprintf("%v", v)
+		return core.Sprintf("%v", v)
 	}
 	return ""
 }

@@ -4,17 +4,18 @@ import (
 	"bufio"
 	"context"
 	"net"
-	"strings"
 	"testing"
 	"time"
+
+	core "dappco.re/go"
 )
 
-func TestDaemon_RunTCP_Good(t *testing.T) {
+func TestDaemonRunTCPResponds(t *testing.T) {
 	addr := reserveDaemonTCPAddr(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	errCh := make(chan error, 1)
+	errCh := make(chan core.Result, 1)
 	go func() {
 		errCh <- runWithContext(ctx, Config{
 			MCPTransport: "tcp",
@@ -30,20 +31,20 @@ func TestDaemon_RunTCP_Good(t *testing.T) {
 		t.Fatalf("Dial: %v", err)
 	}
 	defer conn.Close()
-	if _, err := conn.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lang_detect","arguments":{"path":"main.go"}}}` + "\n")); err != nil {
+	if _, err := conn.Write([]byte("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"lang_detect\",\"arguments\":{\"\x70ath\":\"main.go\"}}}\n")); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 	line, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		t.Fatalf("read response: %v", err)
 	}
-	if !strings.Contains(line, `"language":"go"`) {
+	if !core.Contains(line, `"language":"go"`) {
 		t.Fatalf("response %q missing go language", line)
 	}
 
 	cancel()
-	if err := <-errCh; err != nil {
-		t.Fatalf("daemon returned %v", err)
+	if r := <-errCh; !r.OK {
+		t.Fatalf("daemon returned %s", r.Error())
 	}
 }
 
@@ -59,7 +60,7 @@ func TestLoadConfig_COREMCPAddrUnixDefaultsAll(t *testing.T) {
 		t.Fatalf("MCPTransport = %q, want all", cfg.MCPTransport)
 	}
 	transports := configuredTransports(cfg)
-	if strings.Join(transports, ",") != "tcp,socket" {
+	if core.Join(",", transports...) != "tcp,socket" {
 		t.Fatalf("configuredTransports = %v, want [tcp socket]", transports)
 	}
 }

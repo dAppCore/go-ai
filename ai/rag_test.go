@@ -2,12 +2,19 @@ package ai
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 
+	core "dappco.re/go"
 	rag "dappco.re/go/rag"
 )
+
+func repeatString(value string, count int) string {
+	parts := make([]string, count)
+	for i := range parts {
+		parts[i] = value
+	}
+	return core.Join("", parts...)
+}
 
 func TestBuildTaskQuery_Good_CombinesAndTruncates(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{
@@ -23,7 +30,7 @@ func TestBuildTaskQuery_Good_CombinesAndTruncates(t *testing.T) {
 
 func TestBuildTaskQuery_Good_TruncatesCombinedQuery(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{
-		Title:       strings.Repeat("t", ragTaskQueryRuneLimit),
+		Title:       repeatString("t", ragTaskQueryRuneLimit),
 		Description: "extra",
 	})
 
@@ -35,7 +42,7 @@ func TestBuildTaskQuery_Good_TruncatesCombinedQuery(t *testing.T) {
 func TestBuildTaskQuery_Good_TruncatesToLimit(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{
 		Title:       "",
-		Description: strings.Repeat("x", ragTaskQueryRuneLimit+25),
+		Description: repeatString("x", ragTaskQueryRuneLimit+25),
 	})
 
 	if got == "" {
@@ -49,20 +56,20 @@ func TestBuildTaskQuery_Good_TruncatesToLimit(t *testing.T) {
 func TestBuildTaskQuery_Good_TruncatesDescriptionBeforeComposition(t *testing.T) {
 	got := buildTaskQuery(TaskInfo{
 		Title:       "Investigate",
-		Description: strings.Repeat("y", ragTaskQueryRuneLimit+25),
+		Description: repeatString("y", ragTaskQueryRuneLimit+25),
 	})
 
 	if gotRuneLen := len([]rune(got)); gotRuneLen != ragTaskQueryRuneLimit {
 		t.Fatalf("buildTaskQuery() rune length = %d, want %d", gotRuneLen, ragTaskQueryRuneLimit)
 	}
-	if !strings.HasPrefix(got, "Investigate: ") {
+	if !core.HasPrefix(got, "Investigate: ") {
 		t.Fatalf("buildTaskQuery() = %q, want title prefix preserved", got)
 	}
 }
 
 func TestBuildTaskQuery_Good_TruncatesCombinedQueryExactly(t *testing.T) {
-	title := strings.Repeat("t", 320)
-	description := strings.Repeat("d", 320)
+	title := repeatString("t", 320)
+	description := repeatString("d", 320)
 
 	got := buildTaskQuery(TaskInfo{
 		Title:       title,
@@ -104,7 +111,7 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 	})
 
 	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
-		return nil, errors.New("qdrant unavailable")
+		return nil, core.NewError("qdrant unavailable")
 	}
 
 	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
@@ -115,7 +122,7 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 
 	newQdrantClient = origNewQdrantClient
 	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
-		return nil, errors.New("ollama unavailable")
+		return nil, core.NewError("ollama unavailable")
 	}
 
 	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
@@ -132,7 +139,7 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		_ string,
 		_ rag.QueryConfig,
 	) ([]rag.QueryResult, error) {
-		return nil, errors.New("query failed")
+		return nil, core.NewError("query failed")
 	}
 
 	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
@@ -367,4 +374,49 @@ func TestRag_truncateRunes_Good_PreservesRuneBoundaries(t *testing.T) {
 	if got != "a😀bé" {
 		t.Fatalf("truncateRunes() = %q, want %q", got, "a😀bé")
 	}
+}
+
+// --- AX-7 canonical triplets ---
+
+func TestRag_QueryRAGForTask_Good(t *core.T) {
+	origNewQdrantClient := newQdrantClient
+	origNewOllamaClient := newOllamaClient
+	origRunRAGQuery := runRAGQuery
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+		newOllamaClient = origNewOllamaClient
+		runRAGQuery = origRunRAGQuery
+	})
+
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) { return nil, nil }
+	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) { return nil, nil }
+	runRAGQuery = func(_ context.Context, _ rag.VectorStore, _ rag.Embedder, _ string, _ rag.QueryConfig) ([]rag.QueryResult, error) {
+		return []rag.QueryResult{{Text: "Runbook", Source: "docs/build.md", Score: 0.9}}, nil
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"})
+	core.AssertNoError(t, err)
+	core.AssertContains(t, got, "Runbook")
+}
+
+func TestRag_QueryRAGForTask_Bad(t *core.T) {
+	got, err := QueryRAGForTask(TaskInfo{})
+	want := ""
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, want, got)
+}
+
+func TestRag_QueryRAGForTask_Ugly(t *core.T) {
+	origNewQdrantClient := newQdrantClient
+	t.Cleanup(func() {
+		newQdrantClient = origNewQdrantClient
+	})
+	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+		return nil, core.NewError("qdrant unavailable")
+	}
+
+	got, err := QueryRAGForTask(TaskInfo{Title: "Investigate"})
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, "", got)
 }

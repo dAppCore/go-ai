@@ -1,16 +1,11 @@
 package security
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
+	core "dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
 )
@@ -81,18 +76,8 @@ func TestCmdSecurity_decodeDependabotAlerts_Good(t *testing.T) {
 }
 
 func TestCmdSecurity_decodeCodeScanningAlerts_Good(t *testing.T) {
-	alerts, err := decodeCodeScanningAlerts([]byte(`[
-		[{
-			"number": 4,
-			"state": "open",
-			"rule": {"id": "gosec/G401", "severity": "medium", "description": "Weak crypto", "tags": ["security"]},
-			"tool": {"name": "CodeQL", "version": "2.20.0"},
-			"most_recent_instance": {
-				"location": {"path": "main.go", "start_line": 14, "end_line": 14},
-				"message": {"text": "Potential weak crypto"}
-			}
-		}]
-	]`))
+	payload := "[[{\"number\":4,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G401\",\"severity\":\"medium\",\"description\":\"Weak crypto\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"CodeQL\",\"version\":\"2.20.0\"},\"most_recent_instance\":{\"location\":{\"\x70ath\":\"main.go\",\"start_line\":14,\"end_line\":14},\"message\":{\"text\":\"Potential weak crypto\"}}}]]"
+	alerts, err := decodeCodeScanningAlerts([]byte(payload))
 	if err != nil {
 		t.Fatalf("decodeCodeScanningAlerts: %v", err)
 	}
@@ -199,7 +184,7 @@ func TestCmdSecurity_filterBySeverity_Good(t *testing.T) {
 
 func TestCmdSecurity_AlertSummary_Good(t *testing.T) {
 	var summary AlertSummary
-	if got := summary.String(); !strings.Contains(got, "No alerts") {
+	if got := summary.String(); !core.Contains(got, "No alerts") {
 		t.Fatalf("zero-value summary should report no alerts, got %q", got)
 	}
 	if got := summary.PlainString(); got != "No alerts" {
@@ -218,7 +203,7 @@ func TestCmdSecurity_AlertSummary_Good(t *testing.T) {
 	if got := summary.PlainString(); got != "1 critical | 1 high | 1 medium | 1 low | 1 unknown" {
 		t.Fatalf("PlainString = %q", got)
 	}
-	if got := normalizeWhitespace(summary.String()); !strings.Contains(got, "critical") || !strings.Contains(got, "unknown") {
+	if got := normalizeWhitespace(summary.String()); !core.Contains(got, "critical") || !core.Contains(got, "unknown") {
 		t.Fatalf("styled summary missing expected severities: %q", got)
 	}
 }
@@ -245,7 +230,7 @@ func TestCmdSecurity_runGitHubAPI_Good_ReturnsStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runGitHubAPI: %v", err)
 	}
-	if !bytes.Equal(got, []byte(`[{"full_name":"acme/api"}]`)) {
+	if string(got) != `[{"full_name":"acme/api"}]` {
 		t.Fatalf("runGitHubAPI = %s, want JSON output", string(got))
 	}
 }
@@ -257,7 +242,7 @@ func TestCmdSecurity_runGitHubAPI_Bad_404ReturnsEmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runGitHubAPI 404 should not fail: %v", err)
 	}
-	if !bytes.Equal(got, []byte("[]")) {
+	if string(got) != "[]" {
 		t.Fatalf("runGitHubAPI 404 = %s, want []", string(got))
 	}
 }
@@ -271,8 +256,8 @@ func TestCmdSecurity_runGitHubAPIStrict_Bad_DoesNotFallbackOnMissingEndpoint(t *
 }
 
 func TestCmdSecurity_runGitHubAPIWithMode_Good_RetriesTransientFailures(t *testing.T) {
-	counterFile := filepath.Join(t.TempDir(), "attempts")
-	script := fmt.Sprintf(`#!/bin/sh
+	counterFile := core.PathJoin(t.TempDir(), "attempts")
+	script := core.Sprintf(`#!/bin/sh
 count=0
 if [ -f %[1]q ]; then
   count=$(cat %[1]q)
@@ -297,8 +282,8 @@ printf '[]'
 }
 
 func TestCmdSecurity_runGitHubAPIWithMode_Bad_DoesNotRetryAccessDenied(t *testing.T) {
-	counterFile := filepath.Join(t.TempDir(), "attempts")
-	script := fmt.Sprintf(`#!/bin/sh
+	counterFile := core.PathJoin(t.TempDir(), "attempts")
+	script := core.Sprintf(`#!/bin/sh
 count=0
 if [ -f %[1]q ]; then
   count=$(cat %[1]q)
@@ -311,37 +296,37 @@ exit 1
 	withFakeGitHubScript(t, script)
 
 	_, err := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
-	if !errors.Is(err, errGitHubAPIAccessDenied) {
+	if !core.Is(err, errGitHubAPIAccessDenied) {
 		t.Fatalf("runGitHubAPIWithMode() = %v, expected access denied error", err)
 	}
 
-	attempts, readErr := os.ReadFile(counterFile)
-	if readErr != nil {
-		t.Fatalf("read attempts: %v", readErr)
+	attempts := core.ReadFile(counterFile)
+	if !attempts.OK {
+		t.Fatalf("read attempts: %v", attempts.Error())
 	}
-	if strings.TrimSpace(string(attempts)) != "1" {
-		t.Fatalf("runGitHubAPIWithMode retried access denied error: %s", attempts)
+	if core.Trim(string(attempts.Value.([]byte))) != "1" {
+		t.Fatalf("runGitHubAPIWithMode retried access denied error: %s", attempts.Value.([]byte))
 	}
 }
 
 func TestCmdSecurity_checkGitHubCLI_Good_Found(t *testing.T) {
 	withFakeGitHubCLI(t)
 
-	if err := checkGitHubCLI(); err != nil {
-		t.Fatalf("checkGitHubCLI() = %v, want nil", err)
+	if r := checkGitHubCLI(); !r.OK {
+		t.Fatalf("checkGitHubCLI() = %s, want nil", r.Error())
 	}
 }
 
 func TestCmdSecurity_checkGitHubCLI_Bad_MissingBinary(t *testing.T) {
 	t.Setenv("PATH", "")
 
-	if err := checkGitHubCLI(); err == nil {
+	if r := checkGitHubCLI(); r.OK {
 		t.Fatal("checkGitHubCLI should fail when gh is unavailable")
 	}
 }
 
 func TestCmdSecurity_loadRegistry_Bad_ExplicitPathReturnsError(t *testing.T) {
-	if _, err := loadRegistry(filepath.Join(t.TempDir(), "missing-registry.yaml")); err == nil {
+	if _, err := loadRegistry(core.PathJoin(t.TempDir(), "missing-registry.yaml")); err == nil {
 		t.Fatal("expected loadRegistry to fail for a missing explicit path")
 	}
 }
@@ -353,7 +338,7 @@ func TestCmdSecurity_runGitHubAPIRequest_Good(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runGitHubAPIRequest: %v", err)
 	}
-	if !bytes.Equal(got, []byte(`{"ok":true}`)) {
+	if string(got) != `{"ok":true}` {
 		t.Fatalf("runGitHubAPIRequest() = %s, want payload", string(got))
 	}
 }
@@ -362,7 +347,7 @@ func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps404(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '404 Not Found' >&2\nexit 1\n")
 
 	_, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
-	if !errors.Is(err, errGitHubAPIEndpointNotFound) {
+	if !core.Is(err, errGitHubAPIEndpointNotFound) {
 		t.Fatalf("runGitHubAPIRequest() = %v, expected errGitHubAPIEndpointNotFound", err)
 	}
 }
@@ -371,7 +356,7 @@ func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps403(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '403 Forbidden' >&2\nexit 1\n")
 
 	_, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
-	if !errors.Is(err, errGitHubAPIAccessDenied) {
+	if !core.Is(err, errGitHubAPIAccessDenied) {
 		t.Fatalf("runGitHubAPIRequest() = %v, expected errGitHubAPIAccessDenied", err)
 	}
 }
@@ -406,35 +391,35 @@ func TestCmdSecurity_isRetryableGitHubAPIError_Ugly_NilError(t *testing.T) {
 }
 
 func TestCmdSecurity_combineSecurityCollectorErrors_Good_Empty(t *testing.T) {
-	if err := combineSecurityCollectorErrors("acme/api", map[string]error{}); err != nil {
-		t.Fatalf("combineSecurityCollectorErrors empty map = %v", err)
+	if r := combineSecurityCollectorErrors("acme/api", map[string]error{}); !r.OK {
+		t.Fatalf("combineSecurityCollectorErrors empty map = %s", r.Error())
 	}
 }
 
 func TestCmdSecurity_combineSecurityCollectorErrors_Bad_ReportsFailures(t *testing.T) {
-	err := combineSecurityCollectorErrors("acme/api", map[string]error{
-		"dependabot": errors.New("dependabot failed"),
+	r := combineSecurityCollectorErrors("acme/api", map[string]error{
+		"dependabot": core.NewError("dependabot failed"),
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected error for failed collector")
 	}
-	if !strings.Contains(err.Error(), "dependabot") || !strings.Contains(err.Error(), "acme/api") {
-		t.Fatalf("unexpected combined error: %v", err)
+	if !core.Contains(r.Error(), "dependabot") || !core.Contains(r.Error(), "acme/api") {
+		t.Fatalf("unexpected combined error: %s", r.Error())
 	}
 }
 
 func TestCmdSecurity_combineSecurityCollectorErrors_Ugly_SortsCollectorsAlphabetically(t *testing.T) {
-	err := combineSecurityCollectorErrors("acme/api", map[string]error{
-		"code-scanning": errors.New("code failed"),
-		"dependabot":    errors.New("dep failed"),
+	r := combineSecurityCollectorErrors("acme/api", map[string]error{
+		"code-scanning": core.NewError("code failed"),
+		"dependabot":    core.NewError("dep failed"),
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected collector combination error")
 	}
 
-	got := err.Error()
-	dependabotPos := strings.Index(got, "dependabot")
-	codeScanningPos := strings.Index(got, "code-scanning")
+	got := r.Error()
+	dependabotPos := securityIndex(got, "dependabot")
+	codeScanningPos := securityIndex(got, "code-scanning")
 	if dependabotPos == -1 || codeScanningPos == -1 {
 		t.Fatalf("combined error missing expected collector names: %v", got)
 	}
@@ -444,39 +429,173 @@ func TestCmdSecurity_combineSecurityCollectorErrors_Ugly_SortsCollectorsAlphabet
 }
 
 func TestCmdSecurity_combineSecurityTargetErrors_Good_Empty(t *testing.T) {
-	if err := combineSecurityTargetErrors("security scan", map[string]error{}); err != nil {
-		t.Fatalf("combineSecurityTargetErrors empty map = %v", err)
+	if r := combineSecurityTargetErrors("security scan", map[string]error{}); !r.OK {
+		t.Fatalf("combineSecurityTargetErrors empty map = %s", r.Error())
 	}
 }
 
 func TestCmdSecurity_combineSecurityTargetErrors_Bad_ReportsTargetList(t *testing.T) {
-	err := combineSecurityTargetErrors("security scan", map[string]error{
+	r := combineSecurityTargetErrors("security scan", map[string]error{
 		"acme/api": assertiveError("api failed"),
 		"acme/web": assertiveError("web failed"),
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected target errors to be reported")
 	}
-	if !strings.Contains(err.Error(), "security scan") ||
-		!strings.Contains(err.Error(), "acme/api") ||
-		!strings.Contains(err.Error(), "acme/web") {
-		t.Fatalf("unexpected combined target error: %v", err)
+	if !core.Contains(r.Error(), "security scan") ||
+		!core.Contains(r.Error(), "acme/api") ||
+		!core.Contains(r.Error(), "acme/web") {
+		t.Fatalf("unexpected combined target error: %s", r.Error())
 	}
 }
 
 func TestCmdSecurity_combineSecurityTargetErrors_Ugly_SortsTargetsAlphabetically(t *testing.T) {
-	err := combineSecurityTargetErrors("security scan", map[string]error{
+	r := combineSecurityTargetErrors("security scan", map[string]error{
 		"acme/web":  assertiveError("web failed"),
 		"acme/api":  assertiveError("api failed"),
 		"acme/docs": assertiveError("docs failed"),
 	})
-	if err == nil {
+	if r.OK {
 		t.Fatal("expected target errors")
 	}
 
-	got := err.Error()
-	if strings.Index(got, "acme/api") > strings.Index(got, "acme/docs") ||
-		strings.Index(got, "acme/docs") > strings.Index(got, "acme/web") {
+	got := r.Error()
+	if securityIndex(got, "acme/api") > securityIndex(got, "acme/docs") ||
+		securityIndex(got, "acme/docs") > securityIndex(got, "acme/web") {
 		t.Fatalf("combined target errors are not sorted: %v", got)
 	}
+}
+
+// --- AX-7 canonical triplets ---
+
+func TestCmdSecurity_AlertSummary_Add_Good(t *core.T) {
+	summary := &AlertSummary{}
+	summary.Add("critical")
+	summary.Add("high")
+
+	core.AssertEqual(t, 2, summary.Total)
+	core.AssertEqual(t, 1, summary.Critical)
+	core.AssertEqual(t, 1, summary.High)
+}
+
+func TestCmdSecurity_AlertSummary_Add_Bad(t *core.T) {
+	summary := &AlertSummary{}
+	summary.Add("unknown-severity")
+	got := summary.Unknown
+
+	core.AssertEqual(t, 1, got)
+	core.AssertEqual(t, 1, summary.Total)
+}
+
+func TestCmdSecurity_AlertSummary_Add_Ugly(t *core.T) {
+	summary := &AlertSummary{}
+	summary.Add("HIGH")
+	summary.Add("")
+
+	core.AssertEqual(t, 1, summary.High)
+	core.AssertEqual(t, 1, summary.Unknown)
+}
+
+func TestCmdSecurity_AlertSummary_String_Good(t *core.T) {
+	summary := &AlertSummary{}
+	summary.Add("critical")
+	got := summary.String()
+
+	core.AssertContains(t, got, "critical")
+	core.AssertContains(t, got, "1")
+}
+
+func TestCmdSecurity_AlertSummary_String_Bad(t *core.T) {
+	summary := &AlertSummary{}
+	got := summary.String()
+	want := "No alerts"
+
+	core.AssertContains(t, got, want)
+}
+
+func TestCmdSecurity_AlertSummary_String_Ugly(t *core.T) {
+	summary := &AlertSummary{Low: 2, Unknown: 1, Total: 3}
+	got := summary.String()
+	plain := summary.PlainString()
+
+	core.AssertContains(t, got, "low")
+	core.AssertEqual(t, "2 low | 1 unknown", plain)
+}
+
+func TestCmdSecurity_AlertSummary_PlainString_Good(t *core.T) {
+	summary := &AlertSummary{Critical: 1, High: 2, Total: 3}
+	got := summary.PlainString()
+	want := "1 critical | 2 high"
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmdSecurity_AlertSummary_PlainString_Bad(t *core.T) {
+	summary := &AlertSummary{}
+	got := summary.PlainString()
+	want := "No alerts"
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmdSecurity_AlertSummary_PlainString_Ugly(t *core.T) {
+	summary := &AlertSummary{Medium: 1, Low: 1, Unknown: 1, Total: 3}
+	got := summary.PlainString()
+	want := "1 medium | 1 low | 1 unknown"
+
+	core.AssertEqual(t, want, got)
+}
+
+func TestCmdSecurity_AddSecurityCommands_Good(t *core.T) {
+	root := &cli.Command{Use: "core"}
+	AddSecurityCommands(root)
+	cmd, _, err := root.Find([]string{"security"})
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, "security", cmd.Name())
+}
+
+func TestCmdSecurity_AddSecurityCommands_Bad(t *core.T) {
+	root := &cli.Command{Use: "core"}
+	AddSecurityCommands(root)
+	AddSecurityCommands(root)
+
+	core.AssertLen(t, root.Commands(), 1)
+	core.AssertEqual(t, "security", root.Commands()[0].Name())
+}
+
+func TestCmdSecurity_AddSecurityCommands_Ugly(t *core.T) {
+	root := &cli.Command{Use: "core"}
+	root.AddCommand(&cli.Command{Use: "security"})
+	AddSecurityCommands(root)
+
+	core.AssertLen(t, root.Commands(), 1)
+	core.AssertEqual(t, "security", root.Commands()[0].Name())
+}
+
+func TestCmdSecurity_RawMessage_UnmarshalJSON_Good(t *core.T) {
+	var raw githubRawMessage
+	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
+	got := string(raw)
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, `{"ok":true}`, got)
+}
+
+func TestCmdSecurity_RawMessage_UnmarshalJSON_Bad(t *core.T) {
+	var raw *githubRawMessage
+	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
+	got := core.ErrorMessage(err)
+
+	core.AssertError(t, err)
+	core.AssertContains(t, got, "nil raw message")
+}
+
+func TestCmdSecurity_RawMessage_UnmarshalJSON_Ugly(t *core.T) {
+	raw := githubRawMessage(`old`)
+	err := raw.UnmarshalJSON([]byte(`null`))
+	got := string(raw)
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, "null", got)
 }

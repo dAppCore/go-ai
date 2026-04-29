@@ -2,7 +2,6 @@ package security
 
 import (
 	"cmp"
-	"os/exec"
 	"slices"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"dappco.re/go/i18n"
 	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
+	execabs "golang.org/x/sys/execabs"
 )
 
 var (
@@ -43,7 +43,11 @@ func addJobsCommand(parent *cli.Command) {
 		Short: i18n.T("cmd.security.jobs.short"),
 		Long:  i18n.T("cmd.security.jobs.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runJobs(*commandOptions)
+			r := runJobs(*commandOptions)
+			if !r.OK {
+				return coreResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -56,27 +60,27 @@ func addJobsCommand(parent *cli.Command) {
 	parent.AddCommand(cmd)
 }
 
-func runJobs(commandOptions JobsCommandOptions) error {
+func runJobs(commandOptions JobsCommandOptions) core.Result {
 	startedAt := time.Now()
 
 	if commandOptions.WorkerCount < 1 {
-		return cli.Err("--copies must be at least 1")
+		return core.Fail(cli.Err("--copies must be at least 1"))
 	}
 
 	issueRepoTarget, err := validateJobsIssueRepository(commandOptions.IssueRepository)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 
 	registry, err := loadRegistryForJobs(commandOptions)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 
 	if commandOptions.DryRun {
 		plannedTargets, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry)
 		if err != nil {
-			return err
+			return core.Fail(err)
 		}
 		workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(plannedTargets))
 
@@ -90,21 +94,21 @@ func runJobs(commandOptions JobsCommandOptions) error {
 			cli.Print("%s\n", cli.DimStyle.Render(core.Sprintf("[dry-run] Would create summary issue in: %s", issueRepoTarget.FullName)))
 		}
 		cli.Blank()
-		return nil
+		return core.Ok(nil)
 	}
 
 	// Validate the target specification before any gh invocation.
 	if _, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry); err != nil {
-		return err
+		return core.Fail(err)
 	}
 
-	if err := checkGitHubCLI(); err != nil {
-		return err
+	if r := checkGitHubCLI(); !r.OK {
+		return r
 	}
 
 	targets, err := resolveJobTargets(commandOptions.Targets, registry)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
 
@@ -121,11 +125,11 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		successful = append(successful, result.repo)
 		mergeAlertSummary(overall, &result.repo.Summary)
 	}
-	if err := combineSecurityTargetErrors("security jobs", targetErrors); err != nil {
-		return err
+	if r := combineSecurityTargetErrors("security jobs", targetErrors); !r.OK {
+		return r
 	}
 	if len(successful) == 0 {
-		return cli.Err("all targets failed to process")
+		return core.Fail(cli.Err("all targets failed to process"))
 	}
 
 	cli.Blank()
@@ -140,20 +144,20 @@ func runJobs(commandOptions JobsCommandOptions) error {
 		body := buildJobsIssueBody(overall, successful)
 		issueURL, err := createJobsIssue(issueRepoTarget.FullName, title, body)
 		if err != nil {
-			return err
+			return core.Fail(err)
 		}
 
 		cli.Print("%s %s\n", cli.SuccessStyle.Render(">>"), issueURL)
 		event := buildJobsMetricsEvent(commandOptions, overall, successful, issueURL)
 		event.Duration = time.Since(startedAt)
 		recordSecurityMetricsEvent(event)
-		return nil
+		return core.Ok(nil)
 	}
 
 	event := buildJobsMetricsEvent(commandOptions, overall, successful, "")
 	event.Duration = time.Since(startedAt)
 	recordSecurityMetricsEvent(event)
-	return nil
+	return core.Ok(nil)
 }
 
 func validateJobsIssueRepository(issueRepository string) (SecurityTarget, error) {
@@ -372,11 +376,12 @@ func collectJobRepoResult(target string) (jobRepoResult, error) {
 	secretScanningAlerts, secretScanningError := collectSecretScanningAlertsForJobs(securityTarget)
 
 	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
-		return jobRepoResult{}, combineSecurityCollectorErrors(target, map[string]error{
+		r := combineSecurityCollectorErrors(target, map[string]error{
 			"dependabot":      dependabotError,
 			"code-scanning":   codeScanningError,
 			"secret-scanning": secretScanningError,
 		})
+		return jobRepoResult{}, coreResultError(r)
 	}
 
 	for _, alert := range buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, "") {
@@ -456,7 +461,7 @@ func buildJobsMetricsEvent(commandOptions JobsCommandOptions, summary *AlertSumm
 }
 
 func createJobsIssue(issueRepo, title, body string) (string, error) {
-	cmd := exec.Command("gh",
+	cmd := execabs.Command("gh",
 		"issue", "create",
 		"--repo", issueRepo,
 		"--title", title,

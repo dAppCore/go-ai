@@ -1,14 +1,11 @@
 package ai
 
 import (
-	"bytes"         // Note: test-only — constructs oversized JSONL payloads without external fixtures
-	"os"            // Note: test-only — writes malformed metrics files and directories under t.TempDir
-	"path/filepath" // Note: test-only — builds temporary metrics paths inside test home
-	"sync"          // Note: test-only — coordinates concurrent Record calls in race-focused test
-	"testing"       // Note: intrinsic — Go test entry points and assertions
-	"time"          // Note: test-only — fixes timestamps and read windows for metrics behavior
+	"sync"
+	"testing"
+	"time"
 
-	"dappco.re/go"
+	core "dappco.re/go"
 	coreio "dappco.re/go/io"
 )
 
@@ -20,7 +17,7 @@ func withTempMetricsHome(t *testing.T) string {
 	t.Setenv("DIR_HOME", "")
 	t.Setenv("HOME", tempHome)
 
-	metricsPath := filepath.Join(tempHome, ".core", "ai", "metrics")
+	metricsPath := core.PathJoin(tempHome, ".core", "ai", "metrics")
 	if err := coreio.Local.EnsureDir(metricsPath); err != nil {
 		t.Fatalf("create metrics dir: %v", err)
 	}
@@ -63,8 +60,8 @@ func TestMetrics_ReadEvents_Bad_SkipsMalformedAndOldLines(t *testing.T) {
 			`{"type":"scan","timestamp":"2026-04-15T08:30:00Z","repo":"core/go-ai"}` + "\n" +
 			`{"type":"scan","timestamp":"2026-04-15T10:30:00Z","repo":"core/go-rag"}` + "\n",
 	)
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		t.Fatalf("write metrics file: %v", err)
+	if r := core.WriteFile(path, content, 0o644); !r.OK {
+		t.Fatalf("write metrics file: %v", r.Error())
 	}
 
 	events, err := ReadEvents(now.Add(-time.Hour))
@@ -156,8 +153,8 @@ func TestMetrics_Record_Bad_ReturnsErrorWhenDailyPathIsDirectory(t *testing.T) {
 	}
 
 	todayDir := metricsFilePath(dir, time.Now())
-	if err := os.MkdirAll(todayDir, 0o700); err != nil {
-		t.Fatalf("mkdir daily path: %v", err)
+	if r := core.MkdirAll(todayDir, 0o700); !r.OK {
+		t.Fatalf("mkdir daily path: %v", r.Error())
 	}
 
 	if err := Record(Event{Type: "scan"}); err == nil {
@@ -172,9 +169,9 @@ func TestMetrics_readMetricsFile_Bad_ReturnsErrorOnOversizedLine(t *testing.T) {
 	dir := core.JoinPath(tempHome, ".core", "ai", "metrics")
 	path := metricsFilePath(dir, now)
 
-	oversized := bytes.Repeat([]byte("a"), 1<<20+1)
-	if err := os.WriteFile(path, oversized, 0o644); err != nil {
-		t.Fatalf("write oversized metrics file: %v", err)
+	oversized := []byte(repeatString("a", 1<<20+1))
+	if r := core.WriteFile(path, oversized, 0o644); !r.OK {
+		t.Fatalf("write oversized metrics file: %v", r.Error())
 	}
 
 	if _, err := readMetricsFile(path, now.Add(-time.Hour)); err == nil {
@@ -392,4 +389,91 @@ func TestMetrics_sanitizeMetricsData_Ugly_NilInputReturnsNilMap(t *testing.T) {
 	if got := sanitizeMetricsData(nil); got != nil {
 		t.Fatalf("sanitizeMetricsData(nil) = %v, want nil", got)
 	}
+}
+
+// --- AX-7 canonical triplets ---
+
+func TestMetrics_Record_Good(t *core.T) {
+	withTempMetricsHome(t)
+	err := Record(Event{Type: "security.scan", Repo: "core/go-ai"})
+	events, readErr := ReadEvents(time.Now().Add(-time.Minute))
+
+	core.AssertNoError(t, err)
+	core.AssertNoError(t, readErr)
+	core.AssertLen(t, events, 1)
+}
+
+func TestMetrics_Record_Bad(t *core.T) {
+	withTempMetricsHome(t)
+	err := Record(Event{Type: "security.scan", Data: map[string]any{"bad": make(chan int)}})
+	got := core.ErrorMessage(err)
+
+	core.AssertError(t, err)
+	core.AssertContains(t, got, "record event")
+}
+
+func TestMetrics_Record_Ugly(t *core.T) {
+	withTempMetricsHome(t)
+	err := Record(Event{})
+	events, readErr := ReadEvents(time.Now().Add(-time.Minute))
+
+	core.AssertNoError(t, err)
+	core.AssertNoError(t, readErr)
+	core.AssertLen(t, events, 1)
+}
+
+func TestMetrics_ReadEvents_Good(t *core.T) {
+	withTempMetricsHome(t)
+	recordErr := Record(Event{Type: "scan", Timestamp: time.Now().Add(-time.Second)})
+	events, err := ReadEvents(time.Now().Add(-time.Minute))
+
+	core.AssertNoError(t, recordErr)
+	core.AssertNoError(t, err)
+	core.AssertLen(t, events, 1)
+}
+
+func TestMetrics_ReadEvents_Bad(t *core.T) {
+	withTempMetricsHome(t)
+	events, err := ReadEvents(time.Now().Add(-time.Minute))
+	got := len(events)
+
+	core.AssertNoError(t, err)
+	core.AssertEqual(t, 0, got)
+}
+
+func TestMetrics_ReadEvents_Ugly(t *core.T) {
+	withTempMetricsHome(t)
+	recordErr := Record(Event{Type: "scan", Timestamp: time.Now().Add(-time.Hour)})
+	events, err := ReadEvents(time.Now().Add(time.Hour))
+
+	core.AssertNoError(t, recordErr)
+	core.AssertNoError(t, err)
+	core.AssertLen(t, events, 0)
+}
+
+func TestMetrics_Summary_Good(t *core.T) {
+	events := []Event{{Type: "scan", Repo: "core/go-ai", AgentID: "agent-1"}}
+	summary := Summary(events)
+	byType := summary["by_type"].(map[string]int)
+
+	core.AssertEqual(t, 1, byType["scan"])
+	core.AssertLen(t, summary["recent"].([]Event), 1)
+}
+
+func TestMetrics_Summary_Bad(t *core.T) {
+	summary := Summary(nil)
+	byType := summary["by_type"].(map[string]int)
+	recent := summary["recent"].([]Event)
+
+	core.AssertEmpty(t, byType)
+	core.AssertEmpty(t, recent)
+}
+
+func TestMetrics_Summary_Ugly(t *core.T) {
+	events := []Event{{Type: "scan", Data: map[string]any{"nested": []any{"x"}}}}
+	summary := Summary(events)
+	recent := summary["recent"].([]Event)
+
+	recent[0].Data["nested"].([]any)[0] = "changed"
+	core.AssertEqual(t, "x", events[0].Data["nested"].([]any)[0])
 }

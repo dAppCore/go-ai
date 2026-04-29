@@ -38,7 +38,11 @@ func AddMetricsCommand(parent *cli.Command) {
 		Short: i18n.T("cmd.ai.metrics.short"),
 		Long:  i18n.T("cmd.ai.metrics.long"),
 		RunE: func(cmd *cli.Command, args []string) error {
-			return runMetrics(*options)
+			r := runMetrics(*options)
+			if !r.OK {
+				return metricsResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -57,20 +61,20 @@ func commandExists(parent *cli.Command, name string) bool {
 	return false
 }
 
-func runMetrics(options MetricsCommandOptions) error {
+func runMetrics(options MetricsCommandOptions) core.Result {
 	events, err := ai.ReadEvents(time.Now().Add(-options.SinceWindow))
 	if err != nil {
-		return cli.WrapVerb(err, "read", "metrics")
+		return core.Fail(cli.WrapVerb(err, "read", "metrics"))
 	}
 
 	summary := ai.Summary(events)
 	if options.JSONOutput {
 		output, err := marshalMetricsSummaryJSON(summary)
 		if err != nil {
-			return cli.Wrap(err, "marshal metrics JSON")
+			return core.Fail(cli.Wrap(err, "marshal metrics JSON"))
 		}
 		cli.Text(string(output))
-		return nil
+		return core.Ok(nil)
 	}
 
 	cli.Blank()
@@ -119,7 +123,14 @@ func runMetrics(options MetricsCommandOptions) error {
 		cli.Text(i18n.T("cmd.ai.metrics.none_found"))
 	}
 
-	return nil
+	return core.Ok(nil)
+}
+
+func metricsResultError(r core.Result) (err error) {
+	if err, ok := r.Value.(error); ok {
+		return err
+	}
+	return core.NewError(r.Error())
 }
 
 // parseSinceDuration("7d") returns 168 hours for the default metrics window shorthand.
@@ -204,7 +215,7 @@ func (v *sinceDurationFlagValue) String() string {
 	return v.target.String()
 }
 
-func (v *sinceDurationFlagValue) Set(input string) error {
+func (v *sinceDurationFlagValue) Set(input string) (err error) {
 	duration, err := parseSinceDuration(input)
 	if err != nil {
 		return err

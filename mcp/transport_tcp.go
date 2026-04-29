@@ -2,36 +2,35 @@ package mcp
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
-	"os"
+
+	core "dappco.re/go"
 )
 
 // DefaultTCPAddr is the default TCP MCP listen address.
 const DefaultTCPAddr = "127.0.0.1:9100"
 
 // ServeTCP serves newline-delimited MCP JSON-RPC over TCP.
-func (s *Service) ServeTCP(ctx context.Context, addr string) error {
+func (s *Service) ServeTCP(ctx context.Context, addr string) core.Result {
 	addr = normalizeTCPAddr(addr)
 	host, port, err := net.SplitHostPort(addr)
 	if err == nil && host == "" {
 		addr = net.JoinHostPort("127.0.0.1", port)
 	}
 	if err == nil && host == "0.0.0.0" {
-		fmt.Fprintf(os.Stderr, "WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
+		core.Print(core.Stderr(), "WARNING: MCP TCP server binding to all interfaces (%s). Use 127.0.0.1 for local-only access.\n", addr)
 	}
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 	defer listener.Close()
 
 	go func() {
 		<-ctx.Done()
-		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			fmt.Fprintln(os.Stderr, "MCP TCP listener close error:", err)
+		if err := listener.Close(); err != nil && !core.Is(err, net.ErrClosed) {
+			core.Print(core.Stderr(), "MCP TCP listener close error: %v\n", err)
 		}
 	}()
 
@@ -40,9 +39,9 @@ func (s *Service) ServeTCP(ctx context.Context, addr string) error {
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				return nil
+				return core.Ok(nil)
 			default:
-				fmt.Fprintln(os.Stderr, "MCP TCP accept error:", err)
+				core.Print(core.Stderr(), "MCP TCP accept error: %v\n", err)
 				continue
 			}
 		}
@@ -65,11 +64,12 @@ func (s *Service) serveConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	go func() {
 		<-ctx.Done()
-		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			fmt.Fprintln(os.Stderr, "MCP TCP connection close error:", err)
+		if err := conn.Close(); err != nil && !core.Is(err, net.ErrClosed) {
+			core.Print(core.Stderr(), "MCP TCP connection close error: %v\n", err)
 		}
 	}()
-	if err := serveReaderWriter(ctx, conn, conn, s.HandleFrame); err != nil && !errors.Is(err, net.ErrClosed) {
-		fmt.Fprintln(os.Stderr, "MCP TCP connection error:", err)
+	if r := serveReaderWriter(ctx, conn, conn, s.HandleFrame); !r.OK && !core.Is(resultError(r), net.ErrClosed) {
+		err := resultError(r)
+		core.Print(core.Stderr(), "MCP TCP connection error: %v\n", err)
 	}
 }

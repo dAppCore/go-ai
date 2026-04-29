@@ -57,7 +57,11 @@ func addServeCommand(parent *cli.Command) {
 			if len(args) > 0 {
 				return core.E("lab.serve", core.Sprintf("unexpected argument %q", args[0]), nil)
 			}
-			return RunServe(*options)
+			r := RunServe(*options)
+			if !r.OK {
+				return labResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -68,14 +72,14 @@ func addServeCommand(parent *cli.Command) {
 }
 
 // RunServe starts the lab dashboard HTTP server.
-func RunServe(options CommandOptions) error {
-	if err := ValidateBindAddress(options.Bind, options.AllowRemote); err != nil {
-		return err
+func RunServe(options CommandOptions) core.Result {
+	if r := ValidateBindAddress(options.Bind, options.AllowRemote); !r.OK {
+		return r
 	}
 
 	authToken := core.Trim(core.Env("CORE_LAB_API_TOKEN"))
-	if err := ValidateRemoteAuth(options.AllowRemote, authToken); err != nil {
-		return err
+	if r := ValidateRemoteAuth(options.AllowRemote, authToken); !r.OK {
+		return r
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -103,12 +107,25 @@ func RunServe(options CommandOptions) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			return err
+			return core.Fail(err)
 		}
-		return <-errc
+		if err := <-errc; err != nil {
+			return core.Fail(err)
+		}
+		return core.Ok(nil)
 	case err := <-errc:
+		if err != nil {
+			return core.Fail(err)
+		}
+		return core.Ok(nil)
+	}
+}
+
+func labResultError(r core.Result) (err error) {
+	if err, ok := r.Value.(error); ok {
 		return err
 	}
+	return core.NewError(r.Error())
 }
 
 func newServeMux(authToken string) *http.ServeMux {
@@ -136,11 +153,11 @@ func healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 // ValidateBindAddress rejects remote binds unless --allow-remote is set.
-func ValidateBindAddress(addr string, allowRemote bool) error {
+func ValidateBindAddress(addr string, allowRemote bool) core.Result {
 	if allowRemote || IsLoopbackBindAddress(addr) {
-		return nil
+		return core.Ok(nil)
 	}
-	return core.E("lab.serve", core.Sprintf("refusing to bind lab dashboard to non-loopback address %q without --allow-remote", addr), nil)
+	return core.Fail(core.E("lab.serve", core.Sprintf("refusing to bind lab dashboard to non-loopback address %q without --allow-remote", addr), nil))
 }
 
 // IsLoopbackBindAddress reports whether addr binds to a loopback host.
@@ -180,11 +197,11 @@ func requireAuth(handler http.HandlerFunc, token string) http.HandlerFunc {
 }
 
 // ValidateRemoteAuth requires CORE_LAB_API_TOKEN before remote access is enabled.
-func ValidateRemoteAuth(allowRemote bool, authToken string) error {
+func ValidateRemoteAuth(allowRemote bool, authToken string) core.Result {
 	if !allowRemote || core.Trim(authToken) != "" {
-		return nil
+		return core.Ok(nil)
 	}
-	return core.E("lab.serve", "refusing to start lab dashboard with --allow-remote without CORE_LAB_API_TOKEN", nil)
+	return core.Fail(core.E("lab.serve", "refusing to start lab dashboard with --allow-remote without CORE_LAB_API_TOKEN", nil))
 }
 
 func commandExists(parent *cli.Command, name string) bool {

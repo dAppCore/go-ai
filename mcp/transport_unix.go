@@ -2,45 +2,49 @@ package mcp
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
-	"os"
-	"path/filepath"
+
+	core "dappco.re/go"
 )
 
 // DefaultUnixSocket is used when ServeUnix is called with an empty path.
 const DefaultUnixSocket = "/tmp/core-mcp.sock"
 
 // ServeUnix serves newline-delimited MCP JSON-RPC over a Unix domain socket.
-func (s *Service) ServeUnix(ctx context.Context, socketPath string) error {
+func (s *Service) ServeUnix(ctx context.Context, socketPath string) core.Result {
 	if socketPath == "" {
 		socketPath = DefaultUnixSocket
 	}
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
-		return err
+	if r := core.MkdirAll(osPathDir(socketPath), 0o755); !r.OK {
+		return r
 	}
-	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	if r := core.Remove(socketPath); !r.OK {
+		err, _ := r.Value.(error)
+		if !core.IsNotExist(err) {
+			return r
+		}
 	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 	defer func() {
-		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			fmt.Fprintln(os.Stderr, "MCP Unix listener close error:", err)
+		if err := listener.Close(); err != nil && !core.Is(err, net.ErrClosed) {
+			core.Print(core.Stderr(), "MCP Unix listener close error: %v\n", err)
 		}
-		if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintln(os.Stderr, "MCP Unix socket cleanup error:", err)
+		if r := core.Remove(socketPath); !r.OK {
+			err, _ := r.Value.(error)
+			if !core.IsNotExist(err) {
+				core.Print(core.Stderr(), "MCP Unix socket cleanup error: %s\n", r.Error())
+			}
 		}
 	}()
 
 	go func() {
 		<-ctx.Done()
-		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			fmt.Fprintln(os.Stderr, "MCP Unix listener close error:", err)
+		if err := listener.Close(); err != nil && !core.Is(err, net.ErrClosed) {
+			core.Print(core.Stderr(), "MCP Unix listener close error: %v\n", err)
 		}
 	}()
 
@@ -49,9 +53,9 @@ func (s *Service) ServeUnix(ctx context.Context, socketPath string) error {
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				return nil
+				return core.Ok(nil)
 			default:
-				fmt.Fprintln(os.Stderr, "MCP Unix accept error:", err)
+				core.Print(core.Stderr(), "MCP Unix accept error: %v\n", err)
 				continue
 			}
 		}

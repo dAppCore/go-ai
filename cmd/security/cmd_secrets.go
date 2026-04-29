@@ -16,7 +16,11 @@ func addSecretsCommand(parent *cli.Command) {
 		Short: i18n.T("cmd.security.secrets.short"),
 		Long:  i18n.T("cmd.security.secrets.long"),
 		RunE: func(c *cli.Command, args []string) error {
-			return runSecrets(*selectionOptions)
+			r := runSecrets(*selectionOptions)
+			if !r.OK {
+				return coreResultError(r)
+			}
+			return nil
 		},
 	}
 
@@ -38,16 +42,16 @@ type SecretAlert struct {
 	PushProtection bool   `json:"push_protection_bypassed"`
 }
 
-func runSecrets(selectionOptions SecuritySelectionOptions) error {
+func runSecrets(selectionOptions SecuritySelectionOptions) core.Result {
 	startedAt := time.Now()
 
 	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
 	if err != nil {
-		return err
+		return core.Fail(err)
 	}
 
-	if err := checkGitHubCLI(); err != nil {
-		return err
+	if r := checkGitHubCLI(); !r.OK {
+		return r
 	}
 
 	var allAlerts []SecretAlert
@@ -67,8 +71,8 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 		allAlerts = append(allAlerts, targetAlerts...)
 	}
 
-	if err := combineSecurityTargetErrors("security secrets", targetErrors); err != nil {
-		return err
+	if r := combineSecurityTargetErrors("security secrets", targetErrors); !r.OK {
+		return r
 	}
 
 	recordedRepo := metricRepositoryForTargets(targets)
@@ -80,7 +84,7 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 
 	if selectionOptions.JSONOutput {
 		cli.Text(core.JSONMarshalString(allAlerts))
-		return nil
+		return core.Ok(nil)
 	}
 
 	cli.Blank()
@@ -92,7 +96,7 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 	cli.Blank()
 
 	if len(allAlerts) == 0 {
-		return nil
+		return core.Ok(nil)
 	}
 
 	for _, alert := range allAlerts {
@@ -110,7 +114,7 @@ func runSecrets(selectionOptions SecuritySelectionOptions) error {
 	}
 	cli.Blank()
 
-	return nil
+	return core.Ok(nil)
 }
 
 func collectSecretAlerts(target SecurityTarget) ([]SecretAlert, error) {
