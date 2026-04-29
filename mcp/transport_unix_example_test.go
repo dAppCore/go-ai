@@ -7,7 +7,7 @@ import (
 )
 
 func ExampleService_ServeUnix() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	socketPath := core.PathJoin("/tmp", core.Sprintf("mcp-example-%d.sock", core.Getpid()))

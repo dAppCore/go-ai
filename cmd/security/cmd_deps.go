@@ -18,7 +18,8 @@ func addDepsCommand(parent *cli.Command) {
 		RunE: func(c *cli.Command, args []string) error {
 			r := runDeps(*selectionOptions)
 			if !r.OK {
-				return coreResultError(r)
+				err, _ := coreResultError(r).(error)
+				return err
 			}
 			return nil
 		},
@@ -49,10 +50,11 @@ type DepAlert struct {
 func runDeps(selectionOptions SecuritySelectionOptions) core.Result {
 	startedAt := time.Now()
 
-	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
-	if err != nil {
-		return core.Fail(err)
+	targetsResult := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
+	if !targetsResult.OK {
+		return targetsResult
 	}
+	targets := targetsResult.Value.([]SecurityTarget)
 
 	if r := checkGitHubCLI(); !r.OK {
 		return r
@@ -63,11 +65,12 @@ func runDeps(selectionOptions SecuritySelectionOptions) core.Result {
 	targetErrors := map[string]error{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectDepAlerts(target, selectionOptions.SeverityFilter)
-		if err != nil {
-			targetErrors[target.FullName] = err
+		targetAlertsResult := collectDepAlerts(target, selectionOptions.SeverityFilter)
+		if !targetAlertsResult.OK {
+			targetErrors[target.FullName], _ = coreResultError(targetAlertsResult).(error)
 			continue
 		}
+		targetAlerts := targetAlertsResult.Value.([]DepAlert)
 
 		for _, alert := range targetAlerts {
 			summary.Add(alert.Severity)
@@ -126,11 +129,12 @@ func runDeps(selectionOptions SecuritySelectionOptions) core.Result {
 	return core.Ok(nil)
 }
 
-func collectDepAlerts(target SecurityTarget, severityFilter string) ([]DepAlert, error) {
-	alerts, err := fetchDependabotAlerts(target.FullName)
-	if err != nil {
-		return nil, err
+func collectDepAlerts(target SecurityTarget, severityFilter string) core.Result {
+	alertsResult := fetchDependabotAlerts(target.FullName)
+	if !alertsResult.OK {
+		return alertsResult
 	}
+	alerts := alertsResult.Value.([]DependabotAlert)
 
 	var allAlerts []DepAlert
 	for _, alert := range alerts {
@@ -154,5 +158,5 @@ func collectDepAlerts(target SecurityTarget, severityFilter string) ([]DepAlert,
 			Summary:        alert.Advisory.Summary,
 		})
 	}
-	return allAlerts, nil
+	return core.Ok(allAlerts)
 }

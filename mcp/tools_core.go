@@ -187,90 +187,97 @@ type LanguageInfo struct {
 	Extensions []string `json:"extensions"`
 }
 
-func (s *Service) readFile(ctx context.Context, input ReadFileInput) (ReadFileOutput, error) {
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return ReadFileOutput{}, err
+func (s *Service) readFile(ctx context.Context, input ReadFileInput) core.Result {
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return pathResult
 	}
+	path := pathResult.Value.(string)
 	content := core.ReadFile(path)
 	if !content.OK {
-		return ReadFileOutput{}, core.NewError(content.Error())
+		return content
 	}
-	return ReadFileOutput{Content: string(content.Value.([]byte)), Language: detectLanguageFromPath(input.Path), Path: input.Path}, nil
+	return core.Ok(ReadFileOutput{Content: string(content.Value.([]byte)), Language: detectLanguageFromPath(input.Path), Path: input.Path})
 }
 
-func (s *Service) writeFile(ctx context.Context, input WriteFileInput) (WriteFileOutput, error) {
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return WriteFileOutput{}, err
+func (s *Service) writeFile(ctx context.Context, input WriteFileInput) core.Result {
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return pathResult
 	}
+	path := pathResult.Value.(string)
 	if r := core.MkdirAll(osPathDir(path), 0o755); !r.OK {
-		return WriteFileOutput{}, core.NewError(r.Error())
+		return r
 	}
 	if r := core.WriteFile(path, []byte(input.Content), 0o644); !r.OK {
-		return WriteFileOutput{}, core.NewError(r.Error())
+		return r
 	}
-	return WriteFileOutput{Success: true, Path: input.Path}, nil
+	return core.Ok(WriteFileOutput{Success: true, Path: input.Path})
 }
 
-func (s *Service) deleteFile(ctx context.Context, input DeleteFileInput) (DeleteFileOutput, error) {
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return DeleteFileOutput{}, err
+func (s *Service) deleteFile(ctx context.Context, input DeleteFileInput) core.Result {
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return pathResult
 	}
+	path := pathResult.Value.(string)
 	if r := core.Remove(path); !r.OK {
-		return DeleteFileOutput{}, core.NewError(r.Error())
+		return r
 	}
-	return DeleteFileOutput{Success: true, Path: input.Path}, nil
+	return core.Ok(DeleteFileOutput{Success: true, Path: input.Path})
 }
 
-func (s *Service) renameFile(ctx context.Context, input RenameFileInput) (RenameFileOutput, error) {
-	oldPath, err := s.resolvePath(input.OldPath)
-	if err != nil {
-		return RenameFileOutput{}, err
+func (s *Service) renameFile(ctx context.Context, input RenameFileInput) core.Result {
+	oldPathResult := s.resolvePath(input.OldPath)
+	if !oldPathResult.OK {
+		return oldPathResult
 	}
-	newPath, err := s.resolvePath(input.NewPath)
-	if err != nil {
-		return RenameFileOutput{}, err
+	oldPath := oldPathResult.Value.(string)
+	newPathResult := s.resolvePath(input.NewPath)
+	if !newPathResult.OK {
+		return newPathResult
 	}
+	newPath := newPathResult.Value.(string)
 	if r := core.MkdirAll(osPathDir(newPath), 0o755); !r.OK {
-		return RenameFileOutput{}, core.NewError(r.Error())
+		return r
 	}
 	if r := core.Rename(oldPath, newPath); !r.OK {
-		return RenameFileOutput{}, core.NewError(r.Error())
+		return r
 	}
-	return RenameFileOutput{Success: true, OldPath: input.OldPath, NewPath: input.NewPath}, nil
+	return core.Ok(RenameFileOutput{Success: true, OldPath: input.OldPath, NewPath: input.NewPath})
 }
 
-func (s *Service) fileExists(ctx context.Context, input FileExistsInput) (FileExistsOutput, error) {
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return FileExistsOutput{Exists: false, Path: input.Path}, nil
+func (s *Service) fileExists(ctx context.Context, input FileExistsInput) core.Result {
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return core.Ok(FileExistsOutput{Exists: false, Path: input.Path})
 	}
+	path := pathResult.Value.(string)
 	info := core.Stat(path)
 	if !info.OK {
-		return FileExistsOutput{Exists: false, Path: input.Path}, nil
+		return core.Ok(FileExistsOutput{Exists: false, Path: input.Path})
 	}
 	fileInfo := info.Value.(core.FsFileInfo)
-	return FileExistsOutput{Exists: true, IsDir: fileInfo.IsDir(), Path: input.Path}, nil
+	return core.Ok(FileExistsOutput{Exists: true, IsDir: fileInfo.IsDir(), Path: input.Path})
 }
 
-func (s *Service) editFile(ctx context.Context, input EditFileInput) (EditFileOutput, error) {
+func (s *Service) editFile(ctx context.Context, input EditFileInput) core.Result {
 	if input.OldString == "" {
-		return EditFileOutput{}, core.Errorf("%w: old_string is required", errInvalidParams)
+		return core.Fail(core.Errorf("%w: old_string is required", errInvalidParams))
 	}
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return EditFileOutput{}, err
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return pathResult
 	}
+	path := pathResult.Value.(string)
 	contentBytes := core.ReadFile(path)
 	if !contentBytes.OK {
-		return EditFileOutput{}, core.NewError(contentBytes.Error())
+		return contentBytes
 	}
 	content := string(contentBytes.Value.([]byte))
 	replacements := countStringOccurrences(content, input.OldString)
 	if replacements == 0 {
-		return EditFileOutput{}, core.Errorf("old_string not found")
+		return core.Fail(core.Errorf("old_string not found"))
 	}
 	if input.ReplaceAll {
 		content = core.Replace(content, input.OldString, input.NewString)
@@ -279,19 +286,20 @@ func (s *Service) editFile(ctx context.Context, input EditFileInput) (EditFileOu
 		replacements = 1
 	}
 	if r := core.WriteFile(path, []byte(content), 0o644); !r.OK {
-		return EditFileOutput{}, core.NewError(r.Error())
+		return r
 	}
-	return EditFileOutput{Path: input.Path, Success: true, Replacements: replacements}, nil
+	return core.Ok(EditFileOutput{Path: input.Path, Success: true, Replacements: replacements})
 }
 
-func (s *Service) listDirectory(ctx context.Context, input ListDirectoryInput) (ListDirectoryOutput, error) {
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return ListDirectoryOutput{}, err
+func (s *Service) listDirectory(ctx context.Context, input ListDirectoryInput) core.Result {
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return pathResult
 	}
+	path := pathResult.Value.(string)
 	entriesResult := core.ReadDir(core.DirFS(path), ".")
 	if !entriesResult.OK {
-		return ListDirectoryOutput{}, core.NewError(entriesResult.Error())
+		return entriesResult
 	}
 	entries := entriesResult.Value.([]core.FsDirEntry)
 	slices.SortFunc(entries, func(a, b core.FsDirEntry) int {
@@ -311,42 +319,43 @@ func (s *Service) listDirectory(ctx context.Context, input ListDirectoryInput) (
 			Size:  size,
 		})
 	}
-	return ListDirectoryOutput{Entries: out, Path: input.Path}, nil
+	return core.Ok(ListDirectoryOutput{Entries: out, Path: input.Path})
 }
 
-func (s *Service) createDirectory(ctx context.Context, input CreateDirectoryInput) (CreateDirectoryOutput, error) {
-	path, err := s.resolvePath(input.Path)
-	if err != nil {
-		return CreateDirectoryOutput{}, err
+func (s *Service) createDirectory(ctx context.Context, input CreateDirectoryInput) core.Result {
+	pathResult := s.resolvePath(input.Path)
+	if !pathResult.OK {
+		return pathResult
 	}
+	path := pathResult.Value.(string)
 	if r := core.MkdirAll(path, 0o755); !r.OK {
-		return CreateDirectoryOutput{}, core.NewError(r.Error())
+		return r
 	}
-	return CreateDirectoryOutput{Success: true, Path: input.Path}, nil
+	return core.Ok(CreateDirectoryOutput{Success: true, Path: input.Path})
 }
 
-func (s *Service) detectLanguage(ctx context.Context, input DetectLanguageInput) (DetectLanguageOutput, error) {
-	return DetectLanguageOutput{Language: detectLanguageFromPath(input.Path), Path: input.Path}, nil
+func (s *Service) detectLanguage(ctx context.Context, input DetectLanguageInput) core.Result {
+	return core.Ok(DetectLanguageOutput{Language: detectLanguageFromPath(input.Path), Path: input.Path})
 }
 
-func (s *Service) listLanguages(ctx context.Context, input ListLanguagesInput) (ListLanguagesOutput, error) {
-	return ListLanguagesOutput{Languages: supportedLanguages()}, nil
+func (s *Service) listLanguages(ctx context.Context, input ListLanguagesInput) core.Result {
+	return core.Ok(ListLanguagesOutput{Languages: supportedLanguages()})
 }
 
-func (s *Service) resolvePath(path string) (string, error) {
+func (s *Service) resolvePath(path string) core.Result {
 	if core.Trim(path) == "" {
-		return "", core.Errorf("%w: path is required", errInvalidParams)
+		return core.Fail(core.Errorf("%w: path is required", errInvalidParams))
 	}
 
 	if s.workspaceRoot == "" {
 		if core.PathIsAbs(path) {
-			return cleanOSPath(path), nil
+			return core.Ok(cleanOSPath(path))
 		}
 		abs := core.PathAbs(path)
 		if !abs.OK {
-			return "", core.NewError(abs.Error())
+			return abs
 		}
-		return abs.Value.(string), nil
+		return core.Ok(abs.Value.(string))
 	}
 
 	var candidate string
@@ -358,18 +367,18 @@ func (s *Service) resolvePath(path string) (string, error) {
 	}
 	absCandidate := core.PathAbs(candidate)
 	if !absCandidate.OK {
-		return "", core.NewError(absCandidate.Error())
+		return absCandidate
 	}
 	absPath := absCandidate.Value.(string)
 	rel := core.PathRel(s.workspaceRoot, absPath)
 	if !rel.OK {
-		return "", core.NewError(rel.Error())
+		return rel
 	}
 	relative := rel.Value.(string)
 	if relative == ".." || core.HasPrefix(relative, ".."+string(core.PathSeparator)) {
-		return "", core.Errorf("path escapes workspace root: %s", path)
+		return core.Fail(core.Errorf("path escapes workspace root: %s", path))
 	}
-	return absPath, nil
+	return core.Ok(absPath)
 }
 
 func directoryEntryPath(dir, name string) string {

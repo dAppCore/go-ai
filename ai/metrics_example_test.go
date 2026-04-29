@@ -29,9 +29,9 @@ func withMetricsExampleHome(fn func()) {
 
 func ExampleRecord() {
 	withMetricsExampleHome(func() {
-		err := Record(Event{Type: "security.scan", Repo: "core/go-ai"})
+		result := Record(Event{Type: "security.scan", Repo: "core/go-ai"})
 
-		Println(err == nil)
+		Println(result.OK)
 	})
 	// Output:
 	// true
@@ -40,11 +40,12 @@ func ExampleRecord() {
 func ExampleReadEvents() {
 	withMetricsExampleHome(func() {
 		now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
-		err := Record(Event{Type: "security.scan", Timestamp: now})
-		events, readErr := ReadEvents(now.Add(-time.Hour))
+		result := Record(Event{Type: "security.scan", Timestamp: now})
+		readResult := ReadEvents(now.Add(-time.Hour))
+		events := readResult.Value.([]Event)
 
-		Println(err == nil)
-		Println(readErr == nil)
+		Println(result.OK)
+		Println(readResult.OK)
 		Println(len(events))
 	})
 	// Output:

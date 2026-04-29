@@ -5,8 +5,6 @@ import (
 	"dappco.re/go/cli/pkg/cli"
 )
 
-type RawMessage = githubRawMessage
-
 func ExampleAddSecurityCommands() {
 	root := &cli.Command{Use: "core"}
 	AddSecurityCommands(root)
@@ -17,17 +15,6 @@ func ExampleAddSecurityCommands() {
 	// Output:
 	// true
 	// security
-}
-
-func ExampleRawMessage_UnmarshalJSON() {
-	var raw githubRawMessage
-	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
-
-	core.Println(err == nil)
-	core.Println(string(raw))
-	// Output:
-	// true
-	// {"ok":true}
 }
 
 func ExampleAlertSummary_Add() {

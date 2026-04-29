@@ -44,16 +44,20 @@ func runWithContext(ctx context.Context, cfg Config) core.Result {
 	}
 	defer func() {
 		if cfg.PIDFile != "" {
-			if r := core.Remove(cfg.PIDFile); !r.OK && !core.IsNotExist(daemonResultError(r)) {
-				core.Print(core.Stderr(), "daemon pid cleanup: %s\n", r.Error())
+			if r := core.Remove(cfg.PIDFile); !r.OK {
+				err, _ := daemonResultError(r).(error)
+				if !core.IsNotExist(err) {
+					core.Print(core.Stderr(), "daemon pid cleanup: %s\n", r.Error())
+				}
 			}
 		}
 	}()
 
-	svc, err := mcp.New()
-	if err != nil {
-		return core.Fail(err)
+	serviceResult := mcp.New()
+	if !serviceResult.OK {
+		return serviceResult
 	}
+	svc := serviceResult.Value.(*mcp.Service)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -69,8 +73,11 @@ func runWithContext(ctx context.Context, cfg Config) core.Result {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if r := fn(ctx); !r.OK && !core.Is(daemonResultError(r), context.Canceled) {
-				err := daemonResultError(r)
+			if r := fn(ctx); !r.OK {
+				err, _ := daemonResultError(r).(error)
+				if core.Is(err, context.Canceled) {
+					return
+				}
 				errCh <- core.Errorf("%s: %w", name, err)
 			}
 		}()
@@ -87,11 +94,12 @@ func runWithContext(ctx context.Context, cfg Config) core.Result {
 		}
 	}
 
-	healthServer, err := startHealth(ctx, cfg.HealthAddr)
-	if err != nil {
+	healthResult := startHealth(ctx, cfg.HealthAddr)
+	if !healthResult.OK {
 		cancel()
-		return core.Fail(err)
+		return healthResult
 	}
+	healthServer, _ := healthResult.Value.(*http.Server)
 	if healthServer != nil {
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -164,13 +172,13 @@ func configuredTransports(cfg Config) []string {
 	}
 }
 
-func startHealth(ctx context.Context, addr string) (*http.Server, error) {
+func startHealth(ctx context.Context, addr string) core.Result {
 	if addr == "" {
-		return nil, nil
+		return core.Ok((*http.Server)(nil))
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, err
+		return core.Fail(err)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +197,7 @@ func startHealth(ctx context.Context, addr string) (*http.Server, error) {
 			core.Print(core.Stderr(), "daemon health server: %v\n", err)
 		}
 	}()
-	return server, nil
+	return core.Ok(server)
 }
 
 func writePIDFile(path string) core.Result {
@@ -230,7 +238,7 @@ func looksLikeTCPAddr(value string) bool {
 	return core.HasPrefix(value, ":")
 }
 
-func daemonResultError(r core.Result) (err error) {
+func daemonResultError(r core.Result) any {
 	if err, ok := r.Value.(error); ok {
 		return err
 	}

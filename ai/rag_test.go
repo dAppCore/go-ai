@@ -114,9 +114,9 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		return nil, core.NewError("qdrant unavailable")
 	}
 
-	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
-	} else if got != "" {
+	if result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
+	} else if got := result.Value.(string); got != "" {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 
@@ -125,9 +125,9 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		return nil, core.NewError("ollama unavailable")
 	}
 
-	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
-	} else if got != "" {
+	if result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
+	} else if got := result.Value.(string); got != "" {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 
@@ -142,9 +142,9 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		return nil, core.NewError("query failed")
 	}
 
-	if got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
-	} else if got != "" {
+	if result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
+	} else if got := result.Value.(string); got != "" {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string", got)
 	}
 }
@@ -189,13 +189,14 @@ func TestRag_QueryRAGForTask_Good_ReturnsFormattedContext(t *testing.T) {
 		}, nil
 	}
 
-	got, err := QueryRAGForTask(TaskInfo{
+	result := QueryRAGForTask(TaskInfo{
 		Title:       "Investigate build failure",
 		Description: "CI compile step fails",
 	})
-	if err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	if !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
 	}
+	got := result.Value.(string)
 	if got == "" {
 		t.Fatal("QueryRAGForTask() returned empty context for a populated result set")
 	}
@@ -253,13 +254,14 @@ func TestRag_QueryRAGForTask_Good_ClosesOpenedQdrantClient(t *testing.T) {
 		return []rag.QueryResult{{Text: "Doc", Source: "docs.md"}}, nil
 	}
 
-	got, err := QueryRAGForTask(TaskInfo{
+	result := QueryRAGForTask(TaskInfo{
 		Title:       "Investigate",
 		Description: "failure",
 	})
-	if err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	if !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
 	}
+	got := result.Value.(string)
 	if got == "" {
 		t.Fatal("QueryRAGForTask() returned empty context for a populated result set")
 	}
@@ -297,13 +299,14 @@ func TestRag_QueryRAGForTask_Bad_ReturnsEmptyStringWhenNoResults(t *testing.T) {
 		return nil, nil
 	}
 
-	got, err := QueryRAGForTask(TaskInfo{
+	result := QueryRAGForTask(TaskInfo{
 		Title:       "Investigate build failure",
 		Description: "CI compile step fails",
 	})
-	if err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	if !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
 	}
+	got := result.Value.(string)
 	if got != "" {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string for no matches", got)
 	}
@@ -344,10 +347,11 @@ func TestRag_QueryRAGForTask_Ugly_EmptyTaskShortCircuitsSeams(t *testing.T) {
 		return nil
 	}
 
-	got, err := QueryRAGForTask(TaskInfo{})
-	if err != nil {
-		t.Fatalf("QueryRAGForTask() error = %v, want nil", err)
+	result := QueryRAGForTask(TaskInfo{})
+	if !result.OK {
+		t.Fatalf("QueryRAGForTask() error = %s, want nil", result.Error())
 	}
+	got := result.Value.(string)
 	if got != "" {
 		t.Fatalf("QueryRAGForTask() = %q, want empty string for empty task", got)
 	}
@@ -394,16 +398,18 @@ func TestRag_QueryRAGForTask_Good(t *core.T) {
 		return []rag.QueryResult{{Text: "Runbook", Source: "docs/build.md", Score: 0.9}}, nil
 	}
 
-	got, err := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"})
-	core.AssertNoError(t, err)
+	result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"})
+	got := result.Value.(string)
+	core.AssertTrue(t, result.OK)
 	core.AssertContains(t, got, "Runbook")
 }
 
 func TestRag_QueryRAGForTask_Bad(t *core.T) {
-	got, err := QueryRAGForTask(TaskInfo{})
+	result := QueryRAGForTask(TaskInfo{})
+	got := result.Value.(string)
 	want := ""
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, want, got)
 }
 
@@ -416,7 +422,8 @@ func TestRag_QueryRAGForTask_Ugly(t *core.T) {
 		return nil, core.NewError("qdrant unavailable")
 	}
 
-	got, err := QueryRAGForTask(TaskInfo{Title: "Investigate"})
-	core.AssertNoError(t, err)
+	result := QueryRAGForTask(TaskInfo{Title: "Investigate"})
+	got := result.Value.(string)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, "", got)
 }

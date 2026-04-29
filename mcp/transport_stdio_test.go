@@ -7,14 +7,13 @@ import (
 // --- AX-7 canonical triplets ---
 
 func TestTransportStdio_Service_ServeStdio_Good(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	oldReader, oldWriter := stdioReader, stdioWriter
 	defer func() { stdioReader, stdioWriter = oldReader, oldWriter }()
 
-	var output safeBuffer
+	output := core.NewBuffer()
 	stdioReader = core.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}` + "\n")
-	stdioWriter = &output
+	stdioWriter = output
 	r := service.ServeStdio(core.Background())
 
 	core.AssertTrue(t, r.OK)
@@ -22,14 +21,13 @@ func TestTransportStdio_Service_ServeStdio_Good(t *core.T) {
 }
 
 func TestTransportStdio_Service_ServeStdio_Bad(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	oldReader, oldWriter := stdioReader, stdioWriter
 	defer func() { stdioReader, stdioWriter = oldReader, oldWriter }()
 
-	var output safeBuffer
+	output := core.NewBuffer()
 	stdioReader = core.NewReader("{bad json\n")
-	stdioWriter = &output
+	stdioWriter = output
 	r := service.ServeStdio(core.Background())
 
 	core.AssertTrue(t, r.OK)
@@ -37,13 +35,12 @@ func TestTransportStdio_Service_ServeStdio_Bad(t *core.T) {
 }
 
 func TestTransportStdio_Service_ServeStdio_Ugly(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	oldReader, oldWriter := stdioReader, stdioWriter
 	defer func() { stdioReader, stdioWriter = oldReader, oldWriter }()
 
 	stdioReader = core.NewReader("")
-	stdioWriter = &safeBuffer{}
+	stdioWriter = core.NewBuffer()
 	r := service.ServeStdio(core.Background())
 
 	core.AssertTrue(t, r.OK)
@@ -51,14 +48,13 @@ func TestTransportStdio_Service_ServeStdio_Ugly(t *core.T) {
 }
 
 func TestTransportStdio_Service_Run_Good(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	oldReader, oldWriter := stdioReader, stdioWriter
 	defer func() { stdioReader, stdioWriter = oldReader, oldWriter }()
 
-	var output safeBuffer
+	output := core.NewBuffer()
 	stdioReader = core.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n")
-	stdioWriter = &output
+	stdioWriter = output
 	r := service.Run(core.Background())
 
 	core.AssertTrue(t, r.OK)
@@ -74,8 +70,7 @@ func TestTransportStdio_Service_Run_Bad(t *core.T) {
 		}
 		return ""
 	}
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 
 	r := service.Run(core.Background())
 	core.AssertFalse(t, r.OK)
@@ -92,8 +87,7 @@ func TestTransportStdio_Service_Run_Ugly(t *core.T) {
 		}
 		return ""
 	}
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 
 	r := service.Run(core.Background())
 	core.AssertFalse(t, r.OK)

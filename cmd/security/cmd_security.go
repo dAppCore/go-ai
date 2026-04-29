@@ -31,7 +31,7 @@ var (
 )
 
 func recordSecurityMetricsEvent(event ai.Event) {
-	if err := ai.Record(event); err != nil {
+	if r := ai.Record(event); !r.OK {
 		return
 	}
 }
@@ -160,27 +160,27 @@ type SecretScanningAlert struct {
 	Resolution     string `json:"resolution"`
 }
 
-func loadRegistry(registryPath string) (*repos.Registry, error) {
+func loadRegistry(registryPath string) core.Result {
 	if registryPath != "" {
 		if !io.Local.Exists(registryPath) {
-			return nil, cli.Err("registry not found: %s", registryPath)
+			return core.Fail(cli.Err("registry not found: %s", registryPath))
 		}
 		registry, err := repos.LoadRegistry(io.Local, registryPath)
 		if err != nil {
-			return nil, cli.Wrap(err, "load registry")
+			return core.Fail(cli.Wrap(err, "load registry"))
 		}
-		return registry, nil
+		return core.Ok(registry)
 	}
 
 	path, err := repos.FindRegistry(io.Local)
 	if err != nil {
-		return nil, cli.Wrap(err, "find registry")
+		return core.Fail(cli.Wrap(err, "find registry"))
 	}
 	registry, err := repos.LoadRegistry(io.Local, path)
 	if err != nil {
-		return nil, cli.Wrap(err, "load registry")
+		return core.Fail(cli.Wrap(err, "load registry"))
 	}
-	return registry, nil
+	return core.Ok(registry)
 }
 
 func checkGitHubCLI() core.Result {
@@ -190,42 +190,43 @@ func checkGitHubCLI() core.Result {
 	return core.Ok(nil)
 }
 
-func runGitHubAPI(endpoint string) ([]byte, error) {
+func runGitHubAPI(endpoint string) core.Result {
 	return runGitHubAPIWithMode(endpoint, true)
 }
 
-func runGitHubAPIStrict(endpoint string) ([]byte, error) {
+func runGitHubAPIStrict(endpoint string) core.Result {
 	return runGitHubAPIWithMode(endpoint, false)
 }
 
-func runGitHubAPIWithMode(endpoint string, allowMissingEndpoint bool) ([]byte, error) {
+func runGitHubAPIWithMode(endpoint string, allowMissingEndpoint bool) core.Result {
 	var lastErr error
 	for attempt := 0; attempt < githubAPIMaxAttempts; attempt++ {
-		output, err := runGitHubAPIRequest(endpoint)
-		if err == nil {
-			return output, nil
+		outputResult := runGitHubAPIRequest(endpoint)
+		if outputResult.OK {
+			return outputResult
 		}
 
+		err, _ := coreResultError(outputResult).(error)
 		lastErr = err
 		if allowMissingEndpoint && core.Is(err, errGitHubAPIEndpointNotFound) {
-			return []byte("[]"), nil
+			return core.Ok([]byte("[]"))
 		}
 
 		if core.Is(err, errGitHubAPIAccessDenied) {
-			return nil, err
+			return core.Fail(err)
 		}
 
 		if attempt == githubAPIMaxAttempts-1 || !isRetryableGitHubAPIError(err) {
-			return nil, cli.Wrap(lastErr, "run gh api")
+			return core.Fail(cli.Wrap(lastErr, "run gh api"))
 		}
 
 		time.Sleep(githubAPIBaseBackoff << attempt)
 	}
 
-	return nil, cli.Wrap(lastErr, "run gh api")
+	return core.Fail(cli.Wrap(lastErr, "run gh api"))
 }
 
-func runGitHubAPIRequest(endpoint string) ([]byte, error) {
+func runGitHubAPIRequest(endpoint string) core.Result {
 	ctx, cancel := context.WithTimeout(context.Background(), githubAPITimeout)
 	defer cancel()
 
@@ -233,18 +234,18 @@ func runGitHubAPIRequest(endpoint string) ([]byte, error) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if core.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, core.E("security.github.api", "GitHub API request timed out", errGitHubAPITimeout)
+			return core.Fail(core.E("security.github.api", "GitHub API request timed out", errGitHubAPITimeout))
 		}
 		stderr := string(output)
 		if core.Contains(stderr, "404") || core.Contains(stderr, "Not Found") {
-			return nil, errGitHubAPIEndpointNotFound
+			return core.Fail(errGitHubAPIEndpointNotFound)
 		}
 		if core.Contains(stderr, "403") || core.Contains(stderr, "Forbidden") {
-			return nil, core.E("security.github.api", "check token permissions", errGitHubAPIAccessDenied)
+			return core.Fail(core.E("security.github.api", "check token permissions", errGitHubAPIAccessDenied))
 		}
-		return nil, err
+		return core.Fail(err)
 	}
-	return trimGitHubJSONBytes(output), nil
+	return core.Ok(trimGitHubJSONBytes(output))
 }
 
 func isRetryableGitHubAPIError(err error) bool {
@@ -258,19 +259,11 @@ type githubRepoResponse struct {
 
 type githubRawMessage []byte
 
-func (m *githubRawMessage) UnmarshalJSON(data []byte) (err error) {
-	if m == nil {
-		return core.E("security.github.rawMessage", "unmarshal JSON into nil raw message", nil)
-	}
-	*m = append((*m)[0:0], data...)
-	return nil
-}
-
 func trimGitHubJSONBytes(data []byte) []byte {
 	return []byte(core.Trim(string(data)))
 }
 
-func coreResultError(value any) (err error) {
+func coreResultError(value any) any {
 	if r, ok := value.(core.Result); ok {
 		if r.OK {
 			return nil
@@ -283,20 +276,26 @@ func coreResultError(value any) (err error) {
 	return core.E("security.core.result", "operation failed", nil)
 }
 
-func decodeGitHubArrayItems(output []byte) ([]githubRawMessage, error) {
+func decodeGitHubArrayItems(output []byte) core.Result {
 	trimmed := trimGitHubJSONBytes(output)
 	if len(trimmed) == 0 || string(trimmed) == "[]" {
-		return nil, nil
+		return core.Ok([]githubRawMessage(nil))
 	}
 
-	var pages []githubRawMessage
+	var pages []any
 	if result := core.JSONUnmarshal(trimmed, &pages); !result.OK {
-		return nil, coreerr.E("security", "parse GitHub API response", coreResultError(result.Value))
+		err, _ := coreResultError(result).(error)
+		return core.Fail(coreerr.E("security", "parse GitHub API response", err))
 	}
 
 	items := make([]githubRawMessage, 0, len(pages))
 	for _, page := range pages {
-		pageData := trimGitHubJSONBytes(page)
+		rawPage := core.JSONMarshal(page)
+		if !rawPage.OK {
+			return rawPage
+		}
+		pageRaw := githubRawMessage(rawPage.Value.([]byte))
+		pageData := trimGitHubJSONBytes(pageRaw)
 		if len(pageData) == 0 || string(pageData) == "[]" {
 			continue
 		}
@@ -306,79 +305,94 @@ func decodeGitHubArrayItems(output []byte) ([]githubRawMessage, error) {
 			continue
 		}
 
-		var pageItems []githubRawMessage
+		var pageItems []any
 		if result := core.JSONUnmarshal(pageData, &pageItems); !result.OK {
-			return nil, coreerr.E("security", "parse GitHub API page", coreResultError(result.Value))
+			err, _ := coreResultError(result).(error)
+			return core.Fail(coreerr.E("security", "parse GitHub API page", err))
 		}
-		items = append(items, pageItems...)
+		for _, pageItem := range pageItems {
+			rawItem := core.JSONMarshal(pageItem)
+			if !rawItem.OK {
+				return rawItem
+			}
+			items = append(items, githubRawMessage(rawItem.Value.([]byte)))
+		}
 	}
 
-	return items, nil
+	return core.Ok(items)
 }
 
-func decodeDependabotAlerts(output []byte) ([]DependabotAlert, error) {
-	items, err := decodeGitHubArrayItems(output)
-	if err != nil {
-		return nil, err
+func decodeDependabotAlerts(output []byte) core.Result {
+	itemsResult := decodeGitHubArrayItems(output)
+	if !itemsResult.OK {
+		return itemsResult
 	}
+	items := itemsResult.Value.([]githubRawMessage)
 
 	alerts := make([]DependabotAlert, 0, len(items))
 	for _, item := range items {
 		var alert DependabotAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
-			return nil, coreerr.E("security", "parse dependabot alert", coreResultError(result.Value))
+			err, _ := coreResultError(result).(error)
+			return core.Fail(coreerr.E("security", "parse dependabot alert", err))
 		}
 		alerts = append(alerts, alert)
 	}
-	return alerts, nil
+	return core.Ok(alerts)
 }
 
-func decodeCodeScanningAlerts(output []byte) ([]CodeScanningAlert, error) {
-	items, err := decodeGitHubArrayItems(output)
-	if err != nil {
-		return nil, err
+func decodeCodeScanningAlerts(output []byte) core.Result {
+	itemsResult := decodeGitHubArrayItems(output)
+	if !itemsResult.OK {
+		return itemsResult
 	}
+	items := itemsResult.Value.([]githubRawMessage)
 
 	alerts := make([]CodeScanningAlert, 0, len(items))
 	for _, item := range items {
 		var alert CodeScanningAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
-			return nil, coreerr.E("security", "parse code scanning alert", coreResultError(result.Value))
+			err, _ := coreResultError(result).(error)
+			return core.Fail(coreerr.E("security", "parse code scanning alert", err))
 		}
 		alerts = append(alerts, alert)
 	}
-	return alerts, nil
+	return core.Ok(alerts)
 }
 
-func decodeSecretScanningAlerts(output []byte) ([]SecretScanningAlert, error) {
-	items, err := decodeGitHubArrayItems(output)
-	if err != nil {
-		return nil, err
+func decodeSecretScanningAlerts(output []byte) core.Result {
+	itemsResult := decodeGitHubArrayItems(output)
+	if !itemsResult.OK {
+		return itemsResult
 	}
+	items := itemsResult.Value.([]githubRawMessage)
 
 	alerts := make([]SecretScanningAlert, 0, len(items))
 	for _, item := range items {
 		var alert SecretScanningAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
-			return nil, coreerr.E("security", "parse secret scanning alert", coreResultError(result.Value))
+			err, _ := coreResultError(result).(error)
+			return core.Fail(coreerr.E("security", "parse secret scanning alert", err))
 		}
 		alerts = append(alerts, alert)
 	}
-	return alerts, nil
+	return core.Ok(alerts)
 }
 
-func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
-	items, err := decodeGitHubArrayItems(output)
-	if err != nil {
-		return nil, err
+func decodeGitHubRepositoryNames(output []byte) core.Result {
+	itemsResult := decodeGitHubArrayItems(output)
+	if !itemsResult.OK {
+		return itemsResult
 	}
+	items := itemsResult.Value.([]githubRawMessage)
 
 	names := make([]string, 0, len(items))
 	seen := map[string]struct{}{}
 	for _, item := range items {
 		var repository githubRepoResponse
 		if result := core.JSONUnmarshal(item, &repository); !result.OK {
-			return nil, coreerr.E("security", "parse GitHub repository", coreResultError(result.Value))
+			err, _ := coreResultError(result).(error)
+			return core.Fail(coreerr.E("security", "parse GitHub repository", err))
 		}
 		if repository.FullName == "" {
 			continue
@@ -391,7 +405,7 @@ func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
 	}
 
 	slices.Sort(names)
-	return names, nil
+	return core.Ok(names)
 }
 
 func combineSecurityCollectorErrors(target string, collectorErrors map[string]error) core.Result {

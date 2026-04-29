@@ -32,21 +32,33 @@ func AddMetricsCommand(parent *cli.Command) {
 	options := &MetricsCommandOptions{
 		SinceWindow: 168 * time.Hour,
 	}
+	sinceInput := "7d"
 
 	metricsCommand := &cli.Command{
 		Use:   "metrics",
 		Short: i18n.T("cmd.ai.metrics.short"),
 		Long:  i18n.T("cmd.ai.metrics.long"),
 		RunE: func(cmd *cli.Command, args []string) error {
+			durationResult := parseSinceDuration(sinceInput)
+			if !durationResult.OK {
+				if err, ok := durationResult.Value.(error); ok {
+					return err
+				}
+				return core.NewError(durationResult.Error())
+			}
+			options.SinceWindow = durationResult.Value.(time.Duration)
 			r := runMetrics(*options)
 			if !r.OK {
-				return metricsResultError(r)
+				if err, ok := r.Value.(error); ok {
+					return err
+				}
+				return core.NewError(r.Error())
 			}
 			return nil
 		},
 	}
 
-	metricsCommand.Flags().Var(&sinceDurationFlagValue{target: &options.SinceWindow}, "since", i18n.T("cmd.ai.metrics.flag.since"))
+	metricsCommand.Flags().StringVar(&sinceInput, "since", sinceInput, i18n.T("cmd.ai.metrics.flag.since"))
 	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, i18n.T("common.flag.json"))
 
 	parent.AddCommand(metricsCommand)
@@ -62,17 +74,19 @@ func commandExists(parent *cli.Command, name string) bool {
 }
 
 func runMetrics(options MetricsCommandOptions) core.Result {
-	events, err := ai.ReadEvents(time.Now().Add(-options.SinceWindow))
-	if err != nil {
-		return core.Fail(cli.WrapVerb(err, "read", "metrics"))
+	eventsResult := ai.ReadEvents(time.Now().Add(-options.SinceWindow))
+	if !eventsResult.OK {
+		return core.Fail(cli.WrapVerb(core.NewError(eventsResult.Error()), "read", "metrics"))
 	}
+	events := eventsResult.Value.([]ai.Event)
 
 	summary := ai.Summary(events)
 	if options.JSONOutput {
-		output, err := marshalMetricsSummaryJSON(summary)
-		if err != nil {
-			return core.Fail(cli.Wrap(err, "marshal metrics JSON"))
+		outputResult := marshalMetricsSummaryJSON(summary)
+		if !outputResult.OK {
+			return core.Fail(cli.Wrap(core.NewError(outputResult.Error()), "marshal metrics JSON"))
 		}
+		output := outputResult.Value.([]byte)
 		cli.Text(string(output))
 		return core.Ok(nil)
 	}
@@ -126,29 +140,22 @@ func runMetrics(options MetricsCommandOptions) core.Result {
 	return core.Ok(nil)
 }
 
-func metricsResultError(r core.Result) (err error) {
-	if err, ok := r.Value.(error); ok {
-		return err
-	}
-	return core.NewError(r.Error())
-}
-
 // parseSinceDuration("7d") returns 168 hours for the default metrics window shorthand.
-func parseSinceDuration(input string) (time.Duration, error) {
+func parseSinceDuration(input string) core.Result {
 	trimmed := core.Trim(input)
 	if trimmed == "" {
-		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
+		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
 	}
 
 	if duration, err := time.ParseDuration(trimmed); err == nil {
 		if duration <= 0 {
-			return 0, coreerr.E("metrics", "duration must be positive: "+input, nil)
+			return core.Fail(coreerr.E("metrics", "duration must be positive: "+input, nil))
 		}
-		return duration, nil
+		return core.Ok(duration)
 	}
 
 	if len(trimmed) < 2 {
-		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
+		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
 	}
 
 	unit := trimmed[len(trimmed)-1]
@@ -156,17 +163,17 @@ func parseSinceDuration(input string) (time.Duration, error) {
 
 	n, ok := parseShorthandDurationValue(value)
 	if !ok {
-		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
+		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
 	}
 	if n <= 0 {
-		return 0, coreerr.E("metrics", "duration must be positive: "+input, nil)
+		return core.Fail(coreerr.E("metrics", "duration must be positive: "+input, nil))
 	}
 
 	switch unit {
 	case 'd':
-		return time.Duration(n) * 24 * time.Hour, nil
+		return core.Ok(time.Duration(n) * 24 * time.Hour)
 	default:
-		return 0, coreerr.E("metrics", "invalid duration: "+input, nil)
+		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
 	}
 }
 
@@ -204,30 +211,6 @@ func formatDurationShort(duration time.Duration) string {
 	}
 }
 
-type sinceDurationFlagValue struct {
-	target *time.Duration
-}
-
-func (v *sinceDurationFlagValue) String() string {
-	if v == nil || v.target == nil {
-		return ""
-	}
-	return v.target.String()
-}
-
-func (v *sinceDurationFlagValue) Set(input string) (err error) {
-	duration, err := parseSinceDuration(input)
-	if err != nil {
-		return err
-	}
-	*v.target = duration
-	return nil
-}
-
-func (v *sinceDurationFlagValue) Type() string {
-	return "duration"
-}
-
 func summaryCountPairs(summary map[string]any, key string) []map[string]any {
 	counts, ok := summary[key].(map[string]int)
 	if !ok || len(counts) == 0 {
@@ -258,6 +241,6 @@ func summaryCountPairs(summary map[string]any, key string) []map[string]any {
 	return result
 }
 
-func marshalMetricsSummaryJSON(summary map[string]any) ([]byte, error) {
-	return []byte(core.JSONMarshalString(summary)), nil
+func marshalMetricsSummaryJSON(summary map[string]any) core.Result {
+	return core.Ok([]byte(core.JSONMarshalString(summary)))
 }

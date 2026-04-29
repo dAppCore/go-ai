@@ -7,9 +7,10 @@ import (
 )
 
 func ExampleLabCommandOptions() {
-	options, err := parseLabServeOptions([]string{"--bind", "127.0.0.1:9090"}, io.Discard)
+	result := parseLabServeOptions([]string{"--bind", "127.0.0.1:9090"}, io.Discard)
+	options := result.Value.(LabCommandOptions)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(options.Bind)
 	// Output:
 	// true

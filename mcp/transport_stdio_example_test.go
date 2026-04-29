@@ -7,7 +7,7 @@ import (
 )
 
 func ExampleService_ServeStdio() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 	oldReader, oldWriter := stdioReader, stdioWriter
 	defer func() { stdioReader, stdioWriter = oldReader, oldWriter }()
 
@@ -24,7 +24,7 @@ func ExampleService_ServeStdio() {
 }
 
 func ExampleService_Run() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 	oldReader, oldWriter := stdioReader, stdioWriter
 	oldGetenv := mcpGetenv
 	defer func() {

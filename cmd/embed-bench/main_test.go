@@ -45,16 +45,17 @@ func TestHasInstalledModel_Good_DefaultMatchesTaggedInstall(t *testing.T) {
 }
 
 func TestDecodeInstalledModelNames_Good(t *testing.T) {
-	got, err := decodeInstalledModelNames([]byte(`{
+	result := decodeInstalledModelNames([]byte(`{
 		"models": [
 			{"name": "nomic-embed-text:latest"},
 			{"name": "snowflake-arctic-embed2:335m"},
 			{"name": ""}
 		]
 	}`))
-	if err != nil {
-		t.Fatalf("decodeInstalledModelNames(): %v", err)
+	if !result.OK {
+		t.Fatalf("decodeInstalledModelNames(): %s", result.Error())
 	}
+	got := result.Value.([]string)
 
 	want := []string{
 		"nomic-embed-text:latest",
@@ -158,10 +159,11 @@ func TestMain_listInstalledModelNames_Good_UsesOllamaAPI(t *testing.T) {
 		httpClient = previousClient
 	})
 
-	got, err := listInstalledModelNames()
-	if err != nil {
-		t.Fatalf("listInstalledModelNames: %v", err)
+	result := listInstalledModelNames()
+	if !result.OK {
+		t.Fatalf("listInstalledModelNames: %s", result.Error())
 	}
+	got := result.Value.([]string)
 	if !reflect.DeepEqual(got, []string{"nomic-embed-text:latest"}) {
 		t.Fatalf("listInstalledModelNames() = %v, want %v", got, []string{"nomic-embed-text:latest"})
 	}
@@ -186,7 +188,7 @@ func TestMain_listInstalledModelNames_Bad_HTTPError(t *testing.T) {
 		httpClient = previousClient
 	})
 
-	if _, err := listInstalledModelNames(); err == nil {
+	if result := listInstalledModelNames(); result.OK {
 		t.Fatal("expected listInstalledModelNames to fail on non-200 status")
 	}
 }
@@ -209,10 +211,11 @@ func TestMain_listInstalledModelNames_Ugly_EmptyResponse(t *testing.T) {
 		httpClient = previousClient
 	})
 
-	got, err := listInstalledModelNames()
-	if err != nil {
-		t.Fatalf("listInstalledModelNames: %v", err)
+	result := listInstalledModelNames()
+	if !result.OK {
+		t.Fatalf("listInstalledModelNames: %s", result.Error())
 	}
+	got := result.Value.([]string)
 	if len(got) != 0 {
 		t.Fatalf("expected no models, got %v", got)
 	}
@@ -242,10 +245,11 @@ func TestMain_embed_Good_ParsesEmbeddingVector(t *testing.T) {
 		httpClient = previousClient
 	})
 
-	got, err := embed("nomic-embed-text", "hello")
-	if err != nil {
-		t.Fatalf("embed: %v", err)
+	result := embed("nomic-embed-text", "hello")
+	if !result.OK {
+		t.Fatalf("embed: %s", result.Error())
 	}
+	got := result.Value.([]float64)
 	want := []float64{0.1, 0.2, 0.3}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("embed() = %v, want %v", got, want)
@@ -268,7 +272,7 @@ func TestMain_embed_Bad_HTTPError(t *testing.T) {
 		httpClient = previousClient
 	})
 
-	if _, err := embed("nomic-embed-text", "hello"); err == nil {
+	if result := embed("nomic-embed-text", "hello"); result.OK {
 		t.Fatal("expected embed to fail on non-200 status")
 	}
 }
@@ -291,7 +295,7 @@ func TestMain_embed_Ugly_EmptyEmbeddingErrors(t *testing.T) {
 		httpClient = previousClient
 	})
 
-	if _, err := embed("nomic-embed-text", "hello"); err == nil {
+	if result := embed("nomic-embed-text", "hello"); result.OK {
 		t.Fatal("expected empty embeddings to error")
 	}
 }

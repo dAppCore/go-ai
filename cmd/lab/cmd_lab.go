@@ -43,17 +43,18 @@ func runLabCommand(args []string, stdout io.Writer, stderr io.Writer) core.Resul
 		printLabUsage(stdout)
 		return core.Ok(nil)
 	case "serve":
-		options, err := parseLabServeOptions(args[1:], stderr)
-		if err != nil {
-			return core.Fail(err)
+		optionsResult := parseLabServeOptions(args[1:], stderr)
+		if !optionsResult.OK {
+			return optionsResult
 		}
+		options := optionsResult.Value.(LabCommandOptions)
 		return runServe(options)
 	default:
 		return core.Fail(core.Errorf("unknown go-ai command %q", args[0]))
 	}
 }
 
-func parseLabServeOptions(args []string, output io.Writer) (LabCommandOptions, error) {
+func parseLabServeOptions(args []string, output io.Writer) core.Result {
 	options := LabCommandOptions{
 		Bind: defaultLabBindAddr,
 	}
@@ -67,12 +68,12 @@ func parseLabServeOptions(args []string, output io.Writer) (LabCommandOptions, e
 	flags.BoolVar(&options.AllowRemote, "allow-remote", false, "Allow binding to non-loopback interfaces")
 
 	if err := flags.Parse(args); err != nil {
-		return options, err
+		return core.Fail(err)
 	}
 	if flags.NArg() > 0 {
-		return options, core.Errorf("unexpected argument %q", flags.Arg(0))
+		return core.Fail(core.Errorf("unexpected argument %q", flags.Arg(0)))
 	}
-	return options, nil
+	return core.Ok(options)
 }
 
 func printLabUsage(output io.Writer) {

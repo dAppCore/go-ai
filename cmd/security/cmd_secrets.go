@@ -18,7 +18,8 @@ func addSecretsCommand(parent *cli.Command) {
 		RunE: func(c *cli.Command, args []string) error {
 			r := runSecrets(*selectionOptions)
 			if !r.OK {
-				return coreResultError(r)
+				err, _ := coreResultError(r).(error)
+				return err
 			}
 			return nil
 		},
@@ -45,10 +46,11 @@ type SecretAlert struct {
 func runSecrets(selectionOptions SecuritySelectionOptions) core.Result {
 	startedAt := time.Now()
 
-	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
-	if err != nil {
-		return core.Fail(err)
+	targetsResult := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
+	if !targetsResult.OK {
+		return targetsResult
 	}
+	targets := targetsResult.Value.([]SecurityTarget)
 
 	if r := checkGitHubCLI(); !r.OK {
 		return r
@@ -59,11 +61,12 @@ func runSecrets(selectionOptions SecuritySelectionOptions) core.Result {
 	targetErrors := map[string]error{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectSecretAlerts(target)
-		if err != nil {
-			targetErrors[target.FullName] = err
+		targetAlertsResult := collectSecretAlerts(target)
+		if !targetAlertsResult.OK {
+			targetErrors[target.FullName], _ = coreResultError(targetAlertsResult).(error)
 			continue
 		}
+		targetAlerts := targetAlertsResult.Value.([]SecretAlert)
 
 		for range targetAlerts {
 			summary.Add("high")
@@ -117,11 +120,12 @@ func runSecrets(selectionOptions SecuritySelectionOptions) core.Result {
 	return core.Ok(nil)
 }
 
-func collectSecretAlerts(target SecurityTarget) ([]SecretAlert, error) {
-	alerts, err := fetchSecretScanningAlerts(target.FullName)
-	if err != nil {
-		return nil, err
+func collectSecretAlerts(target SecurityTarget) core.Result {
+	alertsResult := fetchSecretScanningAlerts(target.FullName)
+	if !alertsResult.OK {
+		return alertsResult
 	}
+	alerts := alertsResult.Value.([]SecretScanningAlert)
 
 	var allAlerts []SecretAlert
 	for _, alert := range alerts {
@@ -138,5 +142,5 @@ func collectSecretAlerts(target SecurityTarget) ([]SecretAlert, error) {
 			PushProtection: alert.PushProtection,
 		})
 	}
-	return allAlerts, nil
+	return core.Ok(allAlerts)
 }

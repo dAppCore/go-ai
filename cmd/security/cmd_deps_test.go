@@ -42,10 +42,11 @@ func TestCmdDeps_collectDepAlerts_Good(t *testing.T) {
 		]`), nil
 	})
 
-	alerts, err := collectDepAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, "high")
-	if err != nil {
-		t.Fatalf("collectDepAlerts: %v", err)
+	alertsResult := collectDepAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, "high")
+	if !alertsResult.OK {
+		t.Fatalf("collectDepAlerts: %s", alertsResult.Error())
 	}
+	alerts := alertsResult.Value.([]DepAlert)
 	if len(alerts) != 1 || alerts[0].CVE != "CVE-2026-0001" || alerts[0].PatchedVersion != "1.0.2" {
 		t.Fatalf("unexpected dep alerts: %+v", alerts)
 	}

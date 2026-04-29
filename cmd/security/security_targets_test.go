@@ -9,10 +9,11 @@ import (
 )
 
 func TestParseSecurityTarget_Good(t *testing.T) {
-	got, err := parseSecurityTarget("wailsapp/wails")
-	if err != nil {
-		t.Fatalf("parseSecurityTarget: %v", err)
+	result := parseSecurityTarget("wailsapp/wails")
+	if !result.OK {
+		t.Fatalf("parseSecurityTarget: %s", result.Error())
 	}
+	got := result.Value.(SecurityTarget)
 
 	want := SecurityTarget{
 		DisplayName: "wails",
@@ -25,7 +26,7 @@ func TestParseSecurityTarget_Good(t *testing.T) {
 
 func TestParseSecurityTarget_Bad(t *testing.T) {
 	for _, input := range []string{"", "wailsapp", "/wails", "wailsapp/", "wailsapp/wails/extra", "wails app/wails"} {
-		if _, err := parseSecurityTarget(input); err == nil {
+		if result := parseSecurityTarget(input); result.OK {
 			t.Fatalf("expected error for %q, got nil", input)
 		}
 	}
@@ -77,10 +78,11 @@ func TestMetricRepositoryForTargets_Good(t *testing.T) {
 }
 
 func TestResolveSecurityTargets_Good_ExternalTarget(t *testing.T) {
-	got, err := resolveSecurityTargets("", "", "acme/api")
-	if err != nil {
-		t.Fatalf("resolveSecurityTargets: %v", err)
+	result := resolveSecurityTargets("", "", "acme/api")
+	if !result.OK {
+		t.Fatalf("resolveSecurityTargets: %s", result.Error())
 	}
+	got := result.Value.([]SecurityTarget)
 	want := []SecurityTarget{{DisplayName: "api", FullName: "acme/api"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolveSecurityTargets = %+v, want %+v", got, want)
@@ -88,7 +90,7 @@ func TestResolveSecurityTargets_Good_ExternalTarget(t *testing.T) {
 }
 
 func TestResolveSecurityTargets_Bad_InvalidExternalTarget(t *testing.T) {
-	if _, err := resolveSecurityTargets("", "", "acme api"); err == nil {
+	if result := resolveSecurityTargets("", "", "acme api"); result.OK {
 		t.Fatal("expected invalid external target to fail")
 	}
 }
@@ -106,10 +108,11 @@ func TestListGitHubOrgTargets_Good(t *testing.T) {
 		]`), nil
 	})
 
-	got, err := listGitHubOrgTargets("acme")
-	if err != nil {
-		t.Fatalf("listGitHubOrgTargets: %v", err)
+	result := listGitHubOrgTargets("acme")
+	if !result.OK {
+		t.Fatalf("listGitHubOrgTargets: %s", result.Error())
 	}
+	got := result.Value.([]string)
 	want := []string{"acme/api", "acme/web"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("listGitHubOrgTargets = %v, want %v", got, want)
@@ -122,7 +125,7 @@ func TestSecurityTargets_listGitHubOrgTargets_Bad_RejectsInvalidOrgBeforeGitHubC
 		return nil, nil
 	})
 
-	if _, err := listGitHubOrgTargets("bad org"); err == nil {
+	if result := listGitHubOrgTargets("bad org"); result.OK {
 		t.Fatal("expected invalid org to fail")
 	}
 }
@@ -132,7 +135,7 @@ func TestListGitHubOrgTargets_Bad_InvalidRepositoryReturnedByGitHub(t *testing.T
 		return []byte(`[{"full_name":"bad repo"}]`), nil
 	})
 
-	if _, err := listGitHubOrgTargets("acme"); err == nil {
+	if result := listGitHubOrgTargets("acme"); result.OK {
 		t.Fatal("expected invalid repository target error")
 	}
 }
@@ -155,10 +158,11 @@ repos:
 		t.Fatalf("write registry: %v", r.Error())
 	}
 
-	got, err := resolveSecurityTargets(registryPath, "api", "")
-	if err != nil {
-		t.Fatalf("resolveSecurityTargets registry: %v", err)
+	result := resolveSecurityTargets(registryPath, "api", "")
+	if !result.OK {
+		t.Fatalf("resolveSecurityTargets registry: %s", result.Error())
 	}
+	got := result.Value.([]SecurityTarget)
 	want := []SecurityTarget{{DisplayName: "api", FullName: "acme/api"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolveSecurityTargets registry = %+v, want %+v", got, want)
@@ -179,7 +183,7 @@ repos:
 		t.Fatalf("write registry: %v", r.Error())
 	}
 
-	if _, err := resolveSecurityTargets(registryPath, "missing", ""); err == nil {
+	if result := resolveSecurityTargets(registryPath, "missing", ""); result.OK {
 		t.Fatal("expected missing registry repo error")
 	}
 }

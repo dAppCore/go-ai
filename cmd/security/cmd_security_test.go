@@ -23,10 +23,11 @@ func TestCmdSecurity_decodeGitHubArrayItems_Good(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := decodeGitHubArrayItems(tc.input)
-			if err != nil {
-				t.Fatalf("decodeGitHubArrayItems: %v", err)
+			result := decodeGitHubArrayItems(tc.input)
+			if !result.OK {
+				t.Fatalf("decodeGitHubArrayItems: %s", result.Error())
 			}
+			got := result.Value.([]githubRawMessage)
 			if len(got) != tc.want {
 				t.Fatalf("decodeGitHubArrayItems(%s) len = %d, want %d", tc.name, len(got), tc.want)
 			}
@@ -39,14 +40,14 @@ func TestCmdSecurity_decodeGitHubArrayItems_Bad(t *testing.T) {
 		[]byte(`{"not":"an array"}`),
 		[]byte(`[[{"id":1},bad]]`),
 	} {
-		if _, err := decodeGitHubArrayItems(input); err == nil {
+		if result := decodeGitHubArrayItems(input); result.OK {
 			t.Fatalf("expected error for %s", input)
 		}
 	}
 }
 
 func TestCmdSecurity_decodeDependabotAlerts_Good(t *testing.T) {
-	alerts, err := decodeDependabotAlerts([]byte(`[
+	result := decodeDependabotAlerts([]byte(`[
 		[{
 			"number": 7,
 			"state": "open",
@@ -67,9 +68,10 @@ func TestCmdSecurity_decodeDependabotAlerts_Good(t *testing.T) {
 			}
 		}]
 	]`))
-	if err != nil {
-		t.Fatalf("decodeDependabotAlerts: %v", err)
+	if !result.OK {
+		t.Fatalf("decodeDependabotAlerts: %s", result.Error())
 	}
+	alerts := result.Value.([]DependabotAlert)
 	if len(alerts) != 1 || alerts[0].Advisory.CVEID != "CVE-2026-0001" || alerts[0].SecurityVulnerability.FirstPatchedVersion.Identifier != "1.0.2" {
 		t.Fatalf("unexpected dependabot alert: %+v", alerts)
 	}
@@ -77,17 +79,18 @@ func TestCmdSecurity_decodeDependabotAlerts_Good(t *testing.T) {
 
 func TestCmdSecurity_decodeCodeScanningAlerts_Good(t *testing.T) {
 	payload := "[[{\"number\":4,\"state\":\"open\",\"rule\":{\"id\":\"gosec/G401\",\"severity\":\"medium\",\"description\":\"Weak crypto\",\"tags\":[\"security\"]},\"tool\":{\"name\":\"CodeQL\",\"version\":\"2.20.0\"},\"most_recent_instance\":{\"location\":{\"\x70ath\":\"main.go\",\"start_line\":14,\"end_line\":14},\"message\":{\"text\":\"Potential weak crypto\"}}}]]"
-	alerts, err := decodeCodeScanningAlerts([]byte(payload))
-	if err != nil {
-		t.Fatalf("decodeCodeScanningAlerts: %v", err)
+	result := decodeCodeScanningAlerts([]byte(payload))
+	if !result.OK {
+		t.Fatalf("decodeCodeScanningAlerts: %s", result.Error())
 	}
+	alerts := result.Value.([]CodeScanningAlert)
 	if len(alerts) != 1 || alerts[0].Rule.ID != "gosec/G401" || alerts[0].MostRecentInstance.Location.Path != "main.go" {
 		t.Fatalf("unexpected code scanning alert: %+v", alerts)
 	}
 }
 
 func TestCmdSecurity_decodeSecretScanningAlerts_Good(t *testing.T) {
-	alerts, err := decodeSecretScanningAlerts([]byte(`[
+	result := decodeSecretScanningAlerts([]byte(`[
 		[{
 			"number": 9,
 			"state": "open",
@@ -97,21 +100,23 @@ func TestCmdSecurity_decodeSecretScanningAlerts_Good(t *testing.T) {
 			"resolution": "revoked"
 		}]
 	]`))
-	if err != nil {
-		t.Fatalf("decodeSecretScanningAlerts: %v", err)
+	if !result.OK {
+		t.Fatalf("decodeSecretScanningAlerts: %s", result.Error())
 	}
+	alerts := result.Value.([]SecretScanningAlert)
 	if len(alerts) != 1 || !alerts[0].PushProtection || alerts[0].Resolution != "revoked" {
 		t.Fatalf("unexpected secret scanning alert: %+v", alerts)
 	}
 }
 
 func TestCmdSecurity_decodeGitHubRepositoryNames_Good(t *testing.T) {
-	names, err := decodeGitHubRepositoryNames([]byte(`[
+	result := decodeGitHubRepositoryNames([]byte(`[
 		[{"full_name":"acme/z"},{"full_name":"acme/a"},{"full_name":"acme/a"},{"full_name":""}]
 	]`))
-	if err != nil {
-		t.Fatalf("decodeGitHubRepositoryNames: %v", err)
+	if !result.OK {
+		t.Fatalf("decodeGitHubRepositoryNames: %s", result.Error())
 	}
+	names := result.Value.([]string)
 	want := []string{"acme/a", "acme/z"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("decodeGitHubRepositoryNames = %v, want %v", names, want)
@@ -214,10 +219,11 @@ func TestCmdSecurity_recordSecurityMetricsEvent_Ugly_DoesNotPanic(t *testing.T) 
 	// recordSecurityMetricsEvent intentionally ignores write errors, so this test
 	// only verifies that the wrapper stays no-op from the caller's perspective.
 	recordSecurityMetricsEvent(ai.Event{Type: "security.alerts"})
-	events, err := ai.ReadEvents(time.Now().Add(-time.Minute))
-	if err != nil {
-		t.Fatalf("ReadEvents after recordSecurityMetricsEvent: %v", err)
+	eventsResult := ai.ReadEvents(time.Now().Add(-time.Minute))
+	if !eventsResult.OK {
+		t.Fatalf("ReadEvents after recordSecurityMetricsEvent: %s", eventsResult.Error())
 	}
+	events := eventsResult.Value.([]ai.Event)
 	if len(events) != 1 || events[0].Type != "security.alerts" {
 		t.Fatalf("unexpected metrics events: %+v", events)
 	}
@@ -226,10 +232,11 @@ func TestCmdSecurity_recordSecurityMetricsEvent_Ugly_DoesNotPanic(t *testing.T) 
 func TestCmdSecurity_runGitHubAPI_Good_ReturnsStdout(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '[{\"full_name\":\"acme/api\"}]'\n")
 
-	got, err := runGitHubAPI("repos/acme/api/dependabot/alerts?state=open")
-	if err != nil {
-		t.Fatalf("runGitHubAPI: %v", err)
+	result := runGitHubAPI("repos/acme/api/dependabot/alerts?state=open")
+	if !result.OK {
+		t.Fatalf("runGitHubAPI: %s", result.Error())
 	}
+	got := result.Value.([]byte)
 	if string(got) != `[{"full_name":"acme/api"}]` {
 		t.Fatalf("runGitHubAPI = %s, want JSON output", string(got))
 	}
@@ -238,10 +245,11 @@ func TestCmdSecurity_runGitHubAPI_Good_ReturnsStdout(t *testing.T) {
 func TestCmdSecurity_runGitHubAPI_Bad_404ReturnsEmptyArray(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '404 Not Found' >&2\nexit 1\n")
 
-	got, err := runGitHubAPI("repos/acme/api/dependabot/alerts?state=open")
-	if err != nil {
-		t.Fatalf("runGitHubAPI 404 should not fail: %v", err)
+	result := runGitHubAPI("repos/acme/api/dependabot/alerts?state=open")
+	if !result.OK {
+		t.Fatalf("runGitHubAPI 404 should not fail: %s", result.Error())
 	}
+	got := result.Value.([]byte)
 	if string(got) != "[]" {
 		t.Fatalf("runGitHubAPI 404 = %s, want []", string(got))
 	}
@@ -250,8 +258,8 @@ func TestCmdSecurity_runGitHubAPI_Bad_404ReturnsEmptyArray(t *testing.T) {
 func TestCmdSecurity_runGitHubAPIStrict_Bad_DoesNotFallbackOnMissingEndpoint(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '404 Not Found' >&2\nexit 1\n")
 
-	if got, err := runGitHubAPIStrict("repos/acme/api/dependabot/alerts?state=open"); err == nil {
-		t.Fatalf("runGitHubAPIStrict returned %q, want error", string(got))
+	if result := runGitHubAPIStrict("repos/acme/api/dependabot/alerts?state=open"); result.OK {
+		t.Fatalf("runGitHubAPIStrict returned %q, want error", string(result.Value.([]byte)))
 	}
 }
 
@@ -272,10 +280,11 @@ printf '[]'
 `, counterFile)
 	withFakeGitHubScript(t, script)
 
-	got, err := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
-	if err != nil {
-		t.Fatalf("runGitHubAPIWithMode retry path: %v", err)
+	result := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
+	if !result.OK {
+		t.Fatalf("runGitHubAPIWithMode retry path: %s", result.Error())
 	}
+	got := result.Value.([]byte)
 	if string(got) != "[]" {
 		t.Fatalf("runGitHubAPIWithMode retry path = %q, want []", string(got))
 	}
@@ -295,8 +304,9 @@ exit 1
 `, counterFile)
 	withFakeGitHubScript(t, script)
 
-	_, err := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
-	if !core.Is(err, errGitHubAPIAccessDenied) {
+	result := runGitHubAPIWithMode("repos/acme/api/dependabot/alerts?state=open", true)
+	err, _ := coreResultError(result).(error)
+	if result.OK || !core.Is(err, errGitHubAPIAccessDenied) {
 		t.Fatalf("runGitHubAPIWithMode() = %v, expected access denied error", err)
 	}
 
@@ -326,7 +336,7 @@ func TestCmdSecurity_checkGitHubCLI_Bad_MissingBinary(t *testing.T) {
 }
 
 func TestCmdSecurity_loadRegistry_Bad_ExplicitPathReturnsError(t *testing.T) {
-	if _, err := loadRegistry(core.PathJoin(t.TempDir(), "missing-registry.yaml")); err == nil {
+	if result := loadRegistry(core.PathJoin(t.TempDir(), "missing-registry.yaml")); result.OK {
 		t.Fatal("expected loadRegistry to fail for a missing explicit path")
 	}
 }
@@ -334,10 +344,11 @@ func TestCmdSecurity_loadRegistry_Bad_ExplicitPathReturnsError(t *testing.T) {
 func TestCmdSecurity_runGitHubAPIRequest_Good(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '{\"ok\":true}\\n'\n")
 
-	got, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
-	if err != nil {
-		t.Fatalf("runGitHubAPIRequest: %v", err)
+	result := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
+	if !result.OK {
+		t.Fatalf("runGitHubAPIRequest: %s", result.Error())
 	}
+	got := result.Value.([]byte)
 	if string(got) != `{"ok":true}` {
 		t.Fatalf("runGitHubAPIRequest() = %s, want payload", string(got))
 	}
@@ -346,8 +357,9 @@ func TestCmdSecurity_runGitHubAPIRequest_Good(t *testing.T) {
 func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps404(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '404 Not Found' >&2\nexit 1\n")
 
-	_, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
-	if !core.Is(err, errGitHubAPIEndpointNotFound) {
+	result := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
+	err, _ := coreResultError(result).(error)
+	if result.OK || !core.Is(err, errGitHubAPIEndpointNotFound) {
 		t.Fatalf("runGitHubAPIRequest() = %v, expected errGitHubAPIEndpointNotFound", err)
 	}
 }
@@ -355,8 +367,9 @@ func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps404(t *testing.T) {
 func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps403(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf '403 Forbidden' >&2\nexit 1\n")
 
-	_, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
-	if !core.Is(err, errGitHubAPIAccessDenied) {
+	result := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open")
+	err, _ := coreResultError(result).(error)
+	if result.OK || !core.Is(err, errGitHubAPIAccessDenied) {
 		t.Fatalf("runGitHubAPIRequest() = %v, expected errGitHubAPIAccessDenied", err)
 	}
 }
@@ -364,7 +377,7 @@ func TestCmdSecurity_runGitHubAPIRequest_Bad_Maps403(t *testing.T) {
 func TestCmdSecurity_runGitHubAPIRequest_Ugly_PreservesUnknownExitError(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf 'auth failed' >&2\nexit 2\n")
 
-	if _, err := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open"); err == nil {
+	if result := runGitHubAPIRequest("repos/acme/api/dependabot/alerts?state=open"); result.OK {
 		t.Fatal("expected generic command error to be propagated")
 	}
 }
@@ -571,31 +584,4 @@ func TestCmdSecurity_AddSecurityCommands_Ugly(t *core.T) {
 
 	core.AssertLen(t, root.Commands(), 1)
 	core.AssertEqual(t, "security", root.Commands()[0].Name())
-}
-
-func TestCmdSecurity_RawMessage_UnmarshalJSON_Good(t *core.T) {
-	var raw githubRawMessage
-	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
-	got := string(raw)
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, `{"ok":true}`, got)
-}
-
-func TestCmdSecurity_RawMessage_UnmarshalJSON_Bad(t *core.T) {
-	var raw *githubRawMessage
-	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
-	got := core.ErrorMessage(err)
-
-	core.AssertError(t, err)
-	core.AssertContains(t, got, "nil raw message")
-}
-
-func TestCmdSecurity_RawMessage_UnmarshalJSON_Ugly(t *core.T) {
-	raw := githubRawMessage(`old`)
-	err := raw.UnmarshalJSON([]byte(`null`))
-	got := string(raw)
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "null", got)
 }

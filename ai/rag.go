@@ -29,20 +29,20 @@ type TaskInfo struct {
 	Description string
 }
 
-//	contextText, err := ai.QueryRAGForTask(ai.TaskInfo{
+//	contextResult := ai.QueryRAGForTask(ai.TaskInfo{
 //		Title:       "Investigate build failure",
 //		Description: "CI compile step fails",
 //	})
-func QueryRAGForTask(task TaskInfo) (string, error) {
+func QueryRAGForTask(task TaskInfo) core.Result {
 	queryText := buildTaskQuery(task)
 	if queryText == "" {
-		return "", nil
+		return core.Ok("")
 	}
 
 	qdrantConfiguration := rag.DefaultQdrantConfig()
 	qdrantClient, err := newQdrantClient(qdrantConfiguration)
 	if err != nil {
-		return "", nil
+		return core.Ok("")
 	}
 	if qdrantClient != nil {
 		defer func() { _ = closeQdrant(qdrantClient) }()
@@ -51,7 +51,7 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 	ollamaConfiguration := rag.DefaultOllamaConfig()
 	ollamaClient, err := newOllamaClient(ollamaConfiguration)
 	if err != nil {
-		return "", nil
+		return core.Ok("")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -65,13 +65,13 @@ func QueryRAGForTask(task TaskInfo) (string, error) {
 
 	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfiguration)
 	if err != nil {
-		return "", nil
+		return core.Ok("")
 	}
 	if len(results) == 0 {
-		return "", nil
+		return core.Ok("")
 	}
 
-	return rag.FormatResultsContext(results), nil
+	return core.Ok(rag.FormatResultsContext(results))
 }
 
 func buildTaskQuery(task TaskInfo) string {

@@ -103,10 +103,11 @@ func main() {
 
 	allMemories, allTopics := flattenMemoryGroups(memoryGroups)
 
-	installedModelNames, err := listInstalledModelNames()
-	if err != nil {
-		core.Print(nil, "Warning: could not list installed Ollama models, falling back to defaults: %v", err)
+	installedModelResult := listInstalledModelNames()
+	if !installedModelResult.OK {
+		core.Print(nil, "Warning: could not list installed Ollama models, falling back to defaults: %v", installedModelResult.Error())
 	}
+	installedModelNames, _ := installedModelResult.Value.([]string)
 	benchmarkModelNames := buildBenchmarkModelNames(installedModelNames)
 
 	for _, modelName := range benchmarkModelNames {
@@ -122,12 +123,13 @@ func main() {
 		start := time.Now()
 		memVectors := make([][]float64, 0, len(allMemories))
 		for memoryIndex, memory := range allMemories {
-			vector, err := embed(modelName, memory)
-			if err != nil {
-				core.Print(nil, "  SKIPPED — embeddings unavailable (%s, memory %d): %v", modelName, memoryIndex, err)
+			vectorResult := embed(modelName, memory)
+			if !vectorResult.OK {
+				core.Print(nil, "  SKIPPED — embeddings unavailable (%s, memory %d): %v", modelName, memoryIndex, vectorResult.Error())
 				memVectors = nil
 				break
 			}
+			vector := vectorResult.Value.([]float64)
 			memVectors = append(memVectors, vector)
 		}
 		if len(memVectors) != len(allMemories) {
@@ -163,11 +165,12 @@ func main() {
 		core.Print(nil, "\n  Query recall (top-1 accuracy):")
 		correct := 0
 		for _, q := range queries {
-			qVec, err := embed(modelName, q.query)
-			if err != nil {
-				core.Print(nil, "    ERROR: %v", err)
+			qVecResult := embed(modelName, q.query)
+			if !qVecResult.OK {
+				core.Print(nil, "    ERROR: %v", qVecResult.Error())
 				continue
 			}
+			qVec := qVecResult.Value.([]float64)
 
 			// Find best match
 			bestIdx := 0
@@ -198,11 +201,12 @@ func main() {
 		// 4. Top-3 recall
 		correct3 := 0
 		for _, q := range queries {
-			qVec, err := embed(modelName, q.query)
-			if err != nil {
-				core.Print(nil, "    ERROR: %v", err)
+			qVecResult := embed(modelName, q.query)
+			if !qVecResult.OK {
+				core.Print(nil, "    ERROR: %v", qVecResult.Error())
 				continue
 			}
+			qVec := qVecResult.Value.([]float64)
 
 			type scored struct {
 				idx int
@@ -337,10 +341,10 @@ type ollamaTag struct {
 	Name string `json:"name"`
 }
 
-func embed(model, text string) ([]float64, error) {
+func embed(model, text string) core.Result {
 	r := core.JSONMarshal(embedRequest{Model: model, Prompt: text})
 	if !r.OK {
-		return nil, coreerr.E("embed", "marshal request", r.Value.(error))
+		return core.Fail(coreerr.E("embed", "marshal request", r.Value.(error)))
 	}
 	body := r.Value.([]byte)
 
@@ -349,59 +353,59 @@ func embed(model, text string) ([]float64, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, *ollamaURL+"/api/embeddings", core.NewBuffer(body))
 	if err != nil {
-		return nil, coreerr.E("embed", "create embeddings request", err)
+		return core.Fail(coreerr.E("embed", "create embeddings request", err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return core.Fail(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, coreerr.E("embed", core.Sprintf("HTTP %d", resp.StatusCode), nil)
+		return core.Fail(coreerr.E("embed", core.Sprintf("HTTP %d", resp.StatusCode), nil))
 	}
 	raw := core.ReadAll(resp.Body)
 	if !raw.OK {
-		return nil, coreerr.E("embed", "read response", raw.Value.(error))
+		return core.Fail(coreerr.E("embed", "read response", raw.Value.(error)))
 	}
 	var result embedResponse
 	ur := core.JSONUnmarshal([]byte(raw.Value.(string)), &result)
 	if !ur.OK {
-		return nil, coreerr.E("embed", "decode response", ur.Value.(error))
+		return core.Fail(coreerr.E("embed", "decode response", ur.Value.(error)))
 	}
 	if len(result.Embedding) == 0 {
-		return nil, coreerr.E("embed", "empty embedding", nil)
+		return core.Fail(coreerr.E("embed", "empty embedding", nil))
 	}
-	return result.Embedding, nil
+	return core.Ok(result.Embedding)
 }
 
-func listInstalledModelNames() ([]string, error) {
+func listInstalledModelNames() core.Result {
 	ctx, cancel := context.WithTimeout(context.Background(), ollamaListModelsTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, *ollamaURL+"/api/tags", nil)
 	if err != nil {
-		return nil, coreerr.E("embed", "create model list request", err)
+		return core.Fail(coreerr.E("embed", "create model list request", err))
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return core.Fail(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, coreerr.E("embed", core.Sprintf("list models HTTP %d", resp.StatusCode), nil)
+		return core.Fail(coreerr.E("embed", core.Sprintf("list models HTTP %d", resp.StatusCode), nil))
 	}
 	raw := core.ReadAll(resp.Body)
 	if !raw.OK {
-		return nil, coreerr.E("embed", "read model list", raw.Value.(error))
+		return core.Fail(coreerr.E("embed", "read model list", raw.Value.(error)))
 	}
 	return decodeInstalledModelNames([]byte(raw.Value.(string)))
 }
 
-func decodeInstalledModelNames(raw []byte) ([]string, error) {
+func decodeInstalledModelNames(raw []byte) core.Result {
 	var result ollamaTagsResponse
 	if r := core.JSONUnmarshal(raw, &result); !r.OK {
-		return nil, coreerr.E("embed", "decode model list", r.Value.(error))
+		return core.Fail(coreerr.E("embed", "decode model list", r.Value.(error)))
 	}
 
 	modelNames := make([]string, 0, len(result.Models))
@@ -411,7 +415,7 @@ func decodeInstalledModelNames(raw []byte) ([]string, error) {
 		}
 		modelNames = append(modelNames, model.Name)
 	}
-	return modelNames, nil
+	return core.Ok(modelNames)
 }
 
 // -- Math helpers --

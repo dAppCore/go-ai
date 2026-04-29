@@ -27,18 +27,15 @@ func TestRecordAndReadEvents_Good(t *testing.T) {
 	withTempHome(t)
 
 	before := time.Now()
-	if err := Record(Event{
+	if result := Record(Event{
 		Type:    "security.scan",
 		AgentID: "agent-1",
 		Repo:    "core/go-ai",
-	}); err != nil {
-		t.Fatalf("Record: %v", err)
+	}); !result.OK {
+		t.Fatalf("Record: %s", result.Error())
 	}
 
-	events, err := ReadEvents(before.Add(-time.Minute))
-	if err != nil {
-		t.Fatalf("ReadEvents: %v", err)
-	}
+	events := requireEventSlice(t, ReadEvents(before.Add(-time.Minute)), "ReadEvents")
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -51,28 +48,22 @@ func TestRecord_Good_UsesCurrentDayForDailyFile(t *testing.T) {
 	withTempHome(t)
 
 	now := time.Now()
-	if err := Record(Event{
+	if result := Record(Event{
 		Type:      "scan",
 		Timestamp: now.Add(-time.Hour),
 		Repo:      "core/go-ai",
-	}); err != nil {
-		t.Fatalf("Record: %v", err)
+	}); !result.OK {
+		t.Fatalf("Record: %s", result.Error())
 	}
 
-	dir, err := metricsDir()
-	if err != nil {
-		t.Fatalf("metricsDir: %v", err)
-	}
+	dir := requireMetricsDir(t, metricsDir())
 
 	path := metricsFilePath(dir, now)
 	if !coreio.Local.Exists(path) {
 		t.Fatalf("expected metrics file %s to exist", path)
 	}
 
-	events, err := ReadEvents(now.Add(-2 * time.Hour))
-	if err != nil {
-		t.Fatalf("ReadEvents: %v", err)
-	}
+	events := requireEventSlice(t, ReadEvents(now.Add(-2*time.Hour)), "ReadEvents")
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -87,37 +78,25 @@ func TestMetricsDir_Good_HonoursEnvPrecedence(t *testing.T) {
 	t.Setenv("USERPROFILE", "/userprofile")
 	t.Setenv("DIR_HOME", "/dir-home")
 
-	got, err := metricsDir()
-	if err != nil {
-		t.Fatalf("metricsDir: %v", err)
-	}
+	got := requireMetricsDir(t, metricsDir())
 	if want := core.JoinPath("/core-home", ".core", "ai", "metrics"); got != want {
 		t.Fatalf("metricsDir() = %q, want %q", got, want)
 	}
 
 	t.Setenv("CORE_HOME", "")
-	got, err = metricsDir()
-	if err != nil {
-		t.Fatalf("metricsDir with HOME: %v", err)
-	}
+	got = requireMetricsDir(t, metricsDir())
 	if want := core.JoinPath("/home", ".core", "ai", "metrics"); got != want {
 		t.Fatalf("metricsDir() with HOME = %q, want %q", got, want)
 	}
 
 	t.Setenv("HOME", "")
-	got, err = metricsDir()
-	if err != nil {
-		t.Fatalf("metricsDir with USERPROFILE: %v", err)
-	}
+	got = requireMetricsDir(t, metricsDir())
 	if want := core.JoinPath("/userprofile", ".core", "ai", "metrics"); got != want {
 		t.Fatalf("metricsDir() with USERPROFILE = %q, want %q", got, want)
 	}
 
 	t.Setenv("USERPROFILE", "")
-	got, err = metricsDir()
-	if err != nil {
-		t.Fatalf("metricsDir with DIR_HOME: %v", err)
-	}
+	got = requireMetricsDir(t, metricsDir())
 	if want := core.JoinPath("/dir-home", ".core", "ai", "metrics"); got != want {
 		t.Fatalf("metricsDir() with DIR_HOME = %q, want %q", got, want)
 	}
@@ -130,17 +109,14 @@ func TestReadEvents_Good_SkipsMissingDays(t *testing.T) {
 	dayOne := time.Date(2026, 4, 1, 10, 0, 0, 0, loc)
 	dayThree := time.Date(2026, 4, 3, 10, 0, 0, 0, loc)
 
-	if err := Record(Event{Type: "scan", Timestamp: dayOne, Repo: "core/go-ai"}); err != nil {
-		t.Fatalf("Record day one: %v", err)
+	if result := Record(Event{Type: "scan", Timestamp: dayOne, Repo: "core/go-ai"}); !result.OK {
+		t.Fatalf("Record day one: %s", result.Error())
 	}
-	if err := Record(Event{Type: "deps", Timestamp: dayThree, Repo: "core/go-rag"}); err != nil {
-		t.Fatalf("Record day three: %v", err)
+	if result := Record(Event{Type: "deps", Timestamp: dayThree, Repo: "core/go-rag"}); !result.OK {
+		t.Fatalf("Record day three: %s", result.Error())
 	}
 
-	events, err := ReadEvents(time.Date(2026, 4, 1, 0, 0, 0, 0, loc))
-	if err != nil {
-		t.Fatalf("ReadEvents: %v", err)
-	}
+	events := requireEventSlice(t, ReadEvents(time.Date(2026, 4, 1, 0, 0, 0, 0, loc)), "ReadEvents")
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(events))
 	}

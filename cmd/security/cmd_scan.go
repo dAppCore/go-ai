@@ -18,7 +18,8 @@ func addScanCommand(parent *cli.Command) {
 		RunE: func(c *cli.Command, args []string) error {
 			r := runScan(*commandOptions)
 			if !r.OK {
-				return coreResultError(r)
+				err, _ := coreResultError(r).(error)
+				return err
 			}
 			return nil
 		},
@@ -49,10 +50,11 @@ type ScanAlert struct {
 func runScan(commandOptions ScanCommandOptions) core.Result {
 	startedAt := time.Now()
 
-	targets, err := resolveSecurityTargets(commandOptions.Selection.RegistryPath, commandOptions.Selection.RepositoryName, commandOptions.Selection.ExternalTarget)
-	if err != nil {
-		return core.Fail(err)
+	targetsResult := resolveSecurityTargets(commandOptions.Selection.RegistryPath, commandOptions.Selection.RepositoryName, commandOptions.Selection.ExternalTarget)
+	if !targetsResult.OK {
+		return targetsResult
 	}
+	targets := targetsResult.Value.([]SecurityTarget)
 
 	if r := checkGitHubCLI(); !r.OK {
 		return r
@@ -63,11 +65,12 @@ func runScan(commandOptions ScanCommandOptions) core.Result {
 	targetErrors := map[string]error{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectScanAlerts(target, commandOptions)
-		if err != nil {
-			targetErrors[target.FullName] = err
+		targetAlertsResult := collectScanAlerts(target, commandOptions)
+		if !targetAlertsResult.OK {
+			targetErrors[target.FullName], _ = coreResultError(targetAlertsResult).(error)
 			continue
 		}
+		targetAlerts := targetAlertsResult.Value.([]ScanAlert)
 
 		for _, alert := range targetAlerts {
 			summary.Add(alert.Severity)
@@ -121,11 +124,12 @@ func runScan(commandOptions ScanCommandOptions) core.Result {
 	return core.Ok(nil)
 }
 
-func collectScanAlerts(target SecurityTarget, commandOptions ScanCommandOptions) ([]ScanAlert, error) {
-	alerts, err := fetchCodeScanningAlerts(target.FullName)
-	if err != nil {
-		return nil, err
+func collectScanAlerts(target SecurityTarget, commandOptions ScanCommandOptions) core.Result {
+	alertsResult := fetchCodeScanningAlerts(target.FullName)
+	if !alertsResult.OK {
+		return alertsResult
 	}
+	alerts := alertsResult.Value.([]CodeScanningAlert)
 
 	var allAlerts []ScanAlert
 	for _, alert := range alerts {
@@ -154,5 +158,5 @@ func collectScanAlerts(target SecurityTarget, commandOptions ScanCommandOptions)
 			Message:     alert.MostRecentInstance.Message.Text,
 		})
 	}
-	return allAlerts, nil
+	return core.Ok(allAlerts)
 }

@@ -10,14 +10,23 @@ import (
 	core "dappco.re/go"
 )
 
+func mustNewService(t *testing.T, args ...any) *Service {
+	t.Helper()
+	result := New(args...)
+	if !result.OK {
+		t.Fatalf("New: %s", result.Error())
+	}
+	return result.Value.(*Service)
+}
+
 func TestService_RegisterTool_Good(t *testing.T) {
 	s := &Service{tools: map[string]Tool{}}
 
 	r := s.RegisterTool(Tool{
 		Name:        "custom_tool",
 		Description: "Custom tool",
-		Handler: func(ctx context.Context, raw RawMessage) (any, error) {
-			return map[string]bool{"ok": true}, nil
+		Handler: func(ctx context.Context, raw RawMessage) core.Result {
+			return core.Ok(map[string]bool{"ok": true})
 		},
 	})
 	if !r.OK {
@@ -30,31 +39,29 @@ func TestService_RegisterTool_Good(t *testing.T) {
 
 func TestService_RegisterTool_Bad(t *testing.T) {
 	s := &Service{tools: map[string]Tool{}}
-	if r := s.RegisterTool(Tool{Name: "", Handler: func(context.Context, RawMessage) (any, error) { return nil, nil }}); r.OK {
+	if r := s.RegisterTool(Tool{Name: "", Handler: func(context.Context, RawMessage) core.Result { return core.Ok(nil) }}); r.OK {
 		t.Fatal("expected missing name to fail")
 	}
 	if r := s.RegisterTool(Tool{Name: "missing_handler"}); r.OK {
 		t.Fatal("expected missing handler to fail")
 	}
-	if r := s.RegisterTool(Tool{Name: "dup", Handler: func(context.Context, RawMessage) (any, error) { return nil, nil }}); !r.OK {
+	if r := s.RegisterTool(Tool{Name: "dup", Handler: func(context.Context, RawMessage) core.Result { return core.Ok(nil) }}); !r.OK {
 		t.Fatalf("first duplicate setup failed: %s", r.Error())
 	}
-	if r := s.RegisterTool(Tool{Name: "dup", Handler: func(context.Context, RawMessage) (any, error) { return nil, nil }}); r.OK {
+	if r := s.RegisterTool(Tool{Name: "dup", Handler: func(context.Context, RawMessage) core.Result { return core.Ok(nil) }}); r.OK {
 		t.Fatal("expected duplicate registration to fail")
 	}
 }
 
 func TestService_HandleFrame_Good(t *testing.T) {
-	s, err := New(WithWorkspaceRoot(t.TempDir()))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	s := mustNewService(t, WithWorkspaceRoot(t.TempDir()))
 
 	frame := []byte("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"lang_detect\",\"arguments\":{\"\x70ath\":\"main.go\"}}}")
-	response, err := s.HandleFrame(context.Background(), frame)
-	if err != nil {
-		t.Fatalf("HandleFrame failed: %v", err)
+	responseResult := s.HandleFrame(context.Background(), frame)
+	if !responseResult.OK {
+		t.Fatalf("HandleFrame failed: %s", responseResult.Error())
 	}
+	response := responseResult.Value.([]byte)
 	var decoded struct {
 		Result struct {
 			StructuredContent DetectLanguageOutput `json:"structuredContent"`
@@ -69,15 +76,13 @@ func TestService_HandleFrame_Good(t *testing.T) {
 }
 
 func TestService_HandleFrame_Bad(t *testing.T) {
-	s, err := New(WithWorkspaceRoot(t.TempDir()))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	s := mustNewService(t, WithWorkspaceRoot(t.TempDir()))
 
-	response, err := s.HandleFrame(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"missing"}`))
-	if err == nil {
-		t.Fatal("expected missing method to return error")
+	responseResult := s.HandleFrame(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"missing"}`))
+	if !responseResult.OK {
+		t.Fatalf("HandleFrame failed: %s", responseResult.Error())
 	}
+	response := responseResult.Value.([]byte)
 	var decoded struct {
 		Error *rpcError `json:"error"`
 	}
@@ -90,10 +95,7 @@ func TestService_HandleFrame_Bad(t *testing.T) {
 }
 
 func TestServeStdio_Good(t *testing.T) {
-	s, err := New(WithWorkspaceRoot(t.TempDir()))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	s := mustNewService(t, WithWorkspaceRoot(t.TempDir()))
 
 	oldReader, oldWriter := stdioReader, stdioWriter
 	defer func() {
@@ -113,10 +115,7 @@ func TestServeStdio_Good(t *testing.T) {
 }
 
 func TestServeTCP_Good(t *testing.T) {
-	s, err := New(WithWorkspaceRoot(t.TempDir()))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	s := mustNewService(t, WithWorkspaceRoot(t.TempDir()))
 
 	addr := reserveTCPAddr(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,10 +149,7 @@ func TestServeTCP_Good(t *testing.T) {
 }
 
 func TestServeUnix_Good(t *testing.T) {
-	s, err := New(WithWorkspaceRoot(t.TempDir()))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	s := mustNewService(t, WithWorkspaceRoot(t.TempDir()))
 
 	socketPath := core.PathJoin("/tmp", core.Sprintf("mcp-%d-service.sock", core.Getpid()))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -186,16 +182,13 @@ func TestServeUnix_Good(t *testing.T) {
 	}
 	if r := core.Stat(socketPath); r.OK {
 		t.Fatalf("socket file still exists")
-	} else if statErr := resultError(r); !core.IsNotExist(statErr) {
+	} else if statErr, _ := resultError(r).(error); !core.IsNotExist(statErr) {
 		t.Fatalf("socket stat failed unexpectedly: %v", statErr)
 	}
 }
 
 func TestServiceToolInventoryCount(t *testing.T) {
-	s, err := New(WithWorkspaceRoot(t.TempDir()))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	s := mustNewService(t, WithWorkspaceRoot(t.TempDir()))
 	if got, want := len(s.Tools()), 49; got != want {
 		t.Fatalf("tool count = %d, want %d", got, want)
 	}
@@ -265,126 +258,127 @@ func (s testSubsystem) Shutdown(context.Context) error {
 }
 
 func TestService_New_Good(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
+	result := New(WithWorkspaceRoot(t.TempDir()))
+	service := result.Value.(*Service)
 	names := service.ToolNames()
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertTrue(t, len(names) > 0)
 }
 
 func TestService_New_Bad(t *core.T) {
-	service, err := New(42)
-	got := core.ErrorMessage(err)
+	result := New(42)
+	got := result.Error()
 
-	core.AssertNil(t, service)
-	core.AssertError(t, err)
+	core.AssertFalse(t, result.OK)
 	core.AssertContains(t, got, "unsupported")
 }
 
 func TestService_New_Ugly(t *core.T) {
-	service, err := New(Options{Unrestricted: true})
+	result := New(Options{Unrestricted: true})
+	service := result.Value.(*Service)
 	root := service.WorkspaceRoot()
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, "", root)
 }
 
 func TestService_WithWorkspaceRoot_Good(t *core.T) {
 	service := &Service{}
 	option := WithWorkspaceRoot(t.TempDir())
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertNotEqual(t, "", service.WorkspaceRoot())
 }
 
 func TestService_WithWorkspaceRoot_Bad(t *core.T) {
 	service := &Service{workspaceRoot: "before"}
 	option := WithWorkspaceRoot("")
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, "", service.WorkspaceRoot())
 }
 
 func TestService_WithWorkspaceRoot_Ugly(t *core.T) {
 	service := &Service{}
 	option := WithWorkspaceRoot(".")
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertTrue(t, service.WorkspaceRoot() != ".")
 }
 
 func TestService_WithProcessService_Good(t *core.T) {
 	service := &Service{}
 	option := WithProcessService("process")
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, "process", service.processService)
 }
 
 func TestService_WithProcessService_Bad(t *core.T) {
 	service := &Service{processService: "before"}
 	option := WithProcessService(nil)
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertNil(t, service.processService)
 }
 
 func TestService_WithProcessService_Ugly(t *core.T) {
 	service := &Service{}
 	payload := map[string]bool{"ok": true}
-	err := WithProcessService(payload)(service)
+	result := WithProcessService(payload)(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, payload, service.processService)
 }
 
 func TestService_WithWSHub_Good(t *core.T) {
 	service := &Service{}
 	option := WithWSHub("hub")
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, "hub", service.wsHub)
 }
 
 func TestService_WithWSHub_Bad(t *core.T) {
 	service := &Service{wsHub: "before"}
 	option := WithWSHub(nil)
-	err := option(service)
+	result := option(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertNil(t, service.wsHub)
 }
 
 func TestService_WithWSHub_Ugly(t *core.T) {
 	service := &Service{}
 	payload := map[string]bool{"connected": true}
-	err := WithWSHub(payload)(service)
+	result := WithWSHub(payload)(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, payload, service.wsHub)
 }
 
 func TestService_WithSubsystem_Good(t *core.T) {
 	service := &Service{}
 	sub := testSubsystem{}
-	err := WithSubsystem(sub)(service)
+	result := WithSubsystem(sub)(service)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertLen(t, service.subsystems, 1)
 }
 
 func TestService_WithSubsystem_Bad(t *core.T) {
 	service := &Service{}
-	err := WithSubsystem(nil)(service)
+	result := WithSubsystem(nil)(service)
 	got := len(service.subsystems)
 
-	core.AssertNoError(t, err)
+	core.AssertTrue(t, result.OK)
 	core.AssertEqual(t, 0, got)
 }
 
@@ -393,8 +387,8 @@ func TestService_WithSubsystem_Ugly(t *core.T) {
 	first := testSubsystem{}
 	second := testSubsystem{}
 
-	core.AssertNoError(t, WithSubsystem(first)(service))
-	core.AssertNoError(t, WithSubsystem(second)(service))
+	core.AssertTrue(t, WithSubsystem(first)(service).OK)
+	core.AssertTrue(t, WithSubsystem(second)(service).OK)
 	core.AssertLen(t, service.subsystems, 2)
 }
 
@@ -426,7 +420,7 @@ func TestService_Service_WorkspaceRoot_Ugly(t *core.T) {
 }
 
 func TestService_Service_Tools_Good(t *core.T) {
-	handler := typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return map[string]bool{"ok": true}, nil })
+	handler := typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(map[string]bool{"ok": true}) })
 	service := &Service{tools: map[string]Tool{"x": {Name: "x", InputSchema: objectSchema(), Handler: handler}}, toolOrder: []string{"x"}}
 	records := service.Tools()
 
@@ -444,7 +438,7 @@ func TestService_Service_Tools_Bad(t *core.T) {
 }
 
 func TestService_Service_Tools_Ugly(t *core.T) {
-	handler := typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return map[string]bool{"ok": true}, nil })
+	handler := typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(map[string]bool{"ok": true}) })
 	service := &Service{tools: map[string]Tool{"x": {Name: "x", InputSchema: objectSchema(), Handler: handler}}, toolOrder: []string{"x"}}
 	records := service.Tools()
 
@@ -480,7 +474,7 @@ func TestService_Service_ToolNames_Ugly(t *core.T) {
 }
 
 func TestService_Service_RegisterTool_Good(t *core.T) {
-	handler := typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return map[string]bool{"ok": true}, nil })
+	handler := typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(map[string]bool{"ok": true}) })
 	service := &Service{tools: map[string]Tool{}}
 	r := service.RegisterTool(Tool{Name: "custom", Handler: handler})
 
@@ -490,7 +484,7 @@ func TestService_Service_RegisterTool_Good(t *core.T) {
 
 func TestService_Service_RegisterTool_Bad(t *core.T) {
 	service := &Service{tools: map[string]Tool{}}
-	r := service.RegisterTool(Tool{Name: "", Handler: typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return nil, nil })})
+	r := service.RegisterTool(Tool{Name: "", Handler: typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(nil) })})
 	got := r.Error()
 
 	core.AssertFalse(t, r.OK)
@@ -498,7 +492,7 @@ func TestService_Service_RegisterTool_Bad(t *core.T) {
 }
 
 func TestService_Service_RegisterTool_Ugly(t *core.T) {
-	handler := typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return map[string]bool{"ok": true}, nil })
+	handler := typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(map[string]bool{"ok": true}) })
 	service := &Service{tools: map[string]Tool{}}
 	r := service.RegisterTool(Tool{Name: "custom", Handler: handler})
 
@@ -507,7 +501,7 @@ func TestService_Service_RegisterTool_Ugly(t *core.T) {
 }
 
 func TestService_Service_RegisterToolFunc_Good(t *core.T) {
-	handler := typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return map[string]bool{"ok": true}, nil })
+	handler := typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(map[string]bool{"ok": true}) })
 	service := &Service{tools: map[string]Tool{}}
 	r := service.RegisterToolFunc("group", "custom", "Custom tool", handler)
 
@@ -525,7 +519,7 @@ func TestService_Service_RegisterToolFunc_Bad(t *core.T) {
 }
 
 func TestService_Service_RegisterToolFunc_Ugly(t *core.T) {
-	handler := typedHandler(func(context.Context, struct{}) (map[string]bool, error) { return map[string]bool{"ok": true}, nil })
+	handler := typedHandler(func(context.Context, struct{}) core.Result { return core.Ok(map[string]bool{"ok": true}) })
 	service := &Service{tools: map[string]Tool{}}
 	r := service.RegisterToolFunc("", "custom", "", handler)
 
@@ -558,52 +552,4 @@ func TestService_Service_Shutdown_Ugly(t *core.T) {
 
 	core.AssertTrue(t, r.OK)
 	core.AssertEqual(t, 0, got)
-}
-
-func TestService_RawMessage_MarshalJSON_Good(t *core.T) {
-	raw := RawMessage(`{"ok":true}`)
-	data, err := raw.MarshalJSON()
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, `{"ok":true}`, string(data))
-}
-
-func TestService_RawMessage_MarshalJSON_Bad(t *core.T) {
-	var raw RawMessage
-	data, err := raw.MarshalJSON()
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "null", string(data))
-}
-
-func TestService_RawMessage_MarshalJSON_Ugly(t *core.T) {
-	raw := RawMessage(`[]`)
-	data, err := raw.MarshalJSON()
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "[]", string(data))
-}
-
-func TestService_RawMessage_UnmarshalJSON_Good(t *core.T) {
-	var raw RawMessage
-	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, `{"ok":true}`, string(raw))
-}
-
-func TestService_RawMessage_UnmarshalJSON_Bad(t *core.T) {
-	var raw *RawMessage
-	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
-
-	core.AssertError(t, err)
-	core.AssertContains(t, core.ErrorMessage(err), "nil raw message")
-}
-
-func TestService_RawMessage_UnmarshalJSON_Ugly(t *core.T) {
-	raw := RawMessage(`old`)
-	err := raw.UnmarshalJSON([]byte(`null`))
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "null", string(raw))
 }

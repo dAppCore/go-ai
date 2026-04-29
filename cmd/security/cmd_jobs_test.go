@@ -110,11 +110,11 @@ func TestResolveJobTargets_Good_All(t *testing.T) {
 		callGitHubAPIRequest = originalCallGitHubAPIRequest
 	})
 
-	callGitHubAPIRequest = func(endpoint string) ([]byte, error) {
+	callGitHubAPIRequest = func(endpoint string) core.Result {
 		if endpoint != "orgs/acme/repos?per_page=100&type=all" {
 			t.Fatalf("unexpected endpoint: %s", endpoint)
 		}
-		return []byte(`[[{"full_name":"acme/api"},{"full_name":"acme/web"}]]`), nil
+		return core.Ok([]byte(`[[{"full_name":"acme/api"},{"full_name":"acme/web"}]]`))
 	}
 
 	reg := &repos.Registry{
@@ -125,10 +125,11 @@ func TestResolveJobTargets_Good_All(t *testing.T) {
 		},
 	}
 
-	got, err := resolveJobTargets("all", reg)
-	if err != nil {
-		t.Fatalf("resolveJobTargets(all): %v", err)
+	result := resolveJobTargets("all", reg)
+	if !result.OK {
+		t.Fatalf("resolveJobTargets(all): %s", result.Error())
 	}
+	got := result.Value.([]string)
 
 	want := []string{"acme/api", "acme/web"}
 	if !reflect.DeepEqual(got, want) {
@@ -142,8 +143,8 @@ func TestResolveJobTargets_Bad_AllFailsClosedWhenGitHubUnavailable(t *testing.T)
 		callGitHubAPIRequest = originalCallGitHubAPIRequest
 	})
 
-	callGitHubAPIRequest = func(string) ([]byte, error) {
-		return nil, assertiveError("github unavailable")
+	callGitHubAPIRequest = func(string) core.Result {
+		return core.Fail(assertiveError("github unavailable"))
 	}
 
 	reg := &repos.Registry{
@@ -154,7 +155,7 @@ func TestResolveJobTargets_Bad_AllFailsClosedWhenGitHubUnavailable(t *testing.T)
 		},
 	}
 
-	if _, err := resolveJobTargets("all", reg); err == nil {
+	if result := resolveJobTargets("all", reg); result.OK {
 		t.Fatal("expected resolveJobTargets(all) to fail closed when GitHub enumeration is unavailable")
 	}
 }
@@ -167,10 +168,11 @@ func TestResolveJobTargets_Good_MixedAndDeduped(t *testing.T) {
 		},
 	}
 
-	got, err := resolveJobTargets("api, acme/api, acme/worker, api", reg)
-	if err != nil {
-		t.Fatalf("resolveJobTargets(mixed): %v", err)
+	result := resolveJobTargets("api, acme/api, acme/worker, api", reg)
+	if !result.OK {
+		t.Fatalf("resolveJobTargets(mixed): %s", result.Error())
 	}
+	got := result.Value.([]string)
 
 	want := []string{"acme/api", "acme/worker"}
 	if !reflect.DeepEqual(got, want) {
@@ -184,7 +186,7 @@ func TestResolveJobTargets_Bad_UnknownRepo(t *testing.T) {
 		Repos: map[string]*repos.Repo{},
 	}
 
-	if _, err := resolveJobTargets("missing", reg); err == nil {
+	if result := resolveJobTargets("missing", reg); result.OK {
 		t.Fatal("expected unknown repo error, got nil")
 	}
 }
@@ -199,10 +201,11 @@ func TestCmdJobs_resolveJobTargetsForDryRun_Good_ExpandsAndDedupesRegistryTarget
 		},
 	}
 
-	got, err := resolveJobTargetsForDryRun("api, acme/web, api, acme/docs", reg)
-	if err != nil {
-		t.Fatalf("resolveJobTargetsForDryRun: %v", err)
+	result := resolveJobTargetsForDryRun("api, acme/web, api, acme/docs", reg)
+	if !result.OK {
+		t.Fatalf("resolveJobTargetsForDryRun: %s", result.Error())
 	}
+	got := result.Value.([]string)
 
 	want := []string{"acme/api", "acme/web", "acme/docs"}
 	if !reflect.DeepEqual(got, want) {
@@ -223,7 +226,7 @@ func TestCmdJobs_resolveJobTargetsForDryRun_Bad_RequiresRegistryForAllAndShortNa
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := resolveJobTargetsForDryRun(tc.targets, tc.registry); err == nil {
+			if result := resolveJobTargetsForDryRun(tc.targets, tc.registry); result.OK {
 				t.Fatalf("expected resolveJobTargetsForDryRun(%q) to fail", tc.targets)
 			}
 		})
@@ -231,7 +234,7 @@ func TestCmdJobs_resolveJobTargetsForDryRun_Bad_RequiresRegistryForAllAndShortNa
 }
 
 func TestCmdJobs_resolveJobTargetsForDryRun_Ugly_RejectsBlankTargets(t *testing.T) {
-	if _, err := resolveJobTargetsForDryRun("   ", &repos.Registry{Org: "acme"}); err == nil {
+	if result := resolveJobTargetsForDryRun("   ", &repos.Registry{Org: "acme"}); result.OK {
 		t.Fatal("expected blank --targets to fail")
 	}
 }
@@ -258,45 +261,46 @@ func TestCollectJobRepoResult_Good_UsesSharedCollectors(t *testing.T) {
 		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
 	})
 
-	collectDependabotAlertsForJobs = func(target SecurityTarget, severityFilter string) ([]DepAlert, error) {
+	collectDependabotAlertsForJobs = func(target SecurityTarget, severityFilter string) core.Result {
 		if target.FullName != "acme/api" || severityFilter != "" {
 			t.Fatalf("unexpected dependabot target/filter: %+v %q", target, severityFilter)
 		}
-		return []DepAlert{{
+		return core.Ok([]DepAlert{{
 			Repo:     "api",
 			Severity: "critical",
 			CVE:      "CVE-2026-0001",
 			Summary:  "Upgrade OpenSSL",
-		}}, nil
+		}})
 	}
-	collectCodeScanningAlertsForJobs = func(target SecurityTarget, commandOptions ScanCommandOptions) ([]ScanAlert, error) {
+	collectCodeScanningAlertsForJobs = func(target SecurityTarget, commandOptions ScanCommandOptions) core.Result {
 		if target.FullName != "acme/api" || commandOptions.Selection.SeverityFilter != "" || commandOptions.ToolName != "" {
 			t.Fatalf("unexpected code scanning target/options: %+v %+v", target, commandOptions)
 		}
-		return []ScanAlert{{
+		return core.Ok([]ScanAlert{{
 			Repo:        "api",
 			Severity:    "medium",
 			RuleID:      "gosec/G401",
 			Path:        "main.go",
 			Line:        14,
 			Description: "Potential weak crypto",
-		}}, nil
+		}})
 	}
-	collectSecretScanningAlertsForJobs = func(target SecurityTarget) ([]SecretAlert, error) {
+	collectSecretScanningAlertsForJobs = func(target SecurityTarget) core.Result {
 		if target.FullName != "acme/api" {
 			t.Fatalf("unexpected secret scanning target: %+v", target)
 		}
-		return []SecretAlert{{
+		return core.Ok([]SecretAlert{{
 			Repo:       "api",
 			Number:     9,
 			SecretType: "aws_access_key",
-		}}, nil
+		}})
 	}
 
-	got, err := collectJobRepoResult("acme/api")
-	if err != nil {
-		t.Fatalf("collectJobRepoResult: %v", err)
+	result := collectJobRepoResult("acme/api")
+	if !result.OK {
+		t.Fatalf("collectJobRepoResult: %s", result.Error())
 	}
+	got := result.Value.(jobRepoResult)
 
 	if got.Repo != "acme/api" {
 		t.Fatalf("repo = %q, want acme/api", got.Repo)
@@ -319,17 +323,17 @@ func TestCollectJobRepoResult_Bad_AllCollectorsFail(t *testing.T) {
 		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
 	})
 
-	collectDependabotAlertsForJobs = func(SecurityTarget, string) ([]DepAlert, error) {
-		return nil, assertiveError("dependabot failed")
+	collectDependabotAlertsForJobs = func(SecurityTarget, string) core.Result {
+		return core.Fail(assertiveError("dependabot failed"))
 	}
-	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) ([]ScanAlert, error) {
-		return nil, assertiveError("code scanning failed")
+	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) core.Result {
+		return core.Fail(assertiveError("code scanning failed"))
 	}
-	collectSecretScanningAlertsForJobs = func(SecurityTarget) ([]SecretAlert, error) {
-		return nil, assertiveError("secret scanning failed")
+	collectSecretScanningAlertsForJobs = func(SecurityTarget) core.Result {
+		return core.Fail(assertiveError("secret scanning failed"))
 	}
 
-	if _, err := collectJobRepoResult("acme/api"); err == nil {
+	if result := collectJobRepoResult("acme/api"); result.OK {
 		t.Fatal("expected all-collectors-failed error, got nil")
 	}
 }
@@ -344,17 +348,17 @@ func TestCollectJobRepoResult_Bad_PartialFailureFailsClosed(t *testing.T) {
 		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
 	})
 
-	collectDependabotAlertsForJobs = func(SecurityTarget, string) ([]DepAlert, error) {
-		return []DepAlert{{Repo: "api", Severity: "critical", CVE: "CVE-1", Summary: "dep"}}, nil
+	collectDependabotAlertsForJobs = func(SecurityTarget, string) core.Result {
+		return core.Ok([]DepAlert{{Repo: "api", Severity: "critical", CVE: "CVE-1", Summary: "dep"}})
 	}
-	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) ([]ScanAlert, error) {
-		return nil, core.NewError("code scanning unavailable")
+	collectCodeScanningAlertsForJobs = func(SecurityTarget, ScanCommandOptions) core.Result {
+		return core.Fail(core.NewError("code scanning unavailable"))
 	}
-	collectSecretScanningAlertsForJobs = func(SecurityTarget) ([]SecretAlert, error) {
-		return []SecretAlert{{Repo: "api", Number: 1, SecretType: "token"}}, nil
+	collectSecretScanningAlertsForJobs = func(SecurityTarget) core.Result {
+		return core.Ok([]SecretAlert{{Repo: "api", Number: 1, SecretType: "token"}})
 	}
 
-	if _, err := collectJobRepoResult("acme/api"); err == nil {
+	if result := collectJobRepoResult("acme/api"); result.OK {
 		t.Fatal("expected collectJobRepoResult to fail closed on partial collector failure")
 	}
 }
@@ -446,14 +450,14 @@ func TestRunJobWorkers_Good_SortsResults(t *testing.T) {
 		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
 	})
 
-	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) ([]DepAlert, error) {
-		return []DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}}, nil
+	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) core.Result {
+		return core.Ok([]DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}})
 	}
-	collectCodeScanningAlertsForJobs = func(target SecurityTarget, _ ScanCommandOptions) ([]ScanAlert, error) {
-		return []ScanAlert{{Repo: target.DisplayName, Severity: "medium", RuleID: "R-1", Description: "scan"}}, nil
+	collectCodeScanningAlertsForJobs = func(target SecurityTarget, _ ScanCommandOptions) core.Result {
+		return core.Ok([]ScanAlert{{Repo: target.DisplayName, Severity: "medium", RuleID: "R-1", Description: "scan"}})
 	}
-	collectSecretScanningAlertsForJobs = func(target SecurityTarget) ([]SecretAlert, error) {
-		return []SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}}, nil
+	collectSecretScanningAlertsForJobs = func(target SecurityTarget) core.Result {
+		return core.Ok([]SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}})
 	}
 
 	results := runJobWorkers([]string{"acme/web", "acme/api"}, 2)
@@ -502,17 +506,17 @@ func TestRunJobs_Bad_PartialFailureFailsClosedBeforeIssueCreation(t *testing.T) 
 		collectSecretScanningAlertsForJobs = originalCollectSecretScanningAlertsForJobs
 	})
 
-	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) ([]DepAlert, error) {
+	collectDependabotAlertsForJobs = func(target SecurityTarget, _ string) core.Result {
 		if target.FullName == "acme/web" {
-			return nil, core.NewError("dependabot unavailable")
+			return core.Fail(core.NewError("dependabot unavailable"))
 		}
-		return []DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}}, nil
+		return core.Ok([]DepAlert{{Repo: target.DisplayName, Severity: "high", CVE: "CVE-1", Summary: "dep"}})
 	}
-	collectCodeScanningAlertsForJobs = func(target SecurityTarget, _ ScanCommandOptions) ([]ScanAlert, error) {
-		return []ScanAlert{{Repo: target.DisplayName, Severity: "medium", RuleID: "R-1", Description: "scan"}}, nil
+	collectCodeScanningAlertsForJobs = func(target SecurityTarget, _ ScanCommandOptions) core.Result {
+		return core.Ok([]ScanAlert{{Repo: target.DisplayName, Severity: "medium", RuleID: "R-1", Description: "scan"}})
 	}
-	collectSecretScanningAlertsForJobs = func(target SecurityTarget) ([]SecretAlert, error) {
-		return []SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}}, nil
+	collectSecretScanningAlertsForJobs = func(target SecurityTarget) core.Result {
+		return core.Ok([]SecretAlert{{Repo: target.DisplayName, Number: 1, SecretType: "token"}})
 	}
 
 	r := runJobs(JobsCommandOptions{
@@ -531,10 +535,11 @@ func TestRunJobs_Bad_PartialFailureFailsClosedBeforeIssueCreation(t *testing.T) 
 func TestCreateJobsIssue_Good_ReturnsTrimmedOutput(t *testing.T) {
 	withFakeGitHubScript(t, "#!/bin/sh\nprintf 'https://github.com/acme/security/issues/1\\n'\n")
 
-	got, err := createJobsIssue("acme/security", "Security scan summary", "body")
-	if err != nil {
-		t.Fatalf("createJobsIssue: %v", err)
+	result := createJobsIssue("acme/security", "Security scan summary", "body")
+	if !result.OK {
+		t.Fatalf("createJobsIssue: %s", result.Error())
 	}
+	got := result.Value.(string)
 	if got != "https://github.com/acme/security/issues/1" {
 		t.Fatalf("createJobsIssue = %q, want trimmed issue URL", got)
 	}
@@ -546,9 +551,9 @@ func TestRunJobs_Good_DryRunDoesNotRequireGitHubCLI(t *testing.T) {
 		callGitHubAPIRequest = originalCallGitHubAPIRequest
 	})
 
-	callGitHubAPIRequest = func(string) ([]byte, error) {
+	callGitHubAPIRequest = func(string) core.Result {
 		t.Fatal("dry-run should not invoke GitHub API helpers")
-		return nil, nil
+		return core.Ok(nil)
 	}
 
 	if r := runJobs(JobsCommandOptions{
@@ -575,10 +580,11 @@ func TestRunJobs_Bad_EmptyTargetsFailsBeforeRegistryLookup(t *testing.T) {
 }
 
 func TestValidateJobsIssueRepository_Good(t *testing.T) {
-	got, err := validateJobsIssueRepository("acme/security")
-	if err != nil {
-		t.Fatalf("validateJobsIssueRepository: %v", err)
+	result := validateJobsIssueRepository("acme/security")
+	if !result.OK {
+		t.Fatalf("validateJobsIssueRepository: %s", result.Error())
 	}
+	got := result.Value.(SecurityTarget)
 
 	want := SecurityTarget{DisplayName: "security", FullName: "acme/security"}
 	if got != want {
@@ -587,16 +593,17 @@ func TestValidateJobsIssueRepository_Good(t *testing.T) {
 }
 
 func TestValidateJobsIssueRepository_Bad(t *testing.T) {
-	if _, err := validateJobsIssueRepository("bad repo"); err == nil {
+	if result := validateJobsIssueRepository("bad repo"); result.OK {
 		t.Fatal("expected invalid issue repo error")
 	}
 }
 
 func TestValidateJobsIssueRepository_Ugly_BlankInputReturnsZeroTarget(t *testing.T) {
-	got, err := validateJobsIssueRepository("")
-	if err != nil {
-		t.Fatalf("validateJobsIssueRepository blank: %v", err)
+	result := validateJobsIssueRepository("")
+	if !result.OK {
+		t.Fatalf("validateJobsIssueRepository blank: %s", result.Error())
 	}
+	got := result.Value.(SecurityTarget)
 	if got != (SecurityTarget{}) {
 		t.Fatalf("validateJobsIssueRepository blank = %+v, want zero target", got)
 	}
@@ -638,26 +645,28 @@ repos:
 		t.Fatalf("write registry: %v", r.Error())
 	}
 
-	registry, err := loadRegistryForJobs(JobsCommandOptions{
+	result := loadRegistryForJobs(JobsCommandOptions{
 		RegistryPath: registryPath,
 		Targets:      "api",
 	})
-	if err != nil {
-		t.Fatalf("loadRegistryForJobs: %v", err)
+	if !result.OK {
+		t.Fatalf("loadRegistryForJobs: %s", result.Error())
 	}
+	registry := result.Value.(*repos.Registry)
 	if registry == nil || registry.Org != "acme" {
 		t.Fatalf("loadRegistryForJobs returned %+v, want acme registry", registry)
 	}
 }
 
 func TestLoadRegistryForJobs_Ugly_SkipsRegistryForFullyQualifiedTargets(t *testing.T) {
-	registry, err := loadRegistryForJobs(JobsCommandOptions{
+	result := loadRegistryForJobs(JobsCommandOptions{
 		RegistryPath: "ignored.yaml",
 		Targets:      "acme/api, acme/web",
 	})
-	if err != nil {
-		t.Fatalf("loadRegistryForJobs: %v", err)
+	if !result.OK {
+		t.Fatalf("loadRegistryForJobs: %s", result.Error())
 	}
+	registry, _ := result.Value.(*repos.Registry)
 	if registry != nil {
 		t.Fatalf("loadRegistryForJobs returned %+v, want nil for fully-qualified targets", registry)
 	}

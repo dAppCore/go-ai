@@ -36,9 +36,10 @@ func ExampleQueryRAGForTask() {
 		return []rag.QueryResult{{Text: "Use the build runbook", Source: "docs/build.md", Section: "Checks", Score: 0.9}}, nil
 	}
 
-	contextText, err := QueryRAGForTask(TaskInfo{Title: "Investigate build failure", Description: "CI failed"})
+	result := QueryRAGForTask(TaskInfo{Title: "Investigate build failure", Description: "CI failed"})
+	contextText := result.Value.(string)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(core.Contains(contextText, "Use the build runbook"))
 	// Output:
 	// true

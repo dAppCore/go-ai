@@ -3,9 +3,10 @@ package security
 import core "dappco.re/go"
 
 func ExampleSecurityTarget() {
-	target, err := parseSecurityTarget("acme/api")
+	result := parseSecurityTarget("acme/api")
+	target := result.Value.(SecurityTarget)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(target.DisplayName)
 	// Output:
 	// true

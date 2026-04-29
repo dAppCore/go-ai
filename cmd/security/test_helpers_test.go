@@ -56,7 +56,13 @@ func stubGitHubAPI(t *testing.T, fn func(endpoint string) ([]byte, error)) {
 	t.Helper()
 
 	original := callGitHubAPIRequest
-	callGitHubAPIRequest = fn
+	callGitHubAPIRequest = func(endpoint string) core.Result {
+		output, err := fn(endpoint)
+		if err != nil {
+			return core.Fail(err)
+		}
+		return core.Ok(output)
+	}
 	t.Cleanup(func() {
 		callGitHubAPIRequest = original
 	})

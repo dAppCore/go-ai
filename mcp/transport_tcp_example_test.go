@@ -7,7 +7,7 @@ import (
 )
 
 func ExampleService_ServeTCP() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

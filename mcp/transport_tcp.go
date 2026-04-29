@@ -68,8 +68,11 @@ func (s *Service) serveConn(ctx context.Context, conn net.Conn) {
 			core.Print(core.Stderr(), "MCP TCP connection close error: %v\n", err)
 		}
 	}()
-	if r := serveReaderWriter(ctx, conn, conn, s.HandleFrame); !r.OK && !core.Is(resultError(r), net.ErrClosed) {
-		err := resultError(r)
+	if r := serveReaderWriter(ctx, conn, conn, s.HandleFrame); !r.OK {
+		err, _ := resultError(r).(error)
+		if core.Is(err, net.ErrClosed) {
+			return
+		}
 		core.Print(core.Stderr(), "MCP TCP connection error: %v\n", err)
 	}
 }

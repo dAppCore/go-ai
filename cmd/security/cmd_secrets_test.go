@@ -31,10 +31,11 @@ func TestCmdSecrets_collectSecretAlerts_Good(t *testing.T) {
 		]`), nil
 	})
 
-	alerts, err := collectSecretAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"})
-	if err != nil {
-		t.Fatalf("collectSecretAlerts: %v", err)
+	alertsResult := collectSecretAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"})
+	if !alertsResult.OK {
+		t.Fatalf("collectSecretAlerts: %s", alertsResult.Error())
 	}
+	alerts := alertsResult.Value.([]SecretAlert)
 	if len(alerts) != 1 || alerts[0].Number != 9 || !alerts[0].PushProtection {
 		t.Fatalf("unexpected secret alerts: %+v", alerts)
 	}

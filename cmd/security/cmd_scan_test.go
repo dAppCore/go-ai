@@ -16,13 +16,14 @@ func TestCmdScan_collectScanAlerts_Good(t *testing.T) {
 		return []byte(payload), nil
 	})
 
-	alerts, err := collectScanAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ScanCommandOptions{
+	alertsResult := collectScanAlerts(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ScanCommandOptions{
 		Selection: SecuritySelectionOptions{SeverityFilter: "medium"},
 		ToolName:  "CodeQL",
 	})
-	if err != nil {
-		t.Fatalf("collectScanAlerts: %v", err)
+	if !alertsResult.OK {
+		t.Fatalf("collectScanAlerts: %s", alertsResult.Error())
 	}
+	alerts := alertsResult.Value.([]ScanAlert)
 	if len(alerts) != 1 || alerts[0].RuleID != "gosec/G401" || alerts[0].Severity != "medium" {
 		t.Fatalf("unexpected scan alerts: %+v", alerts)
 	}

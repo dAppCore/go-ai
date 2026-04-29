@@ -11,37 +11,16 @@ type exampleSubsystem struct{}
 func (exampleSubsystem) Name() string { return "example" }
 
 func (exampleSubsystem) RegisterTools(s *Service) {
-	s.RegisterToolFunc("example", "example_echo", "Echo example", func(context.Context, RawMessage) (any, error) {
-		return map[string]string{"ok": "true"}, nil
+	s.RegisterToolFunc("example", "example_echo", "Echo example", func(context.Context, RawMessage) core.Result {
+		return core.Ok(map[string]string{"ok": "true"})
 	})
 }
 
-func ExampleRawMessage_MarshalJSON() {
-	raw := RawMessage(`{"ok":true}`)
-	data, err := raw.MarshalJSON()
-
-	core.Println(err == nil)
-	core.Println(string(data))
-	// Output:
-	// true
-	// {"ok":true}
-}
-
-func ExampleRawMessage_UnmarshalJSON() {
-	var raw RawMessage
-	err := raw.UnmarshalJSON([]byte(`{"ok":true}`))
-
-	core.Println(err == nil)
-	core.Println(string(raw))
-	// Output:
-	// true
-	// {"ok":true}
-}
-
 func ExampleNew() {
-	service, err := New(Options{Unrestricted: true})
+	result := New(Options{Unrestricted: true})
+	service := result.Value.(*Service)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(len(service.Tools()) > 0)
 	// Output:
 	// true
@@ -49,9 +28,10 @@ func ExampleNew() {
 }
 
 func ExampleWithWorkspaceRoot() {
-	service, err := New(WithWorkspaceRoot(""))
+	result := New(WithWorkspaceRoot(""))
+	service := result.Value.(*Service)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(service.WorkspaceRoot() == "")
 	// Output:
 	// true
@@ -60,9 +40,10 @@ func ExampleWithWorkspaceRoot() {
 
 func ExampleWithProcessService() {
 	marker := struct{ Name string }{Name: "process"}
-	service, err := New(WithProcessService(marker))
+	result := New(WithProcessService(marker))
+	service := result.Value.(*Service)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(service.processService == marker)
 	// Output:
 	// true
@@ -71,9 +52,10 @@ func ExampleWithProcessService() {
 
 func ExampleWithWSHub() {
 	marker := struct{ Name string }{Name: "hub"}
-	service, err := New(WithWSHub(marker))
+	result := New(WithWSHub(marker))
+	service := result.Value.(*Service)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(service.wsHub == marker)
 	// Output:
 	// true
@@ -81,9 +63,10 @@ func ExampleWithWSHub() {
 }
 
 func ExampleWithSubsystem() {
-	service, err := New(WithSubsystem(exampleSubsystem{}))
+	result := New(WithSubsystem(exampleSubsystem{}))
+	service := result.Value.(*Service)
 
-	core.Println(err == nil)
+	core.Println(result.OK)
 	core.Println(core.Contains(core.Join(",", service.ToolNames()...), "example_echo"))
 	// Output:
 	// true
@@ -91,7 +74,7 @@ func ExampleWithSubsystem() {
 }
 
 func ExampleService_WorkspaceRoot() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 
 	core.Println(service.WorkspaceRoot() == "")
 	// Output:
@@ -99,7 +82,7 @@ func ExampleService_WorkspaceRoot() {
 }
 
 func ExampleService_Tools() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 
 	core.Println(len(service.Tools()) > 0)
 	// Output:
@@ -107,7 +90,7 @@ func ExampleService_Tools() {
 }
 
 func ExampleService_ToolNames() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 
 	core.Println(core.Contains(core.Join(",", service.ToolNames()...), "file_read"))
 	// Output:
@@ -115,9 +98,9 @@ func ExampleService_ToolNames() {
 }
 
 func ExampleService_RegisterTool() {
-	service, _ := New(WithWorkspaceRoot(""))
-	err := service.RegisterTool(Tool{Name: "example_tool", Handler: func(context.Context, RawMessage) (any, error) {
-		return map[string]bool{"ok": true}, nil
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
+	err := service.RegisterTool(Tool{Name: "example_tool", Handler: func(context.Context, RawMessage) core.Result {
+		return core.Ok(map[string]bool{"ok": true})
 	}})
 
 	core.Println(err.OK)
@@ -128,9 +111,9 @@ func ExampleService_RegisterTool() {
 }
 
 func ExampleService_RegisterToolFunc() {
-	service, _ := New(WithWorkspaceRoot(""))
-	err := service.RegisterToolFunc("example", "example_func", "Example func", func(context.Context, RawMessage) (any, error) {
-		return map[string]bool{"ok": true}, nil
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
+	err := service.RegisterToolFunc("example", "example_func", "Example func", func(context.Context, RawMessage) core.Result {
+		return core.Ok(map[string]bool{"ok": true})
 	})
 
 	core.Println(err.OK)
@@ -141,7 +124,7 @@ func ExampleService_RegisterToolFunc() {
 }
 
 func ExampleService_Shutdown() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 	err := service.Shutdown(context.Background())
 
 	core.Println(err.OK)

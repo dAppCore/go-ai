@@ -34,10 +34,11 @@ func TestCmdLab_RunCommand_Bad_UnknownCommand(t *testing.T) {
 }
 
 func TestCmdLab_parseLabServeOptions_Good_Defaults(t *testing.T) {
-	options, err := parseLabServeOptions(nil, ioDiscard{})
-	if err != nil {
-		t.Fatalf("parseLabServeOptions(defaults): %v", err)
+	result := parseLabServeOptions(nil, ioDiscard{})
+	if !result.OK {
+		t.Fatalf("parseLabServeOptions(defaults): %s", result.Error())
 	}
+	options := result.Value.(LabCommandOptions)
 
 	if options.Bind != defaultLabBindAddr {
 		t.Fatalf("expected default bind %q, got %q", defaultLabBindAddr, options.Bind)
@@ -48,10 +49,11 @@ func TestCmdLab_parseLabServeOptions_Good_Defaults(t *testing.T) {
 }
 
 func TestCmdLab_parseLabServeOptions_Good_CustomFlags(t *testing.T) {
-	options, err := parseLabServeOptions([]string{"--bind", "127.0.0.1:9090", "--allow-remote"}, ioDiscard{})
-	if err != nil {
-		t.Fatalf("parseLabServeOptions(custom): %v", err)
+	result := parseLabServeOptions([]string{"--bind", "127.0.0.1:9090", "--allow-remote"}, ioDiscard{})
+	if !result.OK {
+		t.Fatalf("parseLabServeOptions(custom): %s", result.Error())
 	}
+	options := result.Value.(LabCommandOptions)
 
 	if options.Bind != "127.0.0.1:9090" {
 		t.Fatalf("expected custom bind, got %q", options.Bind)

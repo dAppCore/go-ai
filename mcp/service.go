@@ -25,7 +25,7 @@ var (
 )
 
 // Option configures a Service before tools are registered.
-type Option func(*Service) error
+type Option func(*Service) core.Result
 
 // Options is accepted by New for compatibility with callers that prefer a struct.
 type Options struct {
@@ -52,24 +52,9 @@ type SubsystemWithShutdown interface {
 // encoding/json import in MCP surface types.
 type RawMessage []byte
 
-func (m RawMessage) MarshalJSON() ([]byte, error) {
-	if m == nil {
-		return []byte("null"), nil
-	}
-	return []byte(m), nil
-}
-
-func (m *RawMessage) UnmarshalJSON(data []byte) (err error) {
-	if m == nil {
-		return core.NewError("mcp: nil raw message")
-	}
-	*m = append((*m)[0:0], data...)
-	return nil
-}
-
 // ToolHandler receives the raw JSON arguments from tools/call and returns a
 // JSON-serialisable structured response.
-type ToolHandler func(context.Context, RawMessage) (any, error)
+type ToolHandler func(context.Context, RawMessage) core.Result
 
 // Tool describes one MCP tool.
 type Tool struct {
@@ -114,15 +99,15 @@ type Service struct {
 //
 //	mcp.New(mcp.WithWorkspaceRoot("/repo"))
 //	mcp.New(mcp.Options{WorkspaceRoot: "/repo"})
-func New(args ...any) (*Service, error) {
+func New(args ...any) core.Result {
 	rootResult := core.Getwd()
 	if !rootResult.OK {
-		return nil, core.Errorf("mcp: get working directory: %s", rootResult.Error())
+		return core.Fail(core.Errorf("mcp: get working directory: %s", rootResult.Error()))
 	}
 	root := rootResult.Value.(string)
 	absResult := core.PathAbs(root)
 	if !absResult.OK {
-		return nil, core.Errorf("mcp: resolve working directory: %s", absResult.Error())
+		return core.Fail(core.Errorf("mcp: resolve working directory: %s", absResult.Error()))
 	}
 	root = absResult.Value.(string)
 
@@ -138,20 +123,20 @@ func New(args ...any) (*Service, error) {
 		case nil:
 			continue
 		case Option:
-			if err := v(s); err != nil {
-				return nil, err
+			if r := v(s); !r.OK {
+				return r
 			}
 		case Options:
 			if r := applyOptionsStruct(s, v); !r.OK {
-				return nil, resultError(r)
+				return r
 			}
 		default:
-			return nil, core.Errorf("mcp: unsupported New option %T", arg)
+			return core.Fail(core.Errorf("mcp: unsupported New option %T", arg))
 		}
 	}
 
 	if r := s.registerBuiltInTools(); !r.OK {
-		return nil, resultError(r)
+		return r
 	}
 	for _, sub := range s.subsystems {
 		if sub != nil {
@@ -159,17 +144,17 @@ func New(args ...any) (*Service, error) {
 		}
 	}
 
-	return s, nil
+	return core.Ok(s)
 }
 
 func applyOptionsStruct(s *Service, opts Options) core.Result {
 	if opts.Unrestricted {
-		if err := WithWorkspaceRoot("")(s); err != nil {
-			return core.Fail(err)
+		if r := WithWorkspaceRoot("")(s); !r.OK {
+			return r
 		}
 	} else if opts.WorkspaceRoot != "" {
-		if err := WithWorkspaceRoot(opts.WorkspaceRoot)(s); err != nil {
-			return core.Fail(err)
+		if r := WithWorkspaceRoot(opts.WorkspaceRoot)(s); !r.OK {
+			return r
 		}
 	}
 	if opts.ProcessService != nil {
@@ -189,44 +174,44 @@ func applyOptionsStruct(s *Service, opts Options) core.Result {
 // WithWorkspaceRoot restricts file operations to root. Passing an empty string
 // disables sandboxing and lets file tools operate on cleaned OS paths.
 func WithWorkspaceRoot(root string) Option {
-	return func(s *Service) error {
+	return func(s *Service) core.Result {
 		if root == "" {
 			s.workspaceRoot = ""
-			return nil
+			return core.Ok(nil)
 		}
 		abs := core.PathAbs(root)
 		if !abs.OK {
-			return core.Errorf("mcp: resolve workspace root: %s", abs.Error())
+			return core.Fail(core.Errorf("mcp: resolve workspace root: %s", abs.Error()))
 		}
 		s.workspaceRoot = abs.Value.(string)
-		return nil
+		return core.Ok(nil)
 	}
 }
 
 // WithProcessService records an externally supplied process service. The
 // in-module process tools still provide a local fallback when this is nil.
 func WithProcessService(ps any) Option {
-	return func(s *Service) error {
+	return func(s *Service) core.Result {
 		s.processService = ps
-		return nil
+		return core.Ok(nil)
 	}
 }
 
 // WithWSHub records an externally supplied WebSocket hub.
 func WithWSHub(hub any) Option {
-	return func(s *Service) error {
+	return func(s *Service) core.Result {
 		s.wsHub = hub
-		return nil
+		return core.Ok(nil)
 	}
 }
 
 // WithSubsystem appends a subsystem plugin.
 func WithSubsystem(sub Subsystem) Option {
-	return func(s *Service) error {
+	return func(s *Service) core.Result {
 		if sub != nil {
 			s.subsystems = append(s.subsystems, sub)
 		}
-		return nil
+		return core.Ok(nil)
 	}
 }
 
@@ -326,17 +311,17 @@ func (s *Service) Shutdown(ctx context.Context) core.Result {
 	return core.Ok(nil)
 }
 
-type typedToolFunc[I any, O any] func(context.Context, I) (O, error)
+type typedToolFunc[I any] func(context.Context, I) core.Result
 
-func typedHandler[I any, O any](fn typedToolFunc[I, O]) ToolHandler {
-	return func(ctx context.Context, raw RawMessage) (any, error) {
+func typedHandler[I any](fn typedToolFunc[I]) ToolHandler {
+	return func(ctx context.Context, raw RawMessage) core.Result {
 		var input I
 		raw = RawMessage(core.Trim(string(raw)))
 		if len(raw) == 0 || string(raw) == "null" {
 			raw = RawMessage("{}")
 		}
 		if r := core.JSONUnmarshal([]byte(raw), &input); !r.OK {
-			return nil, core.Errorf("%w: %s", errInvalidParams, r.Error())
+			return core.Fail(core.Errorf("%w: %s", errInvalidParams, r.Error()))
 		}
 		return fn(ctx, input)
 	}
@@ -360,7 +345,7 @@ func cloneStringAnyMap(input map[string]any) map[string]any {
 	return out
 }
 
-func serveReaderWriter(ctx context.Context, r io.Reader, w io.Writer, handle func(context.Context, []byte) ([]byte, error)) core.Result {
+func serveReaderWriter(ctx context.Context, r io.Reader, w io.Writer, handle func(context.Context, []byte) core.Result) core.Result {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), maxMCPMessageSize)
 	for scanner.Scan() {
@@ -370,7 +355,11 @@ func serveReaderWriter(ctx context.Context, r io.Reader, w io.Writer, handle fun
 		default:
 		}
 
-		response, _ := handle(ctx, scanner.Bytes())
+		result := handle(ctx, scanner.Bytes())
+		if !result.OK {
+			return result
+		}
+		response, _ := result.Value.([]byte)
 		if len(response) == 0 {
 			continue
 		}

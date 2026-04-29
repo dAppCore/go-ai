@@ -135,21 +135,21 @@ func (d *DashboardService) Refresh() core.Result {
 }
 
 // RunQuery executes an ad-hoc SQL query against DuckDB.
-func (d *DashboardService) RunQuery(sql string) ([]map[string]interface{}, error) {
+func (d *DashboardService) RunQuery(sql string) core.Result {
 	if d.dbPath == "" {
-		return nil, core.Errorf("no database configured")
+		return core.Fail(core.Errorf("no database configured"))
 	}
 	db, err := lem.OpenDB(d.dbPath)
 	if err != nil {
-		return nil, core.Errorf("open db: %w", err)
+		return core.Fail(core.Errorf("open db: %w", err))
 	}
 	defer db.Close()
 
 	rows, err := db.QueryRows(sql)
 	if err != nil {
-		return nil, core.Errorf("query: %w", err)
+		return core.Fail(core.Errorf("query: %w", err))
 	}
-	return rows, nil
+	return core.Ok(rows)
 }
 
 func (d *DashboardService) refreshLoop(ctx context.Context) {

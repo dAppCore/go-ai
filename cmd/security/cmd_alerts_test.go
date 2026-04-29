@@ -58,10 +58,11 @@ func TestCmdAlerts_collectAlertOutputs_Good(t *testing.T) {
 		}
 	})
 
-	outputs, err := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, "")
-	if err != nil {
-		t.Fatalf("collectAlertOutputs: %v", err)
+	outputsResult := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, "")
+	if !outputsResult.OK {
+		t.Fatalf("collectAlertOutputs: %s", outputsResult.Error())
 	}
+	outputs := outputsResult.Value.([]AlertOutput)
 	if len(outputs) != 3 {
 		t.Fatalf("collectAlertOutputs len = %d, want 3", len(outputs))
 	}
@@ -81,7 +82,7 @@ func TestCmdAlerts_collectAlertOutputs_Bad_AllCollectorsFail(t *testing.T) {
 		return nil, assertiveError("github unavailable")
 	})
 
-	if _, err := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ""); err == nil {
+	if result := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ""); result.OK {
 		t.Fatal("expected collectAlertOutputs to fail when all collectors fail")
 	}
 }
@@ -101,7 +102,7 @@ func TestCmdAlerts_collectAlertOutputs_Bad_PartialFailureFailsClosed(t *testing.
 		}
 	})
 
-	if _, err := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ""); err == nil {
+	if result := collectAlertOutputs(SecurityTarget{DisplayName: "api", FullName: "acme/api"}, ""); result.OK {
 		t.Fatal("expected collectAlertOutputs to fail closed on partial collector failure")
 	}
 }

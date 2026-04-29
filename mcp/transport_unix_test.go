@@ -7,8 +7,7 @@ import (
 // --- AX-7 canonical triplets ---
 
 func TestTransportUnix_Service_ServeUnix_Good(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	socketPath := core.PathJoin("/tmp", core.Sprintf("mcp-%d-good.sock", core.Getpid()))
 	ctx, cancel := core.WithCancel(core.Background())
 
@@ -20,8 +19,7 @@ func TestTransportUnix_Service_ServeUnix_Good(t *core.T) {
 }
 
 func TestTransportUnix_Service_ServeUnix_Bad(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	r := service.ServeUnix(core.Background(), "\x00")
 
 	core.AssertFalse(t, r.OK)
@@ -29,8 +27,7 @@ func TestTransportUnix_Service_ServeUnix_Bad(t *core.T) {
 }
 
 func TestTransportUnix_Service_ServeUnix_Ugly(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	socketPath := core.PathJoin("/tmp", core.Sprintf("mcp-%d-ugly.sock", core.Getpid()))
 	core.AssertTrue(t, core.WriteFile(socketPath, []byte("stale socket"), 0o600).OK)
 	ctx, cancel := core.WithCancel(core.Background())

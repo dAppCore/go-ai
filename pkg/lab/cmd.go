@@ -59,7 +59,10 @@ func addServeCommand(parent *cli.Command) {
 			}
 			r := RunServe(*options)
 			if !r.OK {
-				return labResultError(r)
+				if err, ok := r.Value.(error); ok {
+					return err
+				}
+				return core.NewError(r.Error())
 			}
 			return nil
 		},
@@ -119,13 +122,6 @@ func RunServe(options CommandOptions) core.Result {
 		}
 		return core.Ok(nil)
 	}
-}
-
-func labResultError(r core.Result) (err error) {
-	if err, ok := r.Value.(error); ok {
-		return err
-	}
-	return core.NewError(r.Error())
 }
 
 func newServeMux(authToken string) *http.ServeMux {

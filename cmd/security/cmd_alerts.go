@@ -18,7 +18,8 @@ func addAlertsCommand(parent *cli.Command) {
 		RunE: func(c *cli.Command, args []string) error {
 			r := runAlerts(*selectionOptions)
 			if !r.OK {
-				return coreResultError(r)
+				err, _ := coreResultError(r).(error)
+				return err
 			}
 			return nil
 		},
@@ -48,10 +49,11 @@ type AlertOutput struct {
 func runAlerts(selectionOptions SecuritySelectionOptions) core.Result {
 	startedAt := time.Now()
 
-	targets, err := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
-	if err != nil {
-		return core.Fail(err)
+	targetsResult := resolveSecurityTargets(selectionOptions.RegistryPath, selectionOptions.RepositoryName, selectionOptions.ExternalTarget)
+	if !targetsResult.OK {
+		return targetsResult
 	}
+	targets := targetsResult.Value.([]SecurityTarget)
 
 	if r := checkGitHubCLI(); !r.OK {
 		return r
@@ -62,11 +64,12 @@ func runAlerts(selectionOptions SecuritySelectionOptions) core.Result {
 	targetErrors := map[string]error{}
 
 	for _, target := range targets {
-		targetAlerts, err := collectAlertOutputs(target, selectionOptions.SeverityFilter)
-		if err != nil {
-			targetErrors[target.FullName] = err
+		targetAlertsResult := collectAlertOutputs(target, selectionOptions.SeverityFilter)
+		if !targetAlertsResult.OK {
+			targetErrors[target.FullName], _ = coreResultError(targetAlertsResult).(error)
 			continue
 		}
+		targetAlerts := targetAlertsResult.Value.([]AlertOutput)
 
 		for _, alert := range targetAlerts {
 			summary.Add(alert.Severity)
@@ -128,25 +131,31 @@ func runAlerts(selectionOptions SecuritySelectionOptions) core.Result {
 	return core.Ok(nil)
 }
 
-func collectAlertOutputs(target SecurityTarget, severityFilter string) ([]AlertOutput, error) {
-	dependabotAlerts, dependabotError := collectDepAlerts(target, severityFilter)
-	codeScanningAlerts, codeScanningError := collectScanAlerts(target, ScanCommandOptions{
+func collectAlertOutputs(target SecurityTarget, severityFilter string) core.Result {
+	dependabotResult := collectDepAlerts(target, severityFilter)
+	codeScanningResult := collectScanAlerts(target, ScanCommandOptions{
 		Selection: SecuritySelectionOptions{
 			SeverityFilter: severityFilter,
 		},
 	})
-	secretScanningAlerts, secretScanningError := collectSecretAlerts(target)
+	secretScanningResult := collectSecretAlerts(target)
 
-	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
+	if !dependabotResult.OK || !codeScanningResult.OK || !secretScanningResult.OK {
+		dependabotError, _ := coreResultError(dependabotResult).(error)
+		codeScanningError, _ := coreResultError(codeScanningResult).(error)
+		secretScanningError, _ := coreResultError(secretScanningResult).(error)
 		r := combineSecurityCollectorErrors(target.FullName, map[string]error{
 			"dependabot":      dependabotError,
 			"code-scanning":   codeScanningError,
 			"secret-scanning": secretScanningError,
 		})
-		return nil, coreResultError(r)
+		return r
 	}
 
-	return buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, severityFilter), nil
+	dependabotAlerts := dependabotResult.Value.([]DepAlert)
+	codeScanningAlerts := codeScanningResult.Value.([]ScanAlert)
+	secretScanningAlerts := secretScanningResult.Value.([]SecretAlert)
+	return core.Ok(buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, severityFilter))
 }
 
 func buildAlertOutputs(dependabotAlerts []DepAlert, codeScanningAlerts []ScanAlert, secretScanningAlerts []SecretAlert, severityFilter string) []AlertOutput {
@@ -190,44 +199,53 @@ func buildAlertOutputs(dependabotAlerts []DepAlert, codeScanningAlerts []ScanAle
 	return allAlerts
 }
 
-func fetchDependabotAlerts(repoFullName string) ([]DependabotAlert, error) {
+func fetchDependabotAlerts(repoFullName string) core.Result {
 	endpoint := core.Sprintf("repos/%s/dependabot/alerts?state=open", repoFullName)
-	output, err := callGitHubAPIRequest(endpoint)
-	if err != nil {
-		return nil, cli.Wrap(err, core.Sprintf("fetch dependabot alerts for %s", repoFullName))
+	outputResult := callGitHubAPIRequest(endpoint)
+	if !outputResult.OK {
+		err, _ := coreResultError(outputResult).(error)
+		return core.Fail(cli.Wrap(err, core.Sprintf("fetch dependabot alerts for %s", repoFullName)))
 	}
+	output := outputResult.Value.([]byte)
 
-	alerts, err := decodeDependabotAlerts(output)
-	if err != nil {
-		return nil, cli.Wrap(err, core.Sprintf("parse dependabot alerts for %s", repoFullName))
+	alertsResult := decodeDependabotAlerts(output)
+	if !alertsResult.OK {
+		err, _ := coreResultError(alertsResult).(error)
+		return core.Fail(cli.Wrap(err, core.Sprintf("parse dependabot alerts for %s", repoFullName)))
 	}
-	return alerts, nil
+	return alertsResult
 }
 
-func fetchCodeScanningAlerts(repoFullName string) ([]CodeScanningAlert, error) {
+func fetchCodeScanningAlerts(repoFullName string) core.Result {
 	endpoint := core.Sprintf("repos/%s/code-scanning/alerts?state=open", repoFullName)
-	output, err := callGitHubAPIRequest(endpoint)
-	if err != nil {
-		return nil, cli.Wrap(err, core.Sprintf("fetch code-scanning alerts for %s", repoFullName))
+	outputResult := callGitHubAPIRequest(endpoint)
+	if !outputResult.OK {
+		err, _ := coreResultError(outputResult).(error)
+		return core.Fail(cli.Wrap(err, core.Sprintf("fetch code-scanning alerts for %s", repoFullName)))
 	}
+	output := outputResult.Value.([]byte)
 
-	alerts, err := decodeCodeScanningAlerts(output)
-	if err != nil {
-		return nil, cli.Wrap(err, core.Sprintf("parse code-scanning alerts for %s", repoFullName))
+	alertsResult := decodeCodeScanningAlerts(output)
+	if !alertsResult.OK {
+		err, _ := coreResultError(alertsResult).(error)
+		return core.Fail(cli.Wrap(err, core.Sprintf("parse code-scanning alerts for %s", repoFullName)))
 	}
-	return alerts, nil
+	return alertsResult
 }
 
-func fetchSecretScanningAlerts(repoFullName string) ([]SecretScanningAlert, error) {
+func fetchSecretScanningAlerts(repoFullName string) core.Result {
 	endpoint := core.Sprintf("repos/%s/secret-scanning/alerts?state=open", repoFullName)
-	output, err := callGitHubAPIRequest(endpoint)
-	if err != nil {
-		return nil, cli.Wrap(err, core.Sprintf("fetch secret-scanning alerts for %s", repoFullName))
+	outputResult := callGitHubAPIRequest(endpoint)
+	if !outputResult.OK {
+		err, _ := coreResultError(outputResult).(error)
+		return core.Fail(cli.Wrap(err, core.Sprintf("fetch secret-scanning alerts for %s", repoFullName)))
 	}
+	output := outputResult.Value.([]byte)
 
-	alerts, err := decodeSecretScanningAlerts(output)
-	if err != nil {
-		return nil, cli.Wrap(err, core.Sprintf("parse secret-scanning alerts for %s", repoFullName))
+	alertsResult := decodeSecretScanningAlerts(output)
+	if !alertsResult.OK {
+		err, _ := coreResultError(alertsResult).(error)
+		return core.Fail(cli.Wrap(err, core.Sprintf("parse secret-scanning alerts for %s", repoFullName)))
 	}
-	return alerts, nil
+	return alertsResult
 }

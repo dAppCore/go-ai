@@ -45,7 +45,8 @@ func addJobsCommand(parent *cli.Command) {
 		RunE: func(c *cli.Command, args []string) error {
 			r := runJobs(*commandOptions)
 			if !r.OK {
-				return coreResultError(r)
+				err, _ := coreResultError(r).(error)
+				return err
 			}
 			return nil
 		},
@@ -67,21 +68,24 @@ func runJobs(commandOptions JobsCommandOptions) core.Result {
 		return core.Fail(cli.Err("--copies must be at least 1"))
 	}
 
-	issueRepoTarget, err := validateJobsIssueRepository(commandOptions.IssueRepository)
-	if err != nil {
-		return core.Fail(err)
+	issueRepoTargetResult := validateJobsIssueRepository(commandOptions.IssueRepository)
+	if !issueRepoTargetResult.OK {
+		return issueRepoTargetResult
 	}
+	issueRepoTarget := issueRepoTargetResult.Value.(SecurityTarget)
 
-	registry, err := loadRegistryForJobs(commandOptions)
-	if err != nil {
-		return core.Fail(err)
+	registryResult := loadRegistryForJobs(commandOptions)
+	if !registryResult.OK {
+		return registryResult
 	}
+	registry, _ := registryResult.Value.(*repos.Registry)
 
 	if commandOptions.DryRun {
-		plannedTargets, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry)
-		if err != nil {
-			return core.Fail(err)
+		plannedTargetsResult := resolveJobTargetsForDryRun(commandOptions.Targets, registry)
+		if !plannedTargetsResult.OK {
+			return plannedTargetsResult
 		}
+		plannedTargets := plannedTargetsResult.Value.([]string)
 		workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(plannedTargets))
 
 		// Dry-run only needs target resolution; it should not require `gh` to be installed or call the GitHub API.
@@ -98,18 +102,19 @@ func runJobs(commandOptions JobsCommandOptions) core.Result {
 	}
 
 	// Validate the target specification before any gh invocation.
-	if _, err := resolveJobTargetsForDryRun(commandOptions.Targets, registry); err != nil {
-		return core.Fail(err)
+	if r := resolveJobTargetsForDryRun(commandOptions.Targets, registry); !r.OK {
+		return r
 	}
 
 	if r := checkGitHubCLI(); !r.OK {
 		return r
 	}
 
-	targets, err := resolveJobTargets(commandOptions.Targets, registry)
-	if err != nil {
-		return core.Fail(err)
+	targetsResult := resolveJobTargets(commandOptions.Targets, registry)
+	if !targetsResult.OK {
+		return targetsResult
 	}
+	targets := targetsResult.Value.([]string)
 	workerCount := normalizeJobWorkerCount(commandOptions.WorkerCount, len(targets))
 
 	results := runJobWorkers(targets, workerCount)
@@ -142,10 +147,11 @@ func runJobs(commandOptions JobsCommandOptions) core.Result {
 	if issueRepoTarget.FullName != "" {
 		title := "Security scan summary: " + time.Now().Format("2006-01-02")
 		body := buildJobsIssueBody(overall, successful)
-		issueURL, err := createJobsIssue(issueRepoTarget.FullName, title, body)
-		if err != nil {
-			return core.Fail(err)
+		issueURLResult := createJobsIssue(issueRepoTarget.FullName, title, body)
+		if !issueURLResult.OK {
+			return issueURLResult
 		}
+		issueURL := issueURLResult.Value.(string)
 
 		cli.Print("%s %s\n", cli.SuccessStyle.Render(">>"), issueURL)
 		event := buildJobsMetricsEvent(commandOptions, overall, successful, issueURL)
@@ -160,16 +166,16 @@ func runJobs(commandOptions JobsCommandOptions) core.Result {
 	return core.Ok(nil)
 }
 
-func validateJobsIssueRepository(issueRepository string) (SecurityTarget, error) {
+func validateJobsIssueRepository(issueRepository string) core.Result {
 	if core.Trim(issueRepository) == "" {
-		return SecurityTarget{}, nil
+		return core.Ok(SecurityTarget{})
 	}
 
-	target, err := parseSecurityTarget(issueRepository)
-	if err != nil {
-		return SecurityTarget{}, cli.Err("invalid --issue-repo format: use owner/repo")
+	targetResult := parseSecurityTarget(issueRepository)
+	if !targetResult.OK {
+		return core.Fail(cli.Err("invalid --issue-repo format: use owner/repo"))
 	}
-	return target, nil
+	return targetResult
 }
 
 func normalizeJobWorkerCount(requested, targetCount int) int {
@@ -186,24 +192,24 @@ func normalizeJobWorkerCount(requested, targetCount int) int {
 	return workerCount
 }
 
-func loadRegistryForJobs(commandOptions JobsCommandOptions) (*repos.Registry, error) {
+func loadRegistryForJobs(commandOptions JobsCommandOptions) core.Result {
 	if core.Trim(commandOptions.Targets) == "" {
-		return nil, nil
+		return core.Ok((*repos.Registry)(nil))
 	}
 	if !jobsNeedRegistry(commandOptions.Targets) {
-		return nil, nil
+		return core.Ok((*repos.Registry)(nil))
 	}
-	registry, err := loadRegistry(commandOptions.RegistryPath)
-	if err != nil {
-		return nil, err
+	registryResult := loadRegistry(commandOptions.RegistryPath)
+	if !registryResult.OK {
+		return registryResult
 	}
-	return registry, nil
+	return registryResult
 }
 
-func resolveJobTargetsForDryRun(targets string, registry *repos.Registry) ([]string, error) {
+func resolveJobTargetsForDryRun(targets string, registry *repos.Registry) core.Result {
 	trimmed := core.Trim(targets)
 	if trimmed == "" {
-		return nil, cli.Err("at least one --targets value required (comma-separated repo list or all)")
+		return core.Fail(cli.Err("at least one --targets value required (comma-separated repo list or all)"))
 	}
 
 	seen := map[string]struct{}{}
@@ -218,15 +224,15 @@ func resolveJobTargetsForDryRun(targets string, registry *repos.Registry) ([]str
 
 	if trimmed == "all" {
 		if registry == nil {
-			return nil, cli.Err("--targets=all requires a repository registry for dry-run")
+			return core.Fail(cli.Err("--targets=all requires a repository registry for dry-run"))
 		}
 		if len(registry.List()) == 0 {
-			return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
+			return core.Fail(cli.Err("no repositories found for GitHub org: %s", registry.Org))
 		}
 		for _, repo := range registry.List() {
 			addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
 		}
-		return resolved, nil
+		return core.Ok(resolved)
 	}
 
 	for _, part := range core.Split(trimmed, ",") {
@@ -235,27 +241,27 @@ func resolveJobTargetsForDryRun(targets string, registry *repos.Registry) ([]str
 			continue
 		}
 		if core.Contains(token, "/") {
-			target, err := parseSecurityTarget(token)
-			if err != nil {
-				return nil, cli.Err("invalid target format: use owner/repo")
+			targetResult := parseSecurityTarget(token)
+			if !targetResult.OK {
+				return core.Fail(cli.Err("invalid target format: use owner/repo"))
 			}
-			addTarget(target.FullName)
+			addTarget(targetResult.Value.(SecurityTarget).FullName)
 			continue
 		}
 		if registry == nil {
-			return nil, cli.Err("registry-backed target %q requires a repository registry", token)
+			return core.Fail(cli.Err("registry-backed target %q requires a repository registry", token))
 		}
 		repo, ok := registry.Get(token)
 		if !ok {
-			return nil, cli.Err("repo not found: %s", token)
+			return core.Fail(cli.Err("repo not found: %s", token))
 		}
 		addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
 	}
 
 	if len(resolved) == 0 {
-		return nil, cli.Err("no targets resolved from --targets")
+		return core.Fail(cli.Err("no targets resolved from --targets"))
 	}
-	return resolved, nil
+	return core.Ok(resolved)
 }
 
 func jobsNeedRegistry(targets string) bool {
@@ -276,10 +282,10 @@ func jobsNeedRegistry(targets string) bool {
 	return false
 }
 
-func resolveJobTargets(targets string, registry *repos.Registry) ([]string, error) {
+func resolveJobTargets(targets string, registry *repos.Registry) core.Result {
 	trimmed := core.Trim(targets)
 	if trimmed == "" {
-		return nil, cli.Err("at least one --targets value required (comma-separated repo list or all)")
+		return core.Fail(cli.Err("at least one --targets value required (comma-separated repo list or all)"))
 	}
 
 	seen := map[string]struct{}{}
@@ -294,16 +300,17 @@ func resolveJobTargets(targets string, registry *repos.Registry) ([]string, erro
 
 	if trimmed == "all" {
 		if registry == nil {
-			return nil, cli.Err("--targets=all requires a repository registry")
+			return core.Fail(cli.Err("--targets=all requires a repository registry"))
 		}
-		liveTargets, err := listGitHubOrgTargets(registry.Org)
-		if err != nil {
-			return nil, err
+		liveTargetsResult := listGitHubOrgTargets(registry.Org)
+		if !liveTargetsResult.OK {
+			return liveTargetsResult
 		}
+		liveTargets := liveTargetsResult.Value.([]string)
 		if len(liveTargets) == 0 {
-			return nil, cli.Err("no repositories found for GitHub org: %s", registry.Org)
+			return core.Fail(cli.Err("no repositories found for GitHub org: %s", registry.Org))
 		}
-		return liveTargets, nil
+		return core.Ok(liveTargets)
 	}
 
 	for _, part := range core.Split(trimmed, ",") {
@@ -312,27 +319,27 @@ func resolveJobTargets(targets string, registry *repos.Registry) ([]string, erro
 			continue
 		}
 		if core.Contains(token, "/") {
-			target, err := parseSecurityTarget(token)
-			if err != nil {
-				return nil, cli.Err("invalid target format: use owner/repo")
+			targetResult := parseSecurityTarget(token)
+			if !targetResult.OK {
+				return core.Fail(cli.Err("invalid target format: use owner/repo"))
 			}
-			addTarget(target.FullName)
+			addTarget(targetResult.Value.(SecurityTarget).FullName)
 			continue
 		}
 		if registry == nil {
-			return nil, cli.Err("registry-backed target %q requires a repository registry", token)
+			return core.Fail(cli.Err("registry-backed target %q requires a repository registry", token))
 		}
 		repo, ok := registry.Get(token)
 		if !ok {
-			return nil, cli.Err("repo not found: %s", token)
+			return core.Fail(cli.Err("repo not found: %s", token))
 		}
 		addTarget(core.Sprintf("%s/%s", registry.Org, repo.Name))
 	}
 
 	if len(resolved) == 0 {
-		return nil, cli.Err("no targets resolved from --targets")
+		return core.Fail(cli.Err("no targets resolved from --targets"))
 	}
-	return resolved, nil
+	return core.Ok(resolved)
 }
 
 func runJobWorkers(targets []string, workers int) []jobResult {
@@ -342,8 +349,13 @@ func runJobWorkers(targets []string, workers int) []jobResult {
 	for range workers {
 		go func() {
 			for target := range jobCh {
-				repo, err := collectJobRepoResult(target)
-				resultCh <- jobResult{repo: repo, err: err}
+				repoResult := collectJobRepoResult(target)
+				if !repoResult.OK {
+					err, _ := coreResultError(repoResult).(error)
+					resultCh <- jobResult{repo: jobRepoResult{Repo: target}, err: err}
+					continue
+				}
+				resultCh <- jobResult{repo: repoResult.Value.(jobRepoResult)}
 			}
 		}()
 	}
@@ -364,26 +376,33 @@ func runJobWorkers(targets []string, workers int) []jobResult {
 	return results
 }
 
-func collectJobRepoResult(target string) (jobRepoResult, error) {
-	securityTarget, err := parseSecurityTarget(target)
-	if err != nil {
-		return jobRepoResult{}, coreerr.E("security", "invalid target format: use owner/repo", nil)
+func collectJobRepoResult(target string) core.Result {
+	securityTargetResult := parseSecurityTarget(target)
+	if !securityTargetResult.OK {
+		return core.Fail(coreerr.E("security", "invalid target format: use owner/repo", nil))
 	}
+	securityTarget := securityTargetResult.Value.(SecurityTarget)
 
 	repo := jobRepoResult{Repo: target}
-	dependabotAlerts, dependabotError := collectDependabotAlertsForJobs(securityTarget, "")
-	codeScanningAlerts, codeScanningError := collectCodeScanningAlertsForJobs(securityTarget, ScanCommandOptions{})
-	secretScanningAlerts, secretScanningError := collectSecretScanningAlertsForJobs(securityTarget)
+	dependabotResult := collectDependabotAlertsForJobs(securityTarget, "")
+	codeScanningResult := collectCodeScanningAlertsForJobs(securityTarget, ScanCommandOptions{})
+	secretScanningResult := collectSecretScanningAlertsForJobs(securityTarget)
 
-	if dependabotError != nil || codeScanningError != nil || secretScanningError != nil {
+	if !dependabotResult.OK || !codeScanningResult.OK || !secretScanningResult.OK {
+		dependabotError, _ := coreResultError(dependabotResult).(error)
+		codeScanningError, _ := coreResultError(codeScanningResult).(error)
+		secretScanningError, _ := coreResultError(secretScanningResult).(error)
 		r := combineSecurityCollectorErrors(target, map[string]error{
 			"dependabot":      dependabotError,
 			"code-scanning":   codeScanningError,
 			"secret-scanning": secretScanningError,
 		})
-		return jobRepoResult{}, coreResultError(r)
+		return r
 	}
 
+	dependabotAlerts := dependabotResult.Value.([]DepAlert)
+	codeScanningAlerts := codeScanningResult.Value.([]ScanAlert)
+	secretScanningAlerts := secretScanningResult.Value.([]SecretAlert)
 	for _, alert := range buildAlertOutputs(dependabotAlerts, codeScanningAlerts, secretScanningAlerts, "") {
 		repo.Summary.Add(alert.Severity)
 	}
@@ -409,7 +428,7 @@ func collectJobRepoResult(target string) (jobRepoResult, error) {
 		repo.Findings = append(repo.Findings, core.Sprintf("[HIGH] secret-scanning: %s (#%d)", alert.SecretType, alert.Number))
 	}
 
-	return repo, nil
+	return core.Ok(repo)
 }
 
 func mergeAlertSummary(dst, src *AlertSummary) {
@@ -460,7 +479,7 @@ func buildJobsMetricsEvent(commandOptions JobsCommandOptions, summary *AlertSumm
 	}
 }
 
-func createJobsIssue(issueRepo, title, body string) (string, error) {
+func createJobsIssue(issueRepo, title, body string) core.Result {
 	cmd := execabs.Command("gh",
 		"issue", "create",
 		"--repo", issueRepo,
@@ -474,9 +493,9 @@ func createJobsIssue(issueRepo, title, body string) (string, error) {
 		if text := core.Trim(string(output)); text != "" {
 			message += ": " + text
 		}
-		return "", cli.Wrap(err, message)
+		return core.Fail(cli.Wrap(err, message))
 	}
-	return core.Trim(string(output)), nil
+	return core.Ok(core.Trim(string(output)))
 }
 
 func buildJobsIssueBody(summary *AlertSummary, repos []jobRepoResult) string {

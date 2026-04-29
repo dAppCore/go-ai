@@ -92,15 +92,15 @@ func (d *DockerService) RestartService(name string) core.Result {
 }
 
 // Logs returns recent logs for a service.
-func (d *DockerService) Logs(name string, lines int) (string, error) {
+func (d *DockerService) Logs(name string, lines int) core.Result {
 	if lines <= 0 {
 		lines = 50
 	}
-	out, err := d.composeOutput("logs", "--tail", core.Sprintf("%d", lines), "--no-color", name)
-	if err != nil {
-		return "", err
+	outResult := d.composeOutput("logs", "--tail", core.Sprintf("%d", lines), "--no-color", name)
+	if !outResult.OK {
+		return outResult
 	}
-	return out, nil
+	return outResult
 }
 
 // GetStatus returns the current stack status.
@@ -150,21 +150,22 @@ func (d *DockerService) compose(args ...string) core.Result {
 	return core.Ok(nil)
 }
 
-func (d *DockerService) composeOutput(args ...string) (string, error) {
+func (d *DockerService) composeOutput(args ...string) core.Result {
 	fullArgs := append([]string{"compose", "-f", d.composeFile}, args...)
 	cmd := execabs.Command("docker", fullArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", core.Errorf("docker compose %s: %w: %s", core.Join(" ", args...), err, string(out))
+		return core.Fail(core.Errorf("docker compose %s: %w: %s", core.Join(" ", args...), err, string(out)))
 	}
-	return string(out), nil
+	return core.Ok(string(out))
 }
 
 func (d *DockerService) refreshStatus() {
-	out, err := d.composeOutput("ps", "--format", "json")
-	if err != nil {
+	outResult := d.composeOutput("ps", "--format", "json")
+	if !outResult.OK {
 		return
 	}
+	out := outResult.Value.(string)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()

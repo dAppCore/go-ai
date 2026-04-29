@@ -7,11 +7,12 @@ import (
 )
 
 func ExampleService_HandleFrame() {
-	service, _ := New(WithWorkspaceRoot(""))
+	service := core.MustCast[*Service](New(WithWorkspaceRoot("")))
 	frame := []byte("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"lang_detect\",\"arguments\":{\"\x70ath\":\"main.go\"}}}")
-	response, err := service.HandleFrame(context.Background(), frame)
+	responseResult := service.HandleFrame(context.Background(), frame)
+	response := responseResult.Value.([]byte)
 
-	core.Println(err == nil)
+	core.Println(responseResult.OK)
 	core.Println(core.Contains(string(response), `"language":"go"`))
 	// Output:
 	// true

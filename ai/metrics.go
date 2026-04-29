@@ -35,7 +35,7 @@ type Event struct {
 	Data      map[string]any `json:"data,omitempty"`
 }
 
-func metricsDir() (string, error) {
+func metricsDir() core.Result {
 	home := core.Env("CORE_HOME")
 	if home == "" {
 		home = core.Env("HOME")
@@ -47,9 +47,9 @@ func metricsDir() (string, error) {
 		home = metricsDirHomeEnv()
 	}
 	if home == "" {
-		return "", core.E("ai.metricsDir", "resolve metrics home directory", nil)
+		return core.Fail(core.E("ai.metricsDir", "resolve metrics home directory", nil))
 	}
-	return core.JoinPath(home, ".core", "ai", "metrics"), nil
+	return core.Ok(core.JoinPath(home, ".core", "ai", "metrics"))
 }
 
 func metricsDirHomeEnv() string {
@@ -64,7 +64,7 @@ func metricsFilePath(dir string, t time.Time) string {
 }
 
 // ai.Record(ai.Event{Type: "security.scan", Repo: "wailsapp/wails"})
-func Record(event Event) (err error) {
+func Record(event Event) (result core.Result) {
 	recordedAt := time.Now()
 	if event.Timestamp.IsZero() {
 		event.Timestamp = recordedAt
@@ -75,50 +75,53 @@ func Record(event Event) (err error) {
 	metricsWriteLock.Mutex.Lock()
 	defer metricsWriteLock.Mutex.Unlock()
 
-	dir, err := metricsDir()
-	if err != nil {
-		return coreerr.E("ai", "record event", err)
+	dirResult := metricsDir()
+	if !dirResult.OK {
+		return core.Fail(coreerr.E("ai", "record event", core.NewError(dirResult.Error())))
 	}
+	dir := dirResult.Value.(string)
 
 	if err := coreio.Local.EnsureDir(dir); err != nil {
-		return coreerr.E("ai", "record event", err)
+		return core.Fail(coreerr.E("ai", "record event", err))
 	}
 	if r := chmodMetricsPath(dir, metricsDirMode); !r.OK {
-		return coreerr.E("ai", "record event", core.NewError(r.Error()))
+		return core.Fail(coreerr.E("ai", "record event", core.NewError(r.Error())))
 	}
 
 	path := metricsFilePath(dir, recordedAt)
-	file, err := openMetricsEventFile(path)
-	if err != nil {
-		return coreerr.E("ai", "record event", err)
+	fileResult := openMetricsEventFile(path)
+	if !fileResult.OK {
+		return core.Fail(coreerr.E("ai", "record event", core.NewError(fileResult.Error())))
 	}
+	file := fileResult.Value.(goio.WriteCloser)
 	defer func() {
-		if closeErr := file.Close(); closeErr != nil && err == nil {
-			err = coreerr.E("ai", "record event", closeErr)
+		if closeErr := file.Close(); closeErr != nil && result.OK {
+			result = core.Fail(coreerr.E("ai", "record event", closeErr))
 		}
 	}()
 
 	data := core.JSONMarshal(event)
 	if !data.OK {
 		if marshalErr, ok := data.Value.(error); ok {
-			return coreerr.E("ai", "record event", marshalErr)
+			return core.Fail(coreerr.E("ai", "record event", marshalErr))
 		}
-		return coreerr.E("ai", "record event", nil)
+		return core.Fail(coreerr.E("ai", "record event", nil))
 	}
 
 	if _, err := file.Write(append(data.Value.([]byte), '\n')); err != nil {
-		return coreerr.E("ai", "record event", err)
+		return core.Fail(coreerr.E("ai", "record event", err))
 	}
 
-	return nil
+	return core.Ok(nil)
 }
 
-// events, err := ai.ReadEvents(time.Now().Add(-24 * time.Hour))
-func ReadEvents(since time.Time) ([]Event, error) {
-	dir, err := metricsDir()
-	if err != nil {
-		return nil, coreerr.E("ai", "read events", err)
+// eventsResult := ai.ReadEvents(time.Now().Add(-24 * time.Hour))
+func ReadEvents(since time.Time) core.Result {
+	dirResult := metricsDir()
+	if !dirResult.OK {
+		return core.Fail(coreerr.E("ai", "read events", core.NewError(dirResult.Error())))
 	}
+	dir := dirResult.Value.(string)
 
 	var events []Event
 	now := time.Now()
@@ -131,10 +134,11 @@ func ReadEvents(since time.Time) ([]Event, error) {
 	for day := scanStart; !day.After(today); day = day.AddDate(0, 0, 1) {
 		path := metricsFilePath(dir, day)
 
-		dayEvents, err := readMetricsFile(path, since)
-		if err != nil {
-			return nil, err
+		dayEventsResult := readMetricsFile(path, since)
+		if !dayEventsResult.OK {
+			return dayEventsResult
 		}
+		dayEvents := dayEventsResult.Value.([]Event)
 		events = append(events, dayEvents...)
 	}
 
@@ -142,7 +146,7 @@ func ReadEvents(since time.Time) ([]Event, error) {
 		return cmp.Compare(a.Timestamp.UnixNano(), b.Timestamp.UnixNano())
 	})
 
-	return events, nil
+	return core.Ok(events)
 }
 
 func clampMetricsSince(since, now time.Time) time.Time {
@@ -167,20 +171,20 @@ func daysScannedFromDate(start, current time.Time) int {
 	return int(current.Sub(start).Hours() / 24)
 }
 
-func readMetricsFile(path string, since time.Time) ([]Event, error) {
+func readMetricsFile(path string, since time.Time) core.Result {
 	if !coreio.Local.Exists(path) {
-		return nil, nil
+		return core.Ok([]Event(nil))
 	}
 
 	content, err := coreio.Local.Read(path)
 	if err != nil {
-		return nil, coreerr.E("ai", "read events", err)
+		return core.Fail(coreerr.E("ai", "read events", err))
 	}
 
 	var events []Event
 	for _, line := range core.Split(content, "\n") {
 		if len(line) > maxMetricsLineBytes {
-			return nil, coreerr.E("ai", "read events", core.E("ai.readMetricsFile", "metrics line exceeds maximum size", nil))
+			return core.Fail(coreerr.E("ai", "read events", core.E("ai.readMetricsFile", "metrics line exceeds maximum size", nil)))
 		}
 
 		var event Event
@@ -191,26 +195,26 @@ func readMetricsFile(path string, since time.Time) ([]Event, error) {
 			events = append(events, event)
 		}
 	}
-	return events, nil
+	return core.Ok(events)
 }
 
-func openMetricsEventFile(path string) (goio.WriteCloser, error) {
+func openMetricsEventFile(path string) core.Result {
 	if !coreio.Local.Exists(path) {
 		if err := coreio.Local.WriteMode(path, "", metricsFileMode); err != nil {
-			return nil, err
+			return core.Fail(err)
 		}
 	}
 
 	file, err := coreio.Local.Append(path)
 	if err != nil {
-		return nil, err
+		return core.Fail(err)
 	}
 
 	if r := chmodMetricsPath(path, metricsFileMode); !r.OK {
 		file.Close()
-		return nil, core.NewError(r.Error())
+		return core.Fail(core.NewError(r.Error()))
 	}
-	return file, nil
+	return core.Ok(file)
 }
 
 func chmodMetricsPath(path string, mode uint32) core.Result {

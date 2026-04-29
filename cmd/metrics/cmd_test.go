@@ -24,11 +24,12 @@ func TestParseSinceDuration_Good(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := parseSinceDuration(tc.input)
-		if err != nil {
-			t.Errorf("parseSinceDuration(%q): unexpected error: %v", tc.input, err)
+		result := parseSinceDuration(tc.input)
+		if !result.OK {
+			t.Errorf("parseSinceDuration(%q): unexpected error: %s", tc.input, result.Error())
 			continue
 		}
+		got := result.Value.(time.Duration)
 		if got != tc.want {
 			t.Errorf("parseSinceDuration(%q) = %v, want %v", tc.input, got, tc.want)
 		}
@@ -46,15 +47,15 @@ func TestParseSinceDuration_Bad(t *testing.T) {
 	}
 
 	for _, input := range bad {
-		_, err := parseSinceDuration(input)
-		if err == nil {
+		result := parseSinceDuration(input)
+		if result.OK {
 			t.Errorf("parseSinceDuration(%q): expected error, got nil", input)
 		}
 	}
 }
 
 func TestCmdMetrics_parseSinceDuration_Ugly_RejectsZeroSecondDuration(t *testing.T) {
-	if _, err := parseSinceDuration("0s"); err == nil {
+	if result := parseSinceDuration("0s"); result.OK {
 		t.Fatal("expected parseSinceDuration to reject zero-second durations")
 	}
 }
@@ -79,20 +80,20 @@ func TestAddMetricsCommand_Good_CommandInstancesKeepFlagStateLocal(t *testing.T)
 		t.Fatalf("set first --since: %v", err)
 	}
 
-	firstSince, err := firstCommand.Flags().GetDuration("since")
+	firstSince, err := firstCommand.Flags().GetString("since")
 	if err != nil {
 		t.Fatalf("get first --since: %v", err)
 	}
-	secondSince, err := secondCommand.Flags().GetDuration("since")
+	secondSince, err := secondCommand.Flags().GetString("since")
 	if err != nil {
 		t.Fatalf("get second --since: %v", err)
 	}
 
-	if firstSince != 24*time.Hour {
-		t.Fatalf("first command since = %v, want %v", firstSince, 24*time.Hour)
+	if firstSince != "24h" {
+		t.Fatalf("first command since = %v, want %v", firstSince, "24h")
 	}
-	if secondSince != 168*time.Hour {
-		t.Fatalf("second command since leaked shared state: got %v, want %v", secondSince, 168*time.Hour)
+	if secondSince != "7d" {
+		t.Fatalf("second command since leaked shared state: got %v, want %v", secondSince, "7d")
 	}
 }
 
@@ -165,32 +166,14 @@ func TestSummaryCountPairs_Bad_EmptyOrWrongTypeReturnsNil(t *testing.T) {
 	}
 }
 
-func TestCmdMetrics_sinceDurationFlagValue_String_Ugly_NilReceiverReturnsEmpty(t *testing.T) {
-	var flag *sinceDurationFlagValue
-	if got := flag.String(); got != "" {
-		t.Fatalf("nil flag String() = %q, want empty string", got)
-	}
-}
-
-func TestCmdMetrics_sinceDurationFlagValue_Set_Bad_RejectsInvalidDuration(t *testing.T) {
-	value := time.Hour
-	flag := &sinceDurationFlagValue{target: &value}
-	if err := flag.Set("bad"); err == nil {
-		t.Fatal("expected Set to reject invalid durations")
-	}
-	if value != time.Hour {
-		t.Fatalf("Set should not mutate target on failure, got %v", value)
-	}
-}
-
 func TestRunMetrics_Good_PrintsHumanSummary(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("CORE_HOME", "")
 	t.Setenv("DIR_HOME", "")
 	t.Setenv("HOME", tempHome)
 
-	if err := ai.Record(ai.Event{Type: "scan", Repo: "core/go-ai", AgentID: "agent-1"}); err != nil {
-		t.Fatalf("Record: %v", err)
+	if result := ai.Record(ai.Event{Type: "scan", Repo: "core/go-ai", AgentID: "agent-1"}); !result.OK {
+		t.Fatalf("Record: %s", result.Error())
 	}
 
 	output := captureStdout(t, func() {
@@ -212,8 +195,8 @@ func TestRunMetrics_Bad_PrintsJSONSummary(t *testing.T) {
 	t.Setenv("DIR_HOME", "")
 	t.Setenv("HOME", tempHome)
 
-	if err := ai.Record(ai.Event{Type: "deps", Repo: "core/go-rag", AgentID: "agent-2"}); err != nil {
-		t.Fatalf("Record: %v", err)
+	if result := ai.Record(ai.Event{Type: "deps", Repo: "core/go-rag", AgentID: "agent-2"}); !result.OK {
+		t.Fatalf("Record: %s", result.Error())
 	}
 
 	output := captureStdout(t, func() {
@@ -266,10 +249,11 @@ func TestMarshalMetricsSummaryJSON_Good_CompactOutput(t *testing.T) {
 		"recent":  []any{},
 	}
 
-	got, err := marshalMetricsSummaryJSON(summary)
-	if err != nil {
-		t.Fatalf("marshalMetricsSummaryJSON: %v", err)
+	result := marshalMetricsSummaryJSON(summary)
+	if !result.OK {
+		t.Fatalf("marshalMetricsSummaryJSON: %s", result.Error())
 	}
+	got := result.Value.([]byte)
 
 	var decoded any
 	if r := core.JSONUnmarshal(got, &decoded); !r.OK {
@@ -281,81 +265,6 @@ func TestMarshalMetricsSummaryJSON_Good_CompactOutput(t *testing.T) {
 }
 
 // --- AX-7 canonical triplets ---
-
-func TestCmd_DurationFlagValue_String_Good(t *core.T) {
-	value := 2 * time.Hour
-	flag := &sinceDurationFlagValue{target: &value}
-	got := flag.String()
-
-	core.AssertEqual(t, "2h0m0s", got)
-}
-
-func TestCmd_DurationFlagValue_String_Bad(t *core.T) {
-	flag := &sinceDurationFlagValue{}
-	got := flag.String()
-	want := ""
-
-	core.AssertEqual(t, want, got)
-}
-
-func TestCmd_DurationFlagValue_String_Ugly(t *core.T) {
-	var flag *sinceDurationFlagValue
-	got := flag.String()
-	want := ""
-
-	core.AssertEqual(t, want, got)
-}
-
-func TestCmd_DurationFlagValue_Set_Good(t *core.T) {
-	value := time.Duration(0)
-	flag := &sinceDurationFlagValue{target: &value}
-	err := flag.Set("2d")
-
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, 48*time.Hour, value)
-}
-
-func TestCmd_DurationFlagValue_Set_Bad(t *core.T) {
-	value := time.Hour
-	flag := &sinceDurationFlagValue{target: &value}
-	err := flag.Set("bad")
-
-	core.AssertError(t, err)
-	core.AssertEqual(t, time.Hour, value)
-}
-
-func TestCmd_DurationFlagValue_Set_Ugly(t *core.T) {
-	value := time.Hour
-	flag := &sinceDurationFlagValue{target: &value}
-	err := flag.Set("0s")
-
-	core.AssertError(t, err)
-	core.AssertEqual(t, time.Hour, value)
-}
-
-func TestCmd_DurationFlagValue_Type_Good(t *core.T) {
-	value := time.Minute
-	flag := &sinceDurationFlagValue{target: &value}
-	got := flag.Type()
-
-	core.AssertEqual(t, "duration", got)
-}
-
-func TestCmd_DurationFlagValue_Type_Bad(t *core.T) {
-	flag := &sinceDurationFlagValue{}
-	got := flag.Type()
-	want := "duration"
-
-	core.AssertEqual(t, want, got)
-}
-
-func TestCmd_DurationFlagValue_Type_Ugly(t *core.T) {
-	var flag *sinceDurationFlagValue
-	got := flag.Type()
-	want := "duration"
-
-	core.AssertEqual(t, want, got)
-}
 
 func TestCmd_AddMetricsCommand_Good(t *core.T) {
 	root := &cli.Command{Use: "core"}

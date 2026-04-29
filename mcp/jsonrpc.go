@@ -7,17 +7,18 @@ import (
 )
 
 type rpcRequest struct {
-	JSONRPC string     `json:"jsonrpc"`
-	ID      RawMessage `json:"id,omitempty"`
-	Method  string     `json:"method"`
-	Params  RawMessage `json:"params,omitempty"`
+	JSONRPC string
+	ID      RawMessage
+	HasID   bool
+	Method  string
+	Params  RawMessage
 }
 
 type rpcResponse struct {
-	JSONRPC string     `json:"jsonrpc"`
-	ID      RawMessage `json:"id"`
-	Result  any        `json:"result,omitempty"`
-	Error   *rpcError  `json:"error,omitempty"`
+	JSONRPC string    `json:"jsonrpc"`
+	ID      any       `json:"id"`
+	Result  any       `json:"result,omitempty"`
+	Error   *rpcError `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -26,52 +27,57 @@ type rpcError struct {
 }
 
 type callToolParams struct {
-	Name      string     `json:"name"`
-	Arguments RawMessage `json:"arguments,omitempty"`
+	Name      string
+	Arguments RawMessage
 }
 
 // HandleFrame handles one newline-delimited JSON-RPC frame.
-func (s *Service) HandleFrame(ctx context.Context, frame []byte) ([]byte, error) {
+func (s *Service) HandleFrame(ctx context.Context, frame []byte) core.Result {
 	frame = []byte(core.Trim(string(frame)))
 	if len(frame) == 0 {
-		return nil, nil
+		return core.Ok([]byte(nil))
 	}
 
-	var req rpcRequest
-	if r := core.JSONUnmarshal(frame, &req); !r.OK {
+	reqResult := decodeRPCRequest(frame)
+	if !reqResult.OK {
 		response := marshalRPCResponse(rpcResponse{
 			JSONRPC: "2.0",
-			ID:      RawMessage("null"),
+			ID:      nil,
 			Error:   &rpcError{Code: -32700, Message: "parse error"},
 		})
-		return response, core.NewError(r.Error())
+		return core.Ok(response)
 	}
+	req := reqResult.Value.(rpcRequest)
 
 	if req.JSONRPC != "2.0" || req.Method == "" {
 		response := s.errorResponse(req.ID, -32600, "invalid request")
-		return response, errInvalidRequest
+		return core.Ok(response)
 	}
 
-	result, err := s.handleMethod(ctx, req)
-	if len(req.ID) == 0 {
-		return nil, err
+	result := s.handleMethod(ctx, req)
+	if !req.HasID {
+		if !result.OK {
+			return result
+		}
+		return core.Ok([]byte(nil))
 	}
-	if err != nil {
+	if !result.OK {
+		err, _ := resultError(result).(error)
 		response := s.errorResponse(req.ID, rpcCodeForError(err), err.Error())
-		return response, err
+		return core.Ok(response)
 	}
 
-	return marshalRPCResponse(rpcResponse{
+	return core.Ok(marshalRPCResponse(rpcResponse{
 		JSONRPC: "2.0",
-		ID:      req.ID,
-		Result:  result,
-	}), nil
+		ID:      rawMessageValue(req.ID),
+		Result:  result.Value,
+	}))
 }
 
-func (s *Service) handleMethod(ctx context.Context, req rpcRequest) (any, error) {
+func (s *Service) handleMethod(ctx context.Context, req rpcRequest) core.Result {
 	switch req.Method {
 	case "initialize":
-		return map[string]any{
+		return core.Ok(map[string]any{
 			"protocolVersion": "2024-11-05",
 			"serverInfo": map[string]any{
 				"name":    serverName,
@@ -80,55 +86,56 @@ func (s *Service) handleMethod(ctx context.Context, req rpcRequest) (any, error)
 			"capabilities": map[string]any{
 				"tools": map[string]any{"listChanged": false},
 			},
-		}, nil
+		})
 	case "notifications/initialized":
-		return nil, nil
+		return core.Ok(nil)
 	case "ping":
-		return map[string]any{}, nil
+		return core.Ok(map[string]any{})
 	case "tools/list":
-		return map[string]any{"tools": s.Tools()}, nil
+		return core.Ok(map[string]any{"tools": s.Tools()})
 	case "tools/call":
 		return s.handleToolCall(ctx, req.Params)
 	default:
-		return nil, core.Errorf("method not found: %s", req.Method)
+		return core.Fail(core.Errorf("method not found: %s", req.Method))
 	}
 }
 
-func (s *Service) handleToolCall(ctx context.Context, raw RawMessage) (any, error) {
-	var params callToolParams
+func (s *Service) handleToolCall(ctx context.Context, raw RawMessage) core.Result {
 	raw = RawMessage(core.Trim(string(raw)))
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil, core.Errorf("%w: missing tools/call params", errInvalidParams)
+		return core.Fail(core.Errorf("%w: missing tools/call params", errInvalidParams))
 	}
-	if r := core.JSONUnmarshal([]byte(raw), &params); !r.OK {
-		return nil, core.Errorf("%w: %s", errInvalidParams, r.Error())
+	paramsResult := decodeCallToolParams(raw)
+	if !paramsResult.OK {
+		return paramsResult
 	}
+	params := paramsResult.Value.(callToolParams)
 	params.Name = core.Trim(params.Name)
 	if params.Name == "" {
-		return nil, core.Errorf("%w: tool name is required", errInvalidParams)
+		return core.Fail(core.Errorf("%w: tool name is required", errInvalidParams))
 	}
 	tool, ok := s.tools[params.Name]
 	if !ok {
-		return nil, core.Errorf("tool not found: %s", params.Name)
+		return core.Fail(core.Errorf("tool not found: %s", params.Name))
 	}
 	if len(core.Trim(string(params.Arguments))) == 0 {
 		params.Arguments = RawMessage("{}")
 	}
 
-	output, err := tool.Handler(ctx, params.Arguments)
-	if err != nil {
-		return nil, err
+	outputResult := tool.Handler(ctx, params.Arguments)
+	if !outputResult.OK {
+		return outputResult
 	}
 
-	outputJSON := core.JSONMarshalString(output)
-	return map[string]any{
+	outputJSON := core.JSONMarshalString(outputResult.Value)
+	return core.Ok(map[string]any{
 		"content": []map[string]any{{
 			"type": "text",
 			"text": string(outputJSON),
 		}},
-		"structuredContent": output,
+		"structuredContent": outputResult.Value,
 		"isError":           false,
-	}, nil
+	})
 }
 
 func (s *Service) errorResponse(id RawMessage, code int, message string) []byte {
@@ -137,9 +144,77 @@ func (s *Service) errorResponse(id RawMessage, code int, message string) []byte 
 	}
 	return marshalRPCResponse(rpcResponse{
 		JSONRPC: "2.0",
-		ID:      id,
+		ID:      rawMessageValue(id),
 		Error:   &rpcError{Code: code, Message: message},
 	})
+}
+
+func decodeRPCRequest(frame []byte) core.Result {
+	var fields map[string]any
+	if r := core.JSONUnmarshal(frame, &fields); !r.OK {
+		return r
+	}
+	req := rpcRequest{}
+	if value, ok := fields["jsonrpc"].(string); ok {
+		req.JSONRPC = value
+	}
+	if value, ok := fields["method"].(string); ok {
+		req.Method = value
+	}
+	if value, ok := fields["id"]; ok {
+		req.HasID = true
+		if raw := core.JSONMarshal(value); raw.OK {
+			req.ID = RawMessage(raw.Value.([]byte))
+		} else {
+			return raw
+		}
+	}
+	if value, ok := fields["params"]; ok {
+		if raw := core.JSONMarshal(value); raw.OK {
+			req.Params = RawMessage(raw.Value.([]byte))
+		} else {
+			return raw
+		}
+	}
+	return core.Ok(req)
+}
+
+func decodeCallToolParams(raw RawMessage) core.Result {
+	var fields map[string]any
+	if r := core.JSONUnmarshal([]byte(raw), &fields); !r.OK {
+		return core.Fail(core.Errorf("%w: %s", errInvalidParams, r.Error()))
+	}
+	params := callToolParams{}
+	if value, ok := fields["name"].(string); ok {
+		params.Name = value
+	}
+	if value, ok := fields["arguments"]; ok {
+		rawArgs := core.JSONMarshal(value)
+		if !rawArgs.OK {
+			return rawArgs
+		}
+		params.Arguments = RawMessage(rawArgs.Value.([]byte))
+	}
+	return core.Ok(params)
+}
+
+func rawMessageValue(raw RawMessage) any {
+	raw = RawMessage(core.Trim(string(raw)))
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var value any
+	if r := core.JSONUnmarshal([]byte(raw), &value); r.OK {
+		return value
+	}
+	return nil
+}
+
+func resultError(r core.Result) any {
+	if err, ok := r.Value.(error); ok {
+		return err
+	}
+	return core.NewError(r.Error())
 }
 
 func rpcCodeForError(err error) int {
@@ -160,7 +235,7 @@ func marshalRPCResponse(response rpcResponse) []byte {
 	if !data.OK {
 		fallback := core.JSONMarshal(rpcResponse{
 			JSONRPC: "2.0",
-			ID:      RawMessage("null"),
+			ID:      nil,
 			Error:   &rpcError{Code: -32603, Message: "internal error"},
 		})
 		if !fallback.OK {

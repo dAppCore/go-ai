@@ -7,8 +7,7 @@ import (
 // --- AX-7 canonical triplets ---
 
 func TestTransportTcp_Service_ServeTCP_Good(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	addr := reserveTCPAddr(t)
 	ctx, cancel := core.WithCancel(core.Background())
 
@@ -20,8 +19,7 @@ func TestTransportTcp_Service_ServeTCP_Good(t *core.T) {
 }
 
 func TestTransportTcp_Service_ServeTCP_Bad(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	r := service.ServeTCP(core.Background(), "127.0.0.1:bad")
 
 	core.AssertFalse(t, r.OK)
@@ -29,8 +27,7 @@ func TestTransportTcp_Service_ServeTCP_Bad(t *core.T) {
 }
 
 func TestTransportTcp_Service_ServeTCP_Ugly(t *core.T) {
-	service, err := New(WithWorkspaceRoot(t.TempDir()))
-	core.RequireNoError(t, err)
+	service := core.MustCast[*Service](New(WithWorkspaceRoot(t.TempDir())))
 	r := service.ServeTCP(core.Background(), "256.256.256.256:1")
 
 	core.AssertFalse(t, r.OK)
