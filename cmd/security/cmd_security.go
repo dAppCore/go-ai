@@ -7,9 +7,9 @@ import (
 	"slices"
 	"time"
 
+	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/core"
 	"dappco.re/go/i18n"
 	"dappco.re/go/io"
 	coreerr "dappco.re/go/log"
@@ -31,7 +31,9 @@ var (
 )
 
 func recordSecurityMetricsEvent(event ai.Event) {
-	_ = ai.Record(event)
+	if err := ai.Record(event); err != nil {
+		return
+	}
 }
 
 // SecuritySelectionOptions{RepositoryName: "go-ai", SeverityFilter: "high", JSONOutput: true}
@@ -160,6 +162,9 @@ type SecretScanningAlert struct {
 
 func loadRegistry(registryPath string) (*repos.Registry, error) {
 	if registryPath != "" {
+		if !io.Local.Exists(registryPath) {
+			return nil, cli.Err("registry not found: %s", registryPath)
+		}
 		registry, err := repos.LoadRegistry(io.Local, registryPath)
 		if err != nil {
 			return nil, cli.Wrap(err, "load registry")
@@ -267,8 +272,8 @@ func trimGitHubJSONBytes(data []byte) []byte {
 	return []byte(core.Trim(string(data)))
 }
 
-func coreResultError(result core.Result) error {
-	if err, ok := result.Value.(error); ok {
+func coreResultError(value any) error {
+	if err, ok := value.(error); ok {
 		return err
 	}
 	return core.E("security.core.result", "operation failed", nil)
@@ -282,7 +287,7 @@ func decodeGitHubArrayItems(output []byte) ([]githubRawMessage, error) {
 
 	var pages []githubRawMessage
 	if result := core.JSONUnmarshal(trimmed, &pages); !result.OK {
-		return nil, coreerr.E("security", "parse GitHub API response", coreResultError(result))
+		return nil, coreerr.E("security", "parse GitHub API response", coreResultError(result.Value))
 	}
 
 	items := make([]githubRawMessage, 0, len(pages))
@@ -299,7 +304,7 @@ func decodeGitHubArrayItems(output []byte) ([]githubRawMessage, error) {
 
 		var pageItems []githubRawMessage
 		if result := core.JSONUnmarshal(pageData, &pageItems); !result.OK {
-			return nil, coreerr.E("security", "parse GitHub API page", coreResultError(result))
+			return nil, coreerr.E("security", "parse GitHub API page", coreResultError(result.Value))
 		}
 		items = append(items, pageItems...)
 	}
@@ -317,7 +322,7 @@ func decodeDependabotAlerts(output []byte) ([]DependabotAlert, error) {
 	for _, item := range items {
 		var alert DependabotAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
-			return nil, coreerr.E("security", "parse dependabot alert", coreResultError(result))
+			return nil, coreerr.E("security", "parse dependabot alert", coreResultError(result.Value))
 		}
 		alerts = append(alerts, alert)
 	}
@@ -334,7 +339,7 @@ func decodeCodeScanningAlerts(output []byte) ([]CodeScanningAlert, error) {
 	for _, item := range items {
 		var alert CodeScanningAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
-			return nil, coreerr.E("security", "parse code scanning alert", coreResultError(result))
+			return nil, coreerr.E("security", "parse code scanning alert", coreResultError(result.Value))
 		}
 		alerts = append(alerts, alert)
 	}
@@ -351,7 +356,7 @@ func decodeSecretScanningAlerts(output []byte) ([]SecretScanningAlert, error) {
 	for _, item := range items {
 		var alert SecretScanningAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
-			return nil, coreerr.E("security", "parse secret scanning alert", coreResultError(result))
+			return nil, coreerr.E("security", "parse secret scanning alert", coreResultError(result.Value))
 		}
 		alerts = append(alerts, alert)
 	}
@@ -369,7 +374,7 @@ func decodeGitHubRepositoryNames(output []byte) ([]string, error) {
 	for _, item := range items {
 		var repository githubRepoResponse
 		if result := core.JSONUnmarshal(item, &repository); !result.OK {
-			return nil, coreerr.E("security", "parse GitHub repository", coreResultError(result))
+			return nil, coreerr.E("security", "parse GitHub repository", coreResultError(result.Value))
 		}
 		if repository.FullName == "" {
 			continue

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -29,7 +30,9 @@ func (s *Service) ServeTCP(ctx context.Context, addr string) error {
 
 	go func() {
 		<-ctx.Done()
-		_ = listener.Close()
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			fmt.Fprintln(os.Stderr, "MCP TCP listener close error:", err)
+		}
 	}()
 
 	for {
@@ -62,7 +65,11 @@ func (s *Service) serveConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	go func() {
 		<-ctx.Done()
-		_ = conn.Close()
+		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			fmt.Fprintln(os.Stderr, "MCP TCP connection close error:", err)
+		}
 	}()
-	_ = serveReaderWriter(ctx, conn, conn, s.HandleFrame)
+	if err := serveReaderWriter(ctx, conn, conn, s.HandleFrame); err != nil && !errors.Is(err, net.ErrClosed) {
+		fmt.Fprintln(os.Stderr, "MCP TCP connection error:", err)
+	}
 }

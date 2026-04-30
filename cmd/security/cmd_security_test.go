@@ -229,6 +229,13 @@ func TestCmdSecurity_recordSecurityMetricsEvent_Ugly_DoesNotPanic(t *testing.T) 
 	// recordSecurityMetricsEvent intentionally ignores write errors, so this test
 	// only verifies that the wrapper stays no-op from the caller's perspective.
 	recordSecurityMetricsEvent(ai.Event{Type: "security.alerts"})
+	events, err := ai.ReadEvents(time.Now().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("ReadEvents after recordSecurityMetricsEvent: %v", err)
+	}
+	if len(events) != 1 || events[0].Type != "security.alerts" {
+		t.Fatalf("unexpected metrics events: %+v", events)
+	}
 }
 
 func TestCmdSecurity_runGitHubAPI_Good_ReturnsStdout(t *testing.T) {

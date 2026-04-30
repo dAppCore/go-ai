@@ -619,7 +619,9 @@ func (p *managedProcess) wait() {
 		}
 	}
 	if p.stdin != nil {
-		_ = p.stdin.Close()
+		if closeErr := p.stdin.Close(); closeErr != nil && p.errText == "" {
+			p.errText = closeErr.Error()
+		}
 	}
 }
 

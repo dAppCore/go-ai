@@ -1,8 +1,8 @@
 package security
 
 import (
+	"dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/core"
 	"dappco.re/go/scm/repos"
 )
 
@@ -88,11 +88,23 @@ func isSafeGitHubPathComponent(value string) bool {
 func selectRegistryRepos(registry *repos.Registry, repoFilter string) []*repos.Repo {
 	if repoFilter != "" {
 		if repository, ok := registry.Get(repoFilter); ok {
-			return []*repos.Repo{repository}
+			return []*repos.Repo{securityRepoView(repository)}
 		}
 		return nil
 	}
-	return registry.List()
+	repositories := registry.List()
+	selected := make([]*repos.Repo, 0, len(repositories))
+	for _, repository := range repositories {
+		selected = append(selected, securityRepoView(repository))
+	}
+	return selected
+}
+
+func securityRepoView(repository *repos.Repo) *repos.Repo {
+	if repository == nil {
+		return nil
+	}
+	return &repos.Repo{Name: repository.Name}
 }
 
 func securitySectionLabel(label, externalTarget string) string {

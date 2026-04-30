@@ -8,7 +8,7 @@ import (
 	"testing"       // Note: intrinsic — Go test entry points and assertions
 	"time"          // Note: test-only — fixes timestamps and read windows for metrics behavior
 
-	"dappco.re/go/core"
+	"dappco.re/go"
 	coreio "dappco.re/go/io"
 )
 
