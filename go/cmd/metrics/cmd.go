@@ -12,7 +12,6 @@ import (
 	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/i18n"
 	coreerr "dappco.re/go/log"
 )
 
@@ -36,8 +35,8 @@ func AddMetricsCommand(parent *cli.Command) {
 
 	metricsCommand := &cli.Command{
 		Use:   "metrics",
-		Short: i18n.T("cmd.ai.metrics.short"),
-		Long:  i18n.T("cmd.ai.metrics.long"),
+		Short: cli.T("cmd.ai.metrics.short"),
+		Long:  cli.T("cmd.ai.metrics.long"),
 		RunE: func(cmd *cli.Command, args []string) error {
 			durationResult := parseSinceDuration(sinceInput)
 			if !durationResult.OK {
@@ -58,8 +57,8 @@ func AddMetricsCommand(parent *cli.Command) {
 		},
 	}
 
-	metricsCommand.Flags().StringVar(&sinceInput, "since", sinceInput, i18n.T("cmd.ai.metrics.flag.since"))
-	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, i18n.T("common.flag.json"))
+	metricsCommand.Flags().StringVar(&sinceInput, "since", sinceInput, cli.T("cmd.ai.metrics.flag.since"))
+	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, cli.T("common.flag.json"))
 
 	parent.AddCommand(metricsCommand)
 }
@@ -134,7 +133,7 @@ func runMetrics(options MetricsCommandOptions) core.Result {
 	}
 
 	if len(events) == 0 {
-		cli.Text(i18n.T("cmd.ai.metrics.none_found"))
+		cli.Text(cli.T("cmd.ai.metrics.none_found"))
 	}
 
 	return core.Ok(nil)

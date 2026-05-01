@@ -8,7 +8,6 @@ import (
 	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/i18n"
 	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
 	execabs "golang.org/x/sys/execabs"
@@ -40,8 +39,8 @@ func addJobsCommand(parent *cli.Command) {
 
 	cmd := &cli.Command{
 		Use:   "jobs",
-		Short: i18n.T("cmd.security.jobs.short"),
-		Long:  i18n.T("cmd.security.jobs.long"),
+		Short: cli.T("cmd.security.jobs.short"),
+		Long:  cli.T("cmd.security.jobs.long"),
 		RunE: func(c *cli.Command, args []string) error {
 			r := runJobs(*commandOptions)
 			if !r.OK {
@@ -52,11 +51,11 @@ func addJobsCommand(parent *cli.Command) {
 		},
 	}
 
-	cmd.Flags().StringVar(&commandOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&commandOptions.Targets, "targets", "", i18n.T("cmd.security.jobs.flag.targets"))
-	cmd.Flags().StringVar(&commandOptions.IssueRepository, "issue-repo", "", i18n.T("cmd.security.jobs.flag.issue_repo"))
-	cmd.Flags().BoolVar(&commandOptions.DryRun, "dry-run", false, i18n.T("cmd.security.jobs.flag.dry_run"))
-	cmd.Flags().IntVar(&commandOptions.WorkerCount, "copies", commandOptions.WorkerCount, i18n.T("cmd.security.jobs.flag.copies"))
+	cmd.Flags().StringVar(&commandOptions.RegistryPath, "registry", "", cli.T("common.flag.registry"))
+	cmd.Flags().StringVar(&commandOptions.Targets, "targets", "", cli.T("cmd.security.jobs.flag.targets"))
+	cmd.Flags().StringVar(&commandOptions.IssueRepository, "issue-repo", "", cli.T("cmd.security.jobs.flag.issue_repo"))
+	cmd.Flags().BoolVar(&commandOptions.DryRun, "dry-run", false, cli.T("cmd.security.jobs.flag.dry_run"))
+	cmd.Flags().IntVar(&commandOptions.WorkerCount, "copies", commandOptions.WorkerCount, cli.T("cmd.security.jobs.flag.copies"))
 
 	parent.AddCommand(cmd)
 }

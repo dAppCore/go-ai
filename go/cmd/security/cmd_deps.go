@@ -5,7 +5,6 @@ import (
 
 	"dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/i18n"
 )
 
 func addDepsCommand(parent *cli.Command) {
@@ -13,8 +12,8 @@ func addDepsCommand(parent *cli.Command) {
 
 	cmd := &cli.Command{
 		Use:   "deps",
-		Short: i18n.T("cmd.security.deps.short"),
-		Long:  i18n.T("cmd.security.deps.long"),
+		Short: cli.T("cmd.security.deps.short"),
+		Long:  cli.T("cmd.security.deps.long"),
 		RunE: func(c *cli.Command, args []string) error {
 			r := runDeps(*selectionOptions)
 			if !r.OK {
@@ -25,11 +24,11 @@ func addDepsCommand(parent *cli.Command) {
 		},
 	}
 
-	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", i18n.T("cmd.security.flag.severity"))
-	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", cli.T("common.flag.registry"))
+	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", cli.T("cmd.security.flag.repo"))
+	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", cli.T("cmd.security.flag.severity"))
+	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, cli.T("common.flag.json"))
+	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", cli.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }
