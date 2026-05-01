@@ -5,7 +5,6 @@ import (
 
 	"dappco.re/go"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/i18n"
 )
 
 func addScanCommand(parent *cli.Command) {
@@ -13,8 +12,8 @@ func addScanCommand(parent *cli.Command) {
 
 	cmd := &cli.Command{
 		Use:   "scan",
-		Short: i18n.T("cmd.security.scan.short"),
-		Long:  i18n.T("cmd.security.scan.long"),
+		Short: cli.T("cmd.security.scan.short"),
+		Long:  cli.T("cmd.security.scan.long"),
 		RunE: func(c *cli.Command, args []string) error {
 			r := runScan(*commandOptions)
 			if !r.OK {
@@ -25,12 +24,12 @@ func addScanCommand(parent *cli.Command) {
 		},
 	}
 
-	cmd.Flags().StringVar(&commandOptions.Selection.RegistryPath, "registry", "", i18n.T("common.flag.registry"))
-	cmd.Flags().StringVar(&commandOptions.Selection.RepositoryName, "repo", "", i18n.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&commandOptions.Selection.SeverityFilter, "severity", "", i18n.T("cmd.security.flag.severity"))
-	cmd.Flags().StringVar(&commandOptions.ToolName, "tool", "", i18n.T("cmd.security.scan.flag.tool"))
-	cmd.Flags().BoolVar(&commandOptions.Selection.JSONOutput, "json", false, i18n.T("common.flag.json"))
-	cmd.Flags().StringVar(&commandOptions.Selection.ExternalTarget, "target", "", i18n.T("cmd.security.flag.target"))
+	cmd.Flags().StringVar(&commandOptions.Selection.RegistryPath, "registry", "", cli.T("common.flag.registry"))
+	cmd.Flags().StringVar(&commandOptions.Selection.RepositoryName, "repo", "", cli.T("cmd.security.flag.repo"))
+	cmd.Flags().StringVar(&commandOptions.Selection.SeverityFilter, "severity", "", cli.T("cmd.security.flag.severity"))
+	cmd.Flags().StringVar(&commandOptions.ToolName, "tool", "", cli.T("cmd.security.scan.flag.tool"))
+	cmd.Flags().BoolVar(&commandOptions.Selection.JSONOutput, "json", false, cli.T("common.flag.json"))
+	cmd.Flags().StringVar(&commandOptions.Selection.ExternalTarget, "target", "", cli.T("cmd.security.flag.target"))
 
 	parent.AddCommand(cmd)
 }

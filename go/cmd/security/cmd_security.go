@@ -9,7 +9,6 @@ import (
 	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	"dappco.re/go/i18n"
 	"dappco.re/go/io"
 	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
@@ -72,8 +71,8 @@ func AddSecurityCommands(root *cli.Command) {
 
 	securityCommand := &cli.Command{
 		Use:   "security",
-		Short: i18n.T("cmd.security.short"),
-		Long:  i18n.T("cmd.security.long"),
+		Short: cli.T("cmd.security.short"),
+		Long:  cli.T("cmd.security.long"),
 	}
 
 	addAlertsCommand(securityCommand)
@@ -185,7 +184,7 @@ func loadRegistry(registryPath string) core.Result {
 
 func checkGitHubCLI() core.Result {
 	if _, err := execabs.LookPath("gh"); err != nil {
-		return core.Fail(coreerr.E("security", i18n.T("error.gh_not_found"), nil))
+		return core.Fail(coreerr.E("security", cli.T("error.gh_not_found"), nil))
 	}
 	return core.Ok(nil)
 }
