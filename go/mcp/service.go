@@ -11,6 +11,7 @@ import (
 	"time"
 
 	core "dappco.re/go"
+	"dappco.re/go/inference"
 )
 
 const (
@@ -91,6 +92,9 @@ type Service struct {
 	startedAt      time.Time
 	processService any
 	wsHub          any
+	mlModel        inference.TextModel
+	mlBackend      string
+	mlModelName    string
 }
 
 // New constructs a Service and registers the built-in 49-tool inventory.
@@ -201,6 +205,17 @@ func WithProcessService(ps any) Option {
 func WithWSHub(hub any) Option {
 	return func(s *Service) core.Result {
 		s.wsHub = hub
+		return core.Ok(nil)
+	}
+}
+
+// WithInferenceModel routes the ml_generate tool through a configured
+// inference.TextModel.
+func WithInferenceModel(model inference.TextModel, backendName, modelName string) Option {
+	return func(s *Service) core.Result {
+		s.mlModel = model
+		s.mlBackend = core.Trim(backendName)
+		s.mlModelName = core.Trim(modelName)
 		return core.Ok(nil)
 	}
 }

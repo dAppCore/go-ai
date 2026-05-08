@@ -165,6 +165,27 @@ func (s *Service) mlGenerate(ctx context.Context, input MLGenerateInput) core.Re
 	if core.Trim(input.Prompt) == "" {
 		return core.Fail(core.Errorf("%w: prompt is required", errInvalidParams))
 	}
+	if s != nil && s.mlModel != nil {
+		opts := []inference.GenerateOption{}
+		if input.MaxTokens > 0 {
+			opts = append(opts, inference.WithMaxTokens(input.MaxTokens))
+		}
+		if input.Temperature != 0 {
+			opts = append(opts, inference.WithTemperature(float32(input.Temperature)))
+		}
+		parts := []string{}
+		for token := range s.mlModel.Generate(ctx, input.Prompt, opts...) {
+			parts = append(parts, token.Text)
+		}
+		if err := s.mlModel.Err(); err != nil {
+			return core.Fail(core.Errorf("ml_generate: %w", err))
+		}
+		return core.Ok(MLGenerateOutput{
+			Response: core.Join("", parts...),
+			Backend:  defaultString(input.Backend, defaultString(s.mlBackend, "inference")),
+			Model:    defaultString(input.Model, s.mlModelName),
+		})
+	}
 	backend := defaultString(input.Backend, "builtin")
 	response := "ML generation backend is not configured in this daemon."
 	return core.Ok(MLGenerateOutput{Response: response, Backend: backend, Model: input.Model})

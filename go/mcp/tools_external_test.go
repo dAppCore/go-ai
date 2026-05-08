@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"iter"
 
 	core "dappco.re/go"
 	"dappco.re/go/inference"
@@ -78,3 +79,64 @@ func TestToolsExternal_MLBackendsUsesInferenceCapabilities_Good(t *core.T) {
 	core.AssertContains(t, found.Capabilities, string(inference.CapabilityGenerate))
 	core.AssertContains(t, found.Capabilities, string(inference.CapabilityProbeEvents))
 }
+
+func TestToolsExternal_MLGenerate_Good_UsesConfiguredInferenceModel(t *core.T) {
+	model := &generateModel{}
+	serviceResult := New(WithInferenceModel(model, "external-openai", "gpt-test"))
+	core.AssertTrue(t, serviceResult.OK)
+	service := serviceResult.Value.(*Service)
+
+	result := service.mlGenerate(context.Background(), MLGenerateInput{
+		Prompt:      "hello",
+		Model:       "gpt-test",
+		Temperature: 0.25,
+		MaxTokens:   8,
+	})
+	core.AssertTrue(t, result.OK)
+
+	output := result.Value.(MLGenerateOutput)
+	core.AssertEqual(t, "provider answer", output.Response)
+	core.AssertEqual(t, "external-openai", output.Backend)
+	core.AssertEqual(t, "gpt-test", output.Model)
+	core.AssertEqual(t, "hello", model.prompt)
+	core.AssertEqual(t, 8, model.cfg.MaxTokens)
+	core.AssertEqual(t, float32(0.25), model.cfg.Temperature)
+}
+
+type generateModel struct {
+	prompt string
+	cfg    inference.GenerateConfig
+	err    error
+}
+
+func (m *generateModel) Generate(ctx context.Context, prompt string, opts ...inference.GenerateOption) iter.Seq[inference.Token] {
+	m.prompt = prompt
+	m.cfg = inference.ApplyGenerateOpts(opts)
+	return func(yield func(inference.Token) bool) {
+		yield(inference.Token{Text: "provider answer"})
+	}
+}
+
+func (m *generateModel) Chat(context.Context, []inference.Message, ...inference.GenerateOption) iter.Seq[inference.Token] {
+	return func(func(inference.Token) bool) {}
+}
+
+func (m *generateModel) Classify(context.Context, []string, ...inference.GenerateOption) ([]inference.ClassifyResult, error) {
+	return nil, core.AnError
+}
+
+func (m *generateModel) BatchGenerate(context.Context, []string, ...inference.GenerateOption) ([]inference.BatchResult, error) {
+	return nil, core.AnError
+}
+
+func (m *generateModel) ModelType() string { return "external" }
+
+func (m *generateModel) Info() inference.ModelInfo {
+	return inference.ModelInfo{Architecture: "external"}
+}
+
+func (m *generateModel) Metrics() inference.GenerateMetrics { return inference.GenerateMetrics{} }
+
+func (m *generateModel) Err() error { return m.err }
+
+func (m *generateModel) Close() error { return nil }

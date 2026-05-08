@@ -13,5 +13,6 @@ use (
 	./external/go-io/go
 	./external/go-log/go
 	./external/go-rag/go
+	./external/go-ratelimit/go
 	./external/go-scm/go
 )

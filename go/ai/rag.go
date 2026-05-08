@@ -17,10 +17,31 @@ const (
 )
 
 var (
-	newQdrantClient = rag.NewQdrantClient
-	newOllamaClient = rag.NewOllamaClient
-	runRAGQuery     = rag.Query
-	closeQdrant     = func(client *rag.QdrantClient) error { return client.Close() }
+	newQdrantClient = func(cfg rag.QdrantConfig) (*rag.QdrantClient, error) {
+		result := rag.NewQdrantClient(cfg)
+		if !result.OK {
+			return nil, core.NewError(result.Error())
+		}
+		client, _ := result.Value.(*rag.QdrantClient)
+		return client, nil
+	}
+	newOllamaClient = func(cfg rag.OllamaConfig) (*rag.OllamaClient, error) {
+		result := rag.NewOllamaClient(cfg)
+		if !result.OK {
+			return nil, core.NewError(result.Error())
+		}
+		client, _ := result.Value.(*rag.OllamaClient)
+		return client, nil
+	}
+	runRAGQuery = func(ctx context.Context, store rag.VectorStore, embedder rag.Embedder, query string, cfg rag.QueryConfig) ([]rag.QueryResult, error) {
+		result := rag.Query(ctx, store, embedder, query, cfg)
+		if !result.OK {
+			return nil, core.NewError(result.Error())
+		}
+		results, _ := result.Value.([]rag.QueryResult)
+		return results, nil
+	}
+	closeQdrant = func(client *rag.QdrantClient) error { return client.Close() }
 )
 
 // ai.TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"} carries the minimal task data needed for RAG queries.

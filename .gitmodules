@@ -34,3 +34,7 @@
 	path = external/go-inference
 	url = https://github.com/dappcore/go-inference.git
 	branch = dev
+[submodule "external/go-ratelimit"]
+	path = external/go-ratelimit
+	url = https://github.com/dappcore/go-ratelimit.git
+	branch = dev
