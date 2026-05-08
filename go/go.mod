@@ -3,6 +3,7 @@ module dappco.re/go/ai
 go 1.26.0
 
 require (
+	dappco.re/go/inference v0.9.0
 	github.com/gin-gonic/gin v1.12.0
 	golang.org/x/sys v0.43.0
 )
@@ -126,4 +127,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-

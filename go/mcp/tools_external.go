@@ -10,6 +10,7 @@ import (
 	"time"
 
 	core "dappco.re/go"
+	"dappco.re/go/inference"
 	execabs "golang.org/x/sys/execabs"
 )
 
@@ -154,8 +155,10 @@ type MLBackendsOutput struct {
 }
 
 type MLBackendInfo struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
+	Name         string   `json:"name"`
+	Available    bool     `json:"available"`
+	Capabilities []string `json:"capabilities,omitempty"`
+	Native       bool     `json:"native,omitempty"`
 }
 
 func (s *Service) mlGenerate(ctx context.Context, input MLGenerateInput) core.Result {
@@ -208,10 +211,39 @@ func (s *Service) mlStatus(ctx context.Context, input MLStatusInput) core.Result
 }
 
 func (s *Service) mlBackends(ctx context.Context, input MLBackendsInput) core.Result {
+	names := inference.List()
+	backends := make([]MLBackendInfo, 0, len(names)+1)
+	for _, name := range names {
+		backend, ok := inference.Get(name)
+		info := MLBackendInfo{Name: name, Available: ok && backend.Available()}
+		if ok {
+			report, _ := inference.CapabilitiesOf(backend)
+			info.Capabilities = inferenceCapabilityIDStrings(report.SupportedCapabilityIDs())
+			info.Native = report.Runtime.NativeRuntime
+		}
+		backends = append(backends, info)
+	}
+	defaultName := "builtin"
+	if result := inference.Default(); result.OK {
+		if backend, ok := result.Value.(inference.Backend); ok && backend != nil {
+			defaultName = backend.Name()
+		}
+	}
+	if len(backends) == 0 {
+		backends = append(backends, MLBackendInfo{Name: "builtin", Available: true})
+	}
 	return core.Ok(MLBackendsOutput{
-		Backends: []MLBackendInfo{{Name: "builtin", Available: true}},
-		Default:  "builtin",
+		Backends: backends,
+		Default:  defaultName,
 	})
+}
+
+func inferenceCapabilityIDStrings(ids []inference.CapabilityID) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = string(id)
+	}
+	return out
 }
 
 func heuristicScores(prompt, response string) map[string]any {

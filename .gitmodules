@@ -30,3 +30,7 @@
 	path = external/go-scm
 	url = https://github.com/dappcore/go-scm.git
 	branch = dev
+[submodule "external/go-inference"]
+	path = external/go-inference
+	url = https://github.com/dappcore/go-inference.git
+	branch = dev
