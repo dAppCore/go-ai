@@ -2,16 +2,15 @@ package lab
 
 import (
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func ExampleAddLabCommands() {
-	root := &cli.Command{Use: "core"}
-	AddLabCommands(root)
-	cmd, _, err := root.Find([]string{"lab", "serve"})
+	root := core.New()
+	r := AddLabCommands(root)
+	cmd := root.Command("lab/serve")
 
-	core.Println(err == nil)
-	core.Println(cmd.Name())
+	core.Println(r.OK && cmd.OK)
+	core.Println(cmd.Value.(*core.Command).Name)
 	// Output:
 	// true
 	// serve

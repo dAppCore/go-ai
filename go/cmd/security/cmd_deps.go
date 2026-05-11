@@ -7,30 +7,14 @@ import (
 	"dappco.re/go/cli/pkg/cli"
 )
 
-func addDepsCommand(parent *cli.Command) {
-	selectionOptions := &SecuritySelectionOptions{}
-
-	cmd := &cli.Command{
-		Use:   "deps",
-		Short: cli.T("cmd.security.deps.short"),
-		Long:  cli.T("cmd.security.deps.long"),
-		RunE: func(c *cli.Command, args []string) error {
-			r := runDeps(*selectionOptions)
-			if !r.OK {
-				err, _ := coreResultError(r).(error)
-				return err
-			}
-			return nil
+func addDepsCommand(c *core.Core, path string) core.Result {
+	return registerSecurityCommand(c, path, core.Command{
+		Description: cli.T("cmd.security.deps.long"),
+		Flags:       securitySelectionFlags(),
+		Action: func(opts core.Options) core.Result {
+			return runDeps(securitySelectionFromOptions(opts))
 		},
-	}
-
-	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", cli.T("common.flag.registry"))
-	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", cli.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", cli.T("cmd.security.flag.severity"))
-	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, cli.T("common.flag.json"))
-	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", cli.T("cmd.security.flag.target"))
-
-	parent.AddCommand(cmd)
+	})
 }
 
 // DepAlert is the normalised row emitted by `core security deps --json`.

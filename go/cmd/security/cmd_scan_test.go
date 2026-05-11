@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdScan_collectScanAlerts_Good(t *testing.T) {
@@ -84,33 +83,30 @@ func TestCmdScan_runScan_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) 
 }
 
 func TestCmdScan_addScanCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
-	firstRoot := &cli.Command{Use: "core"}
-	secondRoot := &cli.Command{Use: "core"}
+	firstRoot := core.New()
+	secondRoot := core.New()
 
-	addScanCommand(firstRoot)
-	addScanCommand(secondRoot)
-
-	firstCommand, _, err := firstRoot.Find([]string{"scan"})
-	if err != nil {
-		t.Fatalf("find first scan command: %v", err)
+	if r := addScanCommand(firstRoot, "scan"); !r.OK {
+		t.Fatalf("register first scan command: %s", r.Error())
 	}
-	secondCommand, _, err := secondRoot.Find([]string{"scan"})
-	if err != nil {
-		t.Fatalf("find second scan command: %v", err)
+	if r := addScanCommand(secondRoot, "scan"); !r.OK {
+		t.Fatalf("register second scan command: %s", r.Error())
 	}
 
-	if err := firstCommand.Flags().Set("tool", "CodeQL"); err != nil {
-		t.Fatalf("set first scan tool: %v", err)
+	firstResult := firstRoot.Command("scan")
+	if !firstResult.OK {
+		t.Fatalf("find first scan command: %s", firstResult.Error())
 	}
+	secondResult := secondRoot.Command("scan")
+	if !secondResult.OK {
+		t.Fatalf("find second scan command: %s", secondResult.Error())
+	}
+	firstCommand := firstResult.Value.(*core.Command)
+	secondCommand := secondResult.Value.(*core.Command)
 
-	firstTool, err := firstCommand.Flags().GetString("tool")
-	if err != nil {
-		t.Fatalf("get first scan tool: %v", err)
-	}
-	secondTool, err := secondCommand.Flags().GetString("tool")
-	if err != nil {
-		t.Fatalf("get second scan tool: %v", err)
-	}
+	firstCommand.Flags.Set("tool", "CodeQL")
+	firstTool := firstCommand.Flags.String("tool")
+	secondTool := secondCommand.Flags.String("tool")
 
 	if firstTool != "CodeQL" {
 		t.Fatalf("first scan tool = %q, want CodeQL", firstTool)

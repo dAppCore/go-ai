@@ -3,66 +3,59 @@ package security
 import (
 	"testing"
 
-	"dappco.re/go/cli/pkg/cli"
+	"dappco.re/go"
 )
 
 func TestAddSecurityCommands_Good(t *testing.T) {
-	root := &cli.Command{Use: "core"}
+	root := core.New()
 
-	AddSecurityCommands(root)
-	AddSecurityCommands(root)
+	if r := AddSecurityCommands(root); !r.OK {
+		t.Fatalf("register security commands: %s", r.Error())
+	}
+	if r := AddSecurityCommands(root); !r.OK {
+		t.Fatalf("register duplicate security commands: %s", r.Error())
+	}
 
 	commands := root.Commands()
-	if len(commands) != 1 {
-		t.Fatalf("expected 1 top-level command, got %d", len(commands))
-	}
-	if commands[0].Name() != "security" {
-		t.Fatalf("expected top-level command security, got %s", commands[0].Name())
+	if len(commands) != 6 {
+		t.Fatalf("expected 6 security command paths, got %d: %#v", len(commands), commands)
 	}
 
-	for _, path := range [][]string{
-		{"security", "alerts"},
-		{"security", "deps"},
-		{"security", "scan"},
-		{"security", "secrets"},
-		{"security", "jobs"},
+	for _, path := range []string{
+		"security",
+		"security/alerts",
+		"security/deps",
+		"security/scan",
+		"security/secrets",
+		"security/jobs",
 	} {
-		cmd, _, err := root.Find(path)
-		if err != nil {
-			t.Fatalf("find %v: %v", path, err)
-		}
-		if cmd.Name() != path[len(path)-1] {
-			t.Fatalf("expected %s, got %s", path[len(path)-1], cmd.Name())
+		if cmd := root.Command(path); !cmd.OK {
+			t.Fatalf("find %s: %s", path, cmd.Error())
 		}
 	}
 }
 
 func TestAddSecurityCommands_Good_SubcommandsKeepFlagStateLocal(t *testing.T) {
-	root := &cli.Command{Use: "core"}
+	root := core.New()
 
-	AddSecurityCommands(root)
-
-	alertsCommand, _, err := root.Find([]string{"security", "alerts"})
-	if err != nil {
-		t.Fatalf("find alerts command: %v", err)
-	}
-	depsCommand, _, err := root.Find([]string{"security", "deps"})
-	if err != nil {
-		t.Fatalf("find deps command: %v", err)
+	if r := AddSecurityCommands(root); !r.OK {
+		t.Fatalf("register security commands: %s", r.Error())
 	}
 
-	if err := alertsCommand.Flags().Set("severity", "critical"); err != nil {
-		t.Fatalf("set alerts --severity: %v", err)
+	alertsResult := root.Command("security/alerts")
+	if !alertsResult.OK {
+		t.Fatalf("find alerts command: %s", alertsResult.Error())
 	}
+	depsResult := root.Command("security/deps")
+	if !depsResult.OK {
+		t.Fatalf("find deps command: %s", depsResult.Error())
+	}
+	alertsCommand := alertsResult.Value.(*core.Command)
+	depsCommand := depsResult.Value.(*core.Command)
 
-	alertsSeverity, err := alertsCommand.Flags().GetString("severity")
-	if err != nil {
-		t.Fatalf("get alerts --severity: %v", err)
-	}
-	depsSeverity, err := depsCommand.Flags().GetString("severity")
-	if err != nil {
-		t.Fatalf("get deps --severity: %v", err)
-	}
+	alertsCommand.Flags.Set("severity", "critical")
+	alertsSeverity := alertsCommand.Flags.String("severity")
+	depsSeverity := depsCommand.Flags.String("severity")
 
 	if alertsSeverity != "critical" {
 		t.Fatalf("alerts severity = %q, want %q", alertsSeverity, "critical")

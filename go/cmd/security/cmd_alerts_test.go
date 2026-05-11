@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdAlerts_collectAlertOutputs_Good(t *testing.T) {
@@ -197,33 +196,30 @@ func TestCmdAlerts_runAlerts_Ugly_InvalidExternalTargetRejectsBeforeGitHubCLI(t 
 }
 
 func TestCmdAlerts_addAlertsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
-	firstRoot := &cli.Command{Use: "core"}
-	secondRoot := &cli.Command{Use: "core"}
+	firstRoot := core.New()
+	secondRoot := core.New()
 
-	addAlertsCommand(firstRoot)
-	addAlertsCommand(secondRoot)
-
-	firstCommand, _, err := firstRoot.Find([]string{"alerts"})
-	if err != nil {
-		t.Fatalf("find first alerts command: %v", err)
+	if r := addAlertsCommand(firstRoot, "alerts"); !r.OK {
+		t.Fatalf("register first alerts command: %s", r.Error())
 	}
-	secondCommand, _, err := secondRoot.Find([]string{"alerts"})
-	if err != nil {
-		t.Fatalf("find second alerts command: %v", err)
+	if r := addAlertsCommand(secondRoot, "alerts"); !r.OK {
+		t.Fatalf("register second alerts command: %s", r.Error())
 	}
 
-	if err := firstCommand.Flags().Set("severity", "critical"); err != nil {
-		t.Fatalf("set first alerts severity: %v", err)
+	firstResult := firstRoot.Command("alerts")
+	if !firstResult.OK {
+		t.Fatalf("find first alerts command: %s", firstResult.Error())
 	}
+	secondResult := secondRoot.Command("alerts")
+	if !secondResult.OK {
+		t.Fatalf("find second alerts command: %s", secondResult.Error())
+	}
+	firstCommand := firstResult.Value.(*core.Command)
+	secondCommand := secondResult.Value.(*core.Command)
 
-	firstSeverity, err := firstCommand.Flags().GetString("severity")
-	if err != nil {
-		t.Fatalf("get first alerts severity: %v", err)
-	}
-	secondSeverity, err := secondCommand.Flags().GetString("severity")
-	if err != nil {
-		t.Fatalf("get second alerts severity: %v", err)
-	}
+	firstCommand.Flags.Set("severity", "critical")
+	firstSeverity := firstCommand.Flags.String("severity")
+	secondSeverity := secondCommand.Flags.String("severity")
 
 	if firstSeverity != "critical" {
 		t.Fatalf("first alerts severity = %q, want critical", firstSeverity)

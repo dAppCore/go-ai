@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdSecrets_collectSecretAlerts_Good(t *testing.T) {
@@ -99,33 +98,30 @@ func TestCmdSecrets_runSecrets_Bad_MultiTargetPartialFailureFailsClosed(t *testi
 }
 
 func TestCmdSecrets_addSecretsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
-	firstRoot := &cli.Command{Use: "core"}
-	secondRoot := &cli.Command{Use: "core"}
+	firstRoot := core.New()
+	secondRoot := core.New()
 
-	addSecretsCommand(firstRoot)
-	addSecretsCommand(secondRoot)
-
-	firstCommand, _, err := firstRoot.Find([]string{"secrets"})
-	if err != nil {
-		t.Fatalf("find first secrets command: %v", err)
+	if r := addSecretsCommand(firstRoot, "secrets"); !r.OK {
+		t.Fatalf("register first secrets command: %s", r.Error())
 	}
-	secondCommand, _, err := secondRoot.Find([]string{"secrets"})
-	if err != nil {
-		t.Fatalf("find second secrets command: %v", err)
+	if r := addSecretsCommand(secondRoot, "secrets"); !r.OK {
+		t.Fatalf("register second secrets command: %s", r.Error())
 	}
 
-	if err := firstCommand.Flags().Set("json", "true"); err != nil {
-		t.Fatalf("set first secrets json: %v", err)
+	firstResult := firstRoot.Command("secrets")
+	if !firstResult.OK {
+		t.Fatalf("find first secrets command: %s", firstResult.Error())
 	}
+	secondResult := secondRoot.Command("secrets")
+	if !secondResult.OK {
+		t.Fatalf("find second secrets command: %s", secondResult.Error())
+	}
+	firstCommand := firstResult.Value.(*core.Command)
+	secondCommand := secondResult.Value.(*core.Command)
 
-	firstJSON, err := firstCommand.Flags().GetBool("json")
-	if err != nil {
-		t.Fatalf("get first secrets json: %v", err)
-	}
-	secondJSON, err := secondCommand.Flags().GetBool("json")
-	if err != nil {
-		t.Fatalf("get second secrets json: %v", err)
-	}
+	firstCommand.Flags.Set("json", true)
+	firstJSON := firstCommand.Flags.Bool("json")
+	secondJSON := secondCommand.Flags.Bool("json")
 
 	if !firstJSON {
 		t.Fatal("first secrets json flag should be true")

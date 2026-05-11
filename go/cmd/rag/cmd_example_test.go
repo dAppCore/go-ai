@@ -2,11 +2,10 @@ package rag
 
 import (
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func ExampleAddRAGSubcommands() {
-	root := &cli.Command{Use: "ai"}
+	root := core.New()
 	AddRAGSubcommands(root)
 
 	core.Println(len(root.Commands()) > 0)

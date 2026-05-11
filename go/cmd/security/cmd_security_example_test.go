@@ -6,12 +6,12 @@ import (
 )
 
 func ExampleAddSecurityCommands() {
-	root := &cli.Command{Use: "core"}
-	AddSecurityCommands(root)
-	cmd, _, err := root.Find([]string{"security"})
+	root := core.New()
+	r := AddSecurityCommands(root)
+	cmd := root.Command("security")
 
-	core.Println(err == nil)
-	core.Println(cmd.Name())
+	core.Println(r.OK && cmd.OK)
+	core.Println(cmd.Value.(*core.Command).Name)
 	// Output:
 	// true
 	// security

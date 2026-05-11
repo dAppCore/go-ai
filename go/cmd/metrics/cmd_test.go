@@ -61,33 +61,30 @@ func TestCmdMetrics_parseSinceDuration_Ugly_RejectsZeroSecondDuration(t *testing
 }
 
 func TestAddMetricsCommand_Good_CommandInstancesKeepFlagStateLocal(t *testing.T) {
-	firstRoot := &cli.Command{Use: "core"}
-	secondRoot := &cli.Command{Use: "core"}
+	firstRoot := core.New()
+	secondRoot := core.New()
 
-	AddMetricsCommand(firstRoot)
-	AddMetricsCommand(secondRoot)
-
-	firstCommand, _, err := firstRoot.Find([]string{"metrics"})
-	if err != nil {
-		t.Fatalf("find first metrics command: %v", err)
+	if r := AddMetricsCommand(firstRoot); !r.OK {
+		t.Fatalf("register first metrics command: %s", r.Error())
 	}
-	secondCommand, _, err := secondRoot.Find([]string{"metrics"})
-	if err != nil {
-		t.Fatalf("find second metrics command: %v", err)
+	if r := AddMetricsCommand(secondRoot); !r.OK {
+		t.Fatalf("register second metrics command: %s", r.Error())
 	}
 
-	if err := firstCommand.Flags().Set("since", "24h"); err != nil {
-		t.Fatalf("set first --since: %v", err)
+	firstResult := firstRoot.Command("metrics")
+	if !firstResult.OK {
+		t.Fatalf("find first metrics command: %s", firstResult.Error())
 	}
+	secondResult := secondRoot.Command("metrics")
+	if !secondResult.OK {
+		t.Fatalf("find second metrics command: %s", secondResult.Error())
+	}
+	firstCommand := firstResult.Value.(*core.Command)
+	secondCommand := secondResult.Value.(*core.Command)
 
-	firstSince, err := firstCommand.Flags().GetString("since")
-	if err != nil {
-		t.Fatalf("get first --since: %v", err)
-	}
-	secondSince, err := secondCommand.Flags().GetString("since")
-	if err != nil {
-		t.Fatalf("get second --since: %v", err)
-	}
+	firstCommand.Flags.Set("since", "24h")
+	firstSince := firstCommand.Flags.String("since")
+	secondSince := secondCommand.Flags.String("since")
 
 	if firstSince != "24h" {
 		t.Fatalf("first command since = %v, want %v", firstSince, "24h")
@@ -98,17 +95,21 @@ func TestAddMetricsCommand_Good_CommandInstancesKeepFlagStateLocal(t *testing.T)
 }
 
 func TestAddMetricsCommand_Good_DoesNotDuplicateCommand(t *testing.T) {
-	root := &cli.Command{Use: "core"}
+	root := core.New()
 
-	AddMetricsCommand(root)
-	AddMetricsCommand(root)
+	if r := AddMetricsCommand(root); !r.OK {
+		t.Fatalf("register metrics command: %s", r.Error())
+	}
+	if r := AddMetricsCommand(root); !r.OK {
+		t.Fatalf("register duplicate metrics command: %s", r.Error())
+	}
 
 	commands := root.Commands()
 	if len(commands) != 1 {
 		t.Fatalf("expected a single metrics command, got %d", len(commands))
 	}
-	if commands[0].Name() != "metrics" {
-		t.Fatalf("expected metrics command, got %s", commands[0].Name())
+	if commands[0] != "metrics" {
+		t.Fatalf("expected metrics command, got %s", commands[0])
 	}
 }
 
@@ -267,26 +268,27 @@ func TestMarshalMetricsSummaryJSON_Good_CompactOutput(t *testing.T) {
 // --- AX-7 canonical triplets ---
 
 func TestCmd_AddMetricsCommand_Good(t *core.T) {
-	root := &cli.Command{Use: "core"}
-	AddMetricsCommand(root)
-	cmd, _, err := root.Find([]string{"metrics"})
+	root := core.New()
+	r := AddMetricsCommand(root)
+	cmd := root.Command("metrics")
 
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "metrics", cmd.Name())
+	core.AssertTrue(t, r.OK)
+	core.AssertTrue(t, cmd.OK)
+	core.AssertEqual(t, "metrics", cmd.Value.(*core.Command).Name)
 }
 
 func TestCmd_AddMetricsCommand_Bad(t *core.T) {
-	root := &cli.Command{Use: "core"}
+	root := core.New()
 	AddMetricsCommand(root)
 	AddMetricsCommand(root)
 
 	core.AssertLen(t, root.Commands(), 1)
-	core.AssertEqual(t, "metrics", root.Commands()[0].Name())
+	core.AssertEqual(t, "metrics", root.Commands()[0])
 }
 
 func TestCmd_AddMetricsCommand_Ugly(t *core.T) {
-	first := &cli.Command{Use: "core"}
-	second := &cli.Command{Use: "core"}
+	first := core.New()
+	second := core.New()
 	AddMetricsCommand(first)
 	AddMetricsCommand(second)
 

@@ -12,7 +12,6 @@ import (
 	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	coreerr "dappco.re/go/log"
 )
 
 // MetricsCommandOptions{SinceWindow: 168 * time.Hour, JSONOutput: true} captures one `core ai metrics` invocation.
@@ -23,53 +22,39 @@ type MetricsCommandOptions struct {
 
 // core ai metrics --since 7d
 // core ai metrics --json
-func AddMetricsCommand(parent *cli.Command) {
-	if commandExists(parent, "metrics") {
-		return
-	}
-
-	options := &MetricsCommandOptions{
-		SinceWindow: 168 * time.Hour,
-	}
-	sinceInput := "7d"
-
-	metricsCommand := &cli.Command{
-		Use:   "metrics",
-		Short: cli.T("cmd.ai.metrics.short"),
-		Long:  cli.T("cmd.ai.metrics.long"),
-		RunE: func(cmd *cli.Command, args []string) error {
-			durationResult := parseSinceDuration(sinceInput)
-			if !durationResult.OK {
-				if err, ok := durationResult.Value.(error); ok {
-					return err
-				}
-				return core.NewError(durationResult.Error())
-			}
-			options.SinceWindow = durationResult.Value.(time.Duration)
-			r := runMetrics(*options)
-			if !r.OK {
-				if err, ok := r.Value.(error); ok {
-					return err
-				}
-				return core.NewError(r.Error())
-			}
-			return nil
-		},
-	}
-
-	metricsCommand.Flags().StringVar(&sinceInput, "since", sinceInput, cli.T("cmd.ai.metrics.flag.since"))
-	metricsCommand.Flags().BoolVar(&options.JSONOutput, "json", false, cli.T("common.flag.json"))
-
-	parent.AddCommand(metricsCommand)
+func AddMetricsCommand(c *core.Core) core.Result {
+	return RegisterMetricsCommand(c, "metrics")
 }
 
-func commandExists(parent *cli.Command, name string) bool {
-	for _, child := range parent.Commands() {
-		if child.Name() == name {
-			return true
-		}
+func RegisterMetricsCommand(c *core.Core, path string) core.Result {
+	if c.Command(path).OK {
+		return core.Ok(nil)
 	}
-	return false
+	return c.Command(path, metricsCommand())
+}
+
+func metricsCommand() core.Command {
+	return core.Command{
+		Description: cli.T("cmd.ai.metrics.long"),
+		Flags: core.NewOptions(
+			core.Option{Key: "since", Value: "7d"},
+			core.Option{Key: "json", Value: false},
+		),
+		Action: func(opts core.Options) core.Result {
+			sinceInput := opts.String("since")
+			if sinceInput == "" {
+				sinceInput = "7d"
+			}
+			durationResult := parseSinceDuration(sinceInput)
+			if !durationResult.OK {
+				return durationResult
+			}
+			return runMetrics(MetricsCommandOptions{
+				SinceWindow: durationResult.Value.(time.Duration),
+				JSONOutput:  opts.Bool("json"),
+			})
+		},
+	}
 }
 
 func runMetrics(options MetricsCommandOptions) core.Result {
@@ -143,18 +128,18 @@ func runMetrics(options MetricsCommandOptions) core.Result {
 func parseSinceDuration(input string) core.Result {
 	trimmed := core.Trim(input)
 	if trimmed == "" {
-		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
+		return core.Fail(core.E("metrics", "invalid duration: "+input, nil))
 	}
 
 	if duration, err := time.ParseDuration(trimmed); err == nil {
 		if duration <= 0 {
-			return core.Fail(coreerr.E("metrics", "duration must be positive: "+input, nil))
+			return core.Fail(core.E("metrics", "duration must be positive: "+input, nil))
 		}
 		return core.Ok(duration)
 	}
 
 	if len(trimmed) < 2 {
-		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
+		return core.Fail(core.E("metrics", "invalid duration: "+input, nil))
 	}
 
 	unit := trimmed[len(trimmed)-1]
@@ -162,17 +147,17 @@ func parseSinceDuration(input string) core.Result {
 
 	n, ok := parseShorthandDurationValue(value)
 	if !ok {
-		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
+		return core.Fail(core.E("metrics", "invalid duration: "+input, nil))
 	}
 	if n <= 0 {
-		return core.Fail(coreerr.E("metrics", "duration must be positive: "+input, nil))
+		return core.Fail(core.E("metrics", "duration must be positive: "+input, nil))
 	}
 
 	switch unit {
 	case 'd':
 		return core.Ok(time.Duration(n) * 24 * time.Hour)
 	default:
-		return core.Fail(coreerr.E("metrics", "invalid duration: "+input, nil))
+		return core.Fail(core.E("metrics", "invalid duration: "+input, nil))
 	}
 }
 

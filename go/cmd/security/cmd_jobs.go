@@ -8,7 +8,6 @@ import (
 	"dappco.re/go"
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
-	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
 	execabs "golang.org/x/sys/execabs"
 )
@@ -32,32 +31,14 @@ type jobResult struct {
 	err  error
 }
 
-func addJobsCommand(parent *cli.Command) {
-	commandOptions := &JobsCommandOptions{
-		WorkerCount: 1,
-	}
-
-	cmd := &cli.Command{
-		Use:   "jobs",
-		Short: cli.T("cmd.security.jobs.short"),
-		Long:  cli.T("cmd.security.jobs.long"),
-		RunE: func(c *cli.Command, args []string) error {
-			r := runJobs(*commandOptions)
-			if !r.OK {
-				err, _ := coreResultError(r).(error)
-				return err
-			}
-			return nil
+func addJobsCommand(c *core.Core, path string) core.Result {
+	return registerSecurityCommand(c, path, core.Command{
+		Description: cli.T("cmd.security.jobs.long"),
+		Flags:       jobsCommandFlags(),
+		Action: func(opts core.Options) core.Result {
+			return runJobs(jobsCommandFromOptions(opts))
 		},
-	}
-
-	cmd.Flags().StringVar(&commandOptions.RegistryPath, "registry", "", cli.T("common.flag.registry"))
-	cmd.Flags().StringVar(&commandOptions.Targets, "targets", "", cli.T("cmd.security.jobs.flag.targets"))
-	cmd.Flags().StringVar(&commandOptions.IssueRepository, "issue-repo", "", cli.T("cmd.security.jobs.flag.issue_repo"))
-	cmd.Flags().BoolVar(&commandOptions.DryRun, "dry-run", false, cli.T("cmd.security.jobs.flag.dry_run"))
-	cmd.Flags().IntVar(&commandOptions.WorkerCount, "copies", commandOptions.WorkerCount, cli.T("cmd.security.jobs.flag.copies"))
-
-	parent.AddCommand(cmd)
+	})
 }
 
 func runJobs(commandOptions JobsCommandOptions) core.Result {
@@ -378,7 +359,7 @@ func runJobWorkers(targets []string, workers int) []jobResult {
 func collectJobRepoResult(target string) core.Result {
 	securityTargetResult := parseSecurityTarget(target)
 	if !securityTargetResult.OK {
-		return core.Fail(coreerr.E("security", "invalid target format: use owner/repo", nil))
+		return core.Fail(core.E("security", "invalid target format: use owner/repo", nil))
 	}
 	securityTarget := securityTargetResult.Value.(SecurityTarget)
 

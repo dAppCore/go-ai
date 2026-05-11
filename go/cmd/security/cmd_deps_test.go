@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func TestCmdDeps_collectDepAlerts_Good(t *testing.T) {
@@ -110,33 +109,30 @@ func TestCmdDeps_runDeps_Bad_MultiTargetPartialFailureFailsClosed(t *testing.T) 
 }
 
 func TestCmdDeps_addDepsCommand_Good_BindsFlagsPerCommandInstance(t *testing.T) {
-	firstRoot := &cli.Command{Use: "core"}
-	secondRoot := &cli.Command{Use: "core"}
+	firstRoot := core.New()
+	secondRoot := core.New()
 
-	addDepsCommand(firstRoot)
-	addDepsCommand(secondRoot)
-
-	firstCommand, _, err := firstRoot.Find([]string{"deps"})
-	if err != nil {
-		t.Fatalf("find first deps command: %v", err)
+	if r := addDepsCommand(firstRoot, "deps"); !r.OK {
+		t.Fatalf("register first deps command: %s", r.Error())
 	}
-	secondCommand, _, err := secondRoot.Find([]string{"deps"})
-	if err != nil {
-		t.Fatalf("find second deps command: %v", err)
+	if r := addDepsCommand(secondRoot, "deps"); !r.OK {
+		t.Fatalf("register second deps command: %s", r.Error())
 	}
 
-	if err := firstCommand.Flags().Set("severity", "high"); err != nil {
-		t.Fatalf("set first deps severity: %v", err)
+	firstResult := firstRoot.Command("deps")
+	if !firstResult.OK {
+		t.Fatalf("find first deps command: %s", firstResult.Error())
 	}
+	secondResult := secondRoot.Command("deps")
+	if !secondResult.OK {
+		t.Fatalf("find second deps command: %s", secondResult.Error())
+	}
+	firstCommand := firstResult.Value.(*core.Command)
+	secondCommand := secondResult.Value.(*core.Command)
 
-	firstSeverity, err := firstCommand.Flags().GetString("severity")
-	if err != nil {
-		t.Fatalf("get first deps severity: %v", err)
-	}
-	secondSeverity, err := secondCommand.Flags().GetString("severity")
-	if err != nil {
-		t.Fatalf("get second deps severity: %v", err)
-	}
+	firstCommand.Flags.Set("severity", "high")
+	firstSeverity := firstCommand.Flags.String("severity")
+	secondSeverity := secondCommand.Flags.String("severity")
 
 	if firstSeverity != "high" {
 		t.Fatalf("first deps severity = %q, want high", firstSeverity)
