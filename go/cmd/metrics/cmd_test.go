@@ -113,6 +113,40 @@ func TestAddMetricsCommand_Good_DoesNotDuplicateCommand(t *testing.T) {
 	}
 }
 
+func TestCmd_RegisterMetricsCommand_Good(t *testing.T) {
+	root := core.New()
+	result := RegisterMetricsCommand(root, "metrics")
+
+	if !result.OK {
+		t.Fatalf("RegisterMetricsCommand() error = %s", result.Error())
+	}
+	if command := root.Command("metrics"); !command.OK {
+		t.Fatalf("RegisterMetricsCommand() did not register metrics: %s", command.Error())
+	}
+}
+
+func TestCmd_RegisterMetricsCommand_Bad(t *testing.T) {
+	root := core.New()
+	result := RegisterMetricsCommand(root, "/metrics")
+
+	if result.OK {
+		t.Fatal("RegisterMetricsCommand() OK = true, want invalid command path failure")
+	}
+}
+
+func TestCmd_RegisterMetricsCommand_Ugly(t *testing.T) {
+	root := core.New()
+	first := RegisterMetricsCommand(root, "metrics")
+	second := RegisterMetricsCommand(root, "metrics")
+
+	if !first.OK || !second.OK {
+		t.Fatalf("RegisterMetricsCommand() idempotent registration failed: first=%s second=%s", first.Error(), second.Error())
+	}
+	if commands := root.Commands(); len(commands) != 1 || commands[0] != "metrics" {
+		t.Fatalf("RegisterMetricsCommand() commands = %#v, want one metrics command", commands)
+	}
+}
+
 func TestFormatDurationShort_Good(t *testing.T) {
 	tests := []struct {
 		name string

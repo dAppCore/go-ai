@@ -42,15 +42,15 @@ type ProviderChatRequest struct {
 // ProviderContextAssembler optionally adds retrieval/context-pack material to
 // a routed request before the selected provider sees it.
 type ProviderContextAssembler interface {
-	AssembleContext(context.Context, []inference.Message) (string, error)
+	AssembleContext(context.Context, []inference.Message) core.Result
 }
 
 // ProviderContextAssemblerFunc adapts a function to ProviderContextAssembler.
-type ProviderContextAssemblerFunc func(context.Context, []inference.Message) (string, error)
+type ProviderContextAssemblerFunc func(context.Context, []inference.Message) core.Result
 
-func (fn ProviderContextAssemblerFunc) AssembleContext(ctx context.Context, messages []inference.Message) (string, error) {
+func (fn ProviderContextAssemblerFunc) AssembleContext(ctx context.Context, messages []inference.Message) core.Result {
 	if fn == nil {
-		return "", nil
+		return core.Ok("")
 	}
 	return fn(ctx, messages)
 }
@@ -145,29 +145,30 @@ func (r *ProviderRouter) Chat(ctx context.Context, request ProviderChatRequest) 
 
 	options := request.generateOptions()
 	attempts := make([]ProviderAttempt, 0, len(r.routes))
-	var lastErr error
+	lastFailure := core.Result{}
 
 	for _, route := range r.routes {
 		if err := ctx.Err(); err != nil {
 			return core.Fail(core.E("ai.ProviderRouter.Chat", "request cancelled", err))
 		}
 
-		text, metrics, err := chatProvider(ctx, route, messages, options)
+		providerResult := chatProvider(ctx, route, messages, options)
 		attempt := ProviderAttempt{Provider: route.Name, ModelID: route.ModelID}
-		if err != nil {
-			attempt.Error = err.Error()
+		if !providerResult.OK {
+			attempt.Error = providerResult.Error()
 			attempts = append(attempts, attempt)
-			lastErr = err
+			lastFailure = providerResult
 			continue
 		}
+		providerResponse := providerResult.Value.(chatProviderResponse)
 
 		attempt.OK = true
 		attempts = append(attempts, attempt)
 		return core.Ok(ProviderChatResponse{
-			Text:     text,
+			Text:     providerResponse.text,
 			Provider: route.Name,
 			ModelID:  route.ModelID,
-			Metrics:  metrics,
+			Metrics:  providerResponse.metrics,
 			Attempts: attempts,
 			Labels:   core.MapClone(request.Labels),
 
@@ -176,10 +177,13 @@ func (r *ProviderRouter) Chat(ctx context.Context, request ProviderChatRequest) 
 		})
 	}
 
-	if lastErr == nil {
-		lastErr = core.E("ai.ProviderRouter.Chat", "all providers failed", nil)
+	if !lastFailure.OK && lastFailure.Value == nil {
+		lastFailure = core.Fail(core.E("ai.ProviderRouter.Chat", "all providers failed", nil))
 	}
-	return core.Fail(core.E("ai.ProviderRouter.Chat", core.Sprintf("all providers failed: %s", lastErr.Error()), lastErr))
+	if err, ok := lastFailure.Value.(error); ok {
+		return core.Fail(core.E("ai.ProviderRouter.Chat", core.Sprintf("all providers failed: %s", err.Error()), err))
+	}
+	return core.Fail(core.E("ai.ProviderRouter.Chat", core.Sprintf("all providers failed: %s", lastFailure.Error()), nil))
 }
 
 func (r ProviderChatRequest) normalisedMessages() []inference.Message {
@@ -231,10 +235,14 @@ func (r *ProviderRouter) contextMessages(ctx context.Context, request ProviderCh
 		return core.Ok(providerContextState{messages: out})
 	}
 
-	contextText, err := assembler.AssembleContext(ctx, out)
-	if err != nil {
-		return core.Fail(core.E("ai.ProviderRouter.Chat", "assemble context", err))
+	contextResult := assembler.AssembleContext(ctx, out)
+	if !contextResult.OK {
+		if err, ok := contextResult.Value.(error); ok {
+			return core.Fail(core.E("ai.ProviderRouter.Chat", "assemble context", err))
+		}
+		return core.Fail(core.E("ai.ProviderRouter.Chat", contextResult.Error(), nil))
 	}
+	contextText, _ := contextResult.Value.(string)
 	contextText = core.Trim(contextText)
 	if contextText == "" {
 		return core.Ok(providerContextState{messages: out})
@@ -254,15 +262,20 @@ func (r *ProviderRouter) contextMessages(ctx context.Context, request ProviderCh
 	})
 }
 
-func chatProvider(ctx context.Context, route ProviderRoute, messages []inference.Message, options []inference.GenerateOption) (string, inference.GenerateMetrics, error) {
+type chatProviderResponse struct {
+	text    string
+	metrics inference.GenerateMetrics
+}
+
+func chatProvider(ctx context.Context, route ProviderRoute, messages []inference.Message, options []inference.GenerateOption) core.Result {
 	var text string
 	for token := range route.Model.Chat(ctx, messages, options...) {
 		text = core.Concat(text, token.Text)
 	}
-	if err := route.Model.Err(); err != nil {
-		return "", route.Model.Metrics(), err
+	if errResult := route.Model.Err(); !errResult.OK {
+		return errResult
 	}
-	return text, route.Model.Metrics(), nil
+	return core.Ok(chatProviderResponse{text: text, metrics: route.Model.Metrics()})
 }
 
 func normaliseProviderRouterOptions(options ProviderRouterOptions) ProviderRouterOptions {

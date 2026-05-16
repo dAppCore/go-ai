@@ -364,6 +364,37 @@ func TestService_WithWSHub_Ugly(t *core.T) {
 	core.AssertEqual(t, payload, service.wsHub)
 }
 
+func TestService_WithInferenceModel_Good(t *core.T) {
+	service := &Service{}
+	model := &generateModel{}
+	result := WithInferenceModel(model, "openai", "gpt-test")(service)
+
+	core.AssertTrue(t, result.OK)
+	core.AssertEqual(t, model, service.mlModel)
+	core.AssertEqual(t, "openai", service.mlBackend)
+	core.AssertEqual(t, "gpt-test", service.mlModelName)
+}
+
+func TestService_WithInferenceModel_Bad(t *core.T) {
+	service := &Service{mlBackend: "before", mlModelName: "before"}
+	result := WithInferenceModel(nil, "", "")(service)
+
+	core.AssertTrue(t, result.OK)
+	core.AssertNil(t, service.mlModel)
+	core.AssertEqual(t, "", service.mlBackend)
+	core.AssertEqual(t, "", service.mlModelName)
+}
+
+func TestService_WithInferenceModel_Ugly(t *core.T) {
+	service := &Service{}
+	model := &generateModel{}
+	result := WithInferenceModel(model, "  backend  ", "  model  ")(service)
+
+	core.AssertTrue(t, result.OK)
+	core.AssertEqual(t, "backend", service.mlBackend)
+	core.AssertEqual(t, "model", service.mlModelName)
+}
+
 func TestService_WithSubsystem_Good(t *core.T) {
 	service := &Service{}
 	sub := testSubsystem{}

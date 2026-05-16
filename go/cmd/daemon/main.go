@@ -242,7 +242,7 @@ func daemonResultError(r core.Result) any {
 	if err, ok := r.Value.(error); ok {
 		return err
 	}
-	return core.NewError(r.Error())
+	return core.E("daemon.result", r.Error(), nil)
 }
 
 func daemonPathDir(path string) string {

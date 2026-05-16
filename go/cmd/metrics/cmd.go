@@ -60,7 +60,10 @@ func metricsCommand() core.Command {
 func runMetrics(options MetricsCommandOptions) core.Result {
 	eventsResult := ai.ReadEvents(time.Now().Add(-options.SinceWindow))
 	if !eventsResult.OK {
-		return core.Fail(cli.WrapVerb(core.NewError(eventsResult.Error()), "read", "metrics"))
+		if err, ok := eventsResult.Value.(error); ok {
+			return core.Fail(cli.WrapVerb(err, "read", "metrics"))
+		}
+		return core.Fail(core.E("metrics.run", eventsResult.Error(), nil))
 	}
 	events := eventsResult.Value.([]ai.Event)
 
@@ -68,7 +71,10 @@ func runMetrics(options MetricsCommandOptions) core.Result {
 	if options.JSONOutput {
 		outputResult := marshalMetricsSummaryJSON(summary)
 		if !outputResult.OK {
-			return core.Fail(cli.Wrap(core.NewError(outputResult.Error()), "marshal metrics JSON"))
+			if err, ok := outputResult.Value.(error); ok {
+				return core.Fail(cli.Wrap(err, "marshal metrics JSON"))
+			}
+			return core.Fail(core.E("metrics.run", outputResult.Error(), nil))
 		}
 		output := outputResult.Value.([]byte)
 		cli.Text(string(output))

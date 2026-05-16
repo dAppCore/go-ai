@@ -77,11 +77,11 @@ type BookStateContextAssembler struct {
 }
 
 // AssembleContext implements ProviderContextAssembler.
-func (a BookStateContextAssembler) AssembleContext(ctx context.Context, _ []inference.Message) (string, error) {
+func (a BookStateContextAssembler) AssembleContext(ctx context.Context, _ []inference.Message) core.Result {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return core.Fail(err)
 	}
-	return formatBookStateContext(a.State), nil
+	return core.Ok(formatBookStateContext(a.State))
 }
 
 // BookStateDemoConfig configures a teacher/student demo over provider routes.
@@ -145,14 +145,20 @@ func NewBookStateDemo(cfg BookStateDemoConfig) core.Result {
 
 	teacherResult := NewProviderRouter(cfg.TeacherRoutes...)
 	if !teacherResult.OK {
-		return core.Fail(core.E("ai.NewBookStateDemo", "teacher route invalid", core.NewError(teacherResult.Error())))
+		if err, ok := teacherResult.Value.(error); ok {
+			return core.Fail(core.E("ai.NewBookStateDemo", "teacher route invalid", err))
+		}
+		return core.Fail(core.E("ai.NewBookStateDemo", teacherResult.Error(), nil))
 	}
 
 	var student *ProviderRouter
 	if len(cfg.StudentRoutes) > 0 {
 		studentResult := NewProviderRouter(cfg.StudentRoutes...)
 		if !studentResult.OK {
-			return core.Fail(core.E("ai.NewBookStateDemo", "student route invalid", core.NewError(studentResult.Error())))
+			if err, ok := studentResult.Value.(error); ok {
+				return core.Fail(core.E("ai.NewBookStateDemo", "student route invalid", err))
+			}
+			return core.Fail(core.E("ai.NewBookStateDemo", studentResult.Error(), nil))
 		}
 		student = studentResult.Value.(*ProviderRouter)
 	}
@@ -213,7 +219,10 @@ func (d *BookStateDemo) Ask(ctx context.Context, req BookStateAskRequest) core.R
 			Labels:           map[string]string{"role": "student"},
 		})
 		if !studentResult.OK {
-			return core.Fail(core.E("ai.BookStateDemo.Ask", "student failed", core.NewError(studentResult.Error())))
+			if err, ok := studentResult.Value.(error); ok {
+				return core.Fail(core.E("ai.BookStateDemo.Ask", "student failed", err))
+			}
+			return core.Fail(core.E("ai.BookStateDemo.Ask", studentResult.Error(), nil))
 		}
 		studentResponse = studentResult.Value.(ProviderChatResponse)
 		studentAnswer = core.Trim(studentResponse.Text)
@@ -229,7 +238,10 @@ func (d *BookStateDemo) Ask(ctx context.Context, req BookStateAskRequest) core.R
 		Labels:           map[string]string{"role": "teacher"},
 	})
 	if !teacherResult.OK {
-		return core.Fail(core.E("ai.BookStateDemo.Ask", "teacher failed", core.NewError(teacherResult.Error())))
+		if err, ok := teacherResult.Value.(error); ok {
+			return core.Fail(core.E("ai.BookStateDemo.Ask", "teacher failed", err))
+		}
+		return core.Fail(core.E("ai.BookStateDemo.Ask", teacherResult.Error(), nil))
 	}
 
 	teacherResponse := teacherResult.Value.(ProviderChatResponse)

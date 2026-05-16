@@ -15,3 +15,15 @@ func ExampleAddMetricsCommand() {
 	// true
 	// metrics
 }
+
+func ExampleRegisterMetricsCommand() {
+	root := core.New()
+	r := RegisterMetricsCommand(root, "ai/metrics")
+	cmd := root.Command("ai/metrics")
+
+	core.Println(r.OK)
+	core.Println(cmd.Value.(*core.Command).Path)
+	// Output:
+	// true
+	// ai/metrics
+}

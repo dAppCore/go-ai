@@ -12,7 +12,6 @@ import (
 
 	"dappco.re/go"
 	coreio "dappco.re/go/io"
-	coreerr "dappco.re/go/log"
 )
 
 var metricsWriteLock = core.New().Lock("ai.metrics.write")
@@ -77,7 +76,7 @@ func Record(event Event) (result core.Result) {
 
 	dirResult := metricsDir()
 	if !dirResult.OK {
-		return metricsFailure("record event", core.NewError(dirResult.Error()))
+		return metricsFailureResult("record event", dirResult)
 	}
 	dir := dirResult.Value.(string)
 
@@ -85,13 +84,13 @@ func Record(event Event) (result core.Result) {
 		return metricsFailure("record event", err)
 	}
 	if r := chmodMetricsPath(dir, metricsDirMode); !r.OK {
-		return metricsFailure("record event", core.NewError(r.Error()))
+		return metricsFailureResult("record event", r)
 	}
 
 	path := metricsFilePath(dir, recordedAt)
 	fileResult := openMetricsEventFile(path)
 	if !fileResult.OK {
-		return metricsFailure("record event", core.NewError(fileResult.Error()))
+		return metricsFailureResult("record event", fileResult)
 	}
 	file := fileResult.Value.(goio.WriteCloser)
 	defer func() {
@@ -119,7 +118,7 @@ func Record(event Event) (result core.Result) {
 func ReadEvents(since time.Time) core.Result {
 	dirResult := metricsDir()
 	if !dirResult.OK {
-		return metricsFailure("read events", core.NewError(dirResult.Error()))
+		return metricsFailureResult("read events", dirResult)
 	}
 	dir := dirResult.Value.(string)
 
@@ -199,13 +198,14 @@ func readMetricsFile(path string, since time.Time) core.Result {
 }
 
 func metricsFailure(message string, err error) core.Result {
-	wrapped := coreerr.E("ai", message, err)
-	if wrapped.OK {
-		if metricErr, ok := wrapped.Value.(error); ok {
-			return core.Fail(metricErr)
-		}
+	return core.Fail(core.E("ai", message, err))
+}
+
+func metricsFailureResult(message string, failure core.Result) core.Result {
+	if err, ok := failure.Value.(error); ok {
+		return metricsFailure(message, err)
 	}
-	return core.Fail(core.NewError(wrapped.Error()))
+	return core.Fail(core.E("ai", core.Concat(message, ": ", failure.Error()), nil))
 }
 
 func openMetricsEventFile(path string) core.Result {
@@ -222,7 +222,7 @@ func openMetricsEventFile(path string) core.Result {
 
 	if r := chmodMetricsPath(path, metricsFileMode); !r.OK {
 		file.Close()
-		return core.Fail(core.NewError(r.Error()))
+		return metricsFailureResult("open metrics event file", r)
 	}
 	return core.Ok(file)
 }

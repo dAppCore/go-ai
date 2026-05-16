@@ -34,15 +34,15 @@ type Limiter interface {
 // provider request. go-rag adapters can satisfy this shape without creating a
 // dependency cycle.
 type ContextAssembler interface {
-	AssembleContext(context.Context, []inference.Message) (string, error)
+	AssembleContext(context.Context, []inference.Message) core.Result
 }
 
 // ContextAssemblerFunc adapts a function to ContextAssembler.
-type ContextAssemblerFunc func(context.Context, []inference.Message) (string, error)
+type ContextAssemblerFunc func(context.Context, []inference.Message) core.Result
 
-func (fn ContextAssemblerFunc) AssembleContext(ctx context.Context, messages []inference.Message) (string, error) {
+func (fn ContextAssemblerFunc) AssembleContext(ctx context.Context, messages []inference.Message) core.Result {
 	if fn == nil {
-		return "", nil
+		return core.Ok("")
 	}
 	return fn(ctx, messages)
 }
@@ -102,25 +102,25 @@ func (b *Backend) Available() bool {
 // LoadModel creates a lightweight model handle for the requested provider
 // model. path is interpreted as the provider model id; an empty path uses
 // Config.DefaultModel.
-func (b *Backend) LoadModel(path string, _ ...inference.LoadOption) (inference.TextModel, error) {
+func (b *Backend) LoadModel(path string, _ ...inference.LoadOption) core.Result {
 	if b == nil {
-		return nil, core.E("ai.openai.LoadModel", "backend is nil", nil)
+		return core.Fail(core.E("ai.openai.LoadModel", "backend is nil", nil))
 	}
 	modelID := core.Trim(path)
 	if modelID == "" {
 		modelID = core.Trim(b.cfg.DefaultModel)
 	}
 	if modelID == "" {
-		return nil, core.E("ai.openai.LoadModel", "model id is required", nil)
+		return core.Fail(core.E("ai.openai.LoadModel", "model id is required", nil))
 	}
 	if core.Trim(b.cfg.BaseURL) == "" {
-		return nil, core.E("ai.openai.LoadModel", "base URL is required", nil)
+		return core.Fail(core.E("ai.openai.LoadModel", "base URL is required", nil))
 	}
-	return &Model{
+	return core.Ok(&Model{
 		backend: b,
 		modelID: modelID,
 		client:  httpClient(b.cfg.HTTPClient),
-	}, nil
+	})
 }
 
 // Capabilities implements inference.CapabilityReporter.
@@ -162,6 +162,11 @@ type Model struct {
 var _ inference.TextModel = (*Model)(nil)
 var _ inference.CapabilityReporter = (*Model)(nil)
 
+type completionResult struct {
+	content string
+	metrics inference.GenerateMetrics
+}
+
 // Generate implements inference.TextModel.
 func (m *Model) Generate(ctx context.Context, prompt string, opts ...inference.GenerateOption) iter.Seq[inference.Token] {
 	return m.Chat(ctx, []inference.Message{{Role: "user", Content: prompt}}, opts...)
@@ -170,31 +175,44 @@ func (m *Model) Generate(ctx context.Context, prompt string, opts ...inference.G
 // Chat implements inference.TextModel.
 func (m *Model) Chat(ctx context.Context, messages []inference.Message, opts ...inference.GenerateOption) iter.Seq[inference.Token] {
 	return func(yield func(inference.Token) bool) {
-		content, metrics, err := m.complete(ctx, messages, opts...)
-		m.setResult(metrics, err)
-		if err != nil || content == "" {
+		result := m.complete(ctx, messages, opts...)
+		if !result.OK {
+			m.setResult(inference.GenerateMetrics{}, result)
 			return
 		}
-		yield(inference.Token{Text: content})
+		completion := result.Value.(completionResult)
+		m.setResult(completion.metrics, core.Ok(nil))
+		if completion.content == "" {
+			return
+		}
+		yield(inference.Token{Text: completion.content})
 	}
 }
 
 // Classify is not exposed for external chat providers yet.
-func (m *Model) Classify(context.Context, []string, ...inference.GenerateOption) ([]inference.ClassifyResult, error) {
-	return nil, core.E("ai.openai.Classify", "classification is not supported by this provider backend", nil)
+func (m *Model) Classify(context.Context, []string, ...inference.GenerateOption) core.Result {
+	return core.Fail(core.E("ai.openai.Classify", "classification is not supported by this provider backend", nil))
 }
 
 // BatchGenerate runs Generate sequentially for each prompt.
-func (m *Model) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) ([]inference.BatchResult, error) {
+func (m *Model) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) core.Result {
 	results := make([]inference.BatchResult, 0, len(prompts))
 	for _, prompt := range prompts {
 		var tokens []inference.Token
 		for token := range m.Generate(ctx, prompt, opts...) {
 			tokens = append(tokens, token)
 		}
-		results = append(results, inference.BatchResult{Tokens: tokens, Err: m.Err()})
+		batch := inference.BatchResult{Tokens: tokens}
+		if errResult := m.Err(); !errResult.OK {
+			if err, ok := errResult.Value.(error); ok {
+				batch.Err = err
+			} else {
+				batch.Err = core.E("ai.openai.BatchGenerate", errResult.Error(), nil)
+			}
+		}
+		results = append(results, batch)
 	}
-	return results, nil
+	return core.Ok(results)
 }
 
 // ModelType implements inference.TextModel.
@@ -215,15 +233,18 @@ func (m *Model) Metrics() inference.GenerateMetrics {
 }
 
 // Err implements inference.TextModel.
-func (m *Model) Err() error {
+func (m *Model) Err() core.Result {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.lastErr
+	if m.lastErr != nil {
+		return core.Fail(m.lastErr)
+	}
+	return core.Ok(nil)
 }
 
 // Close implements inference.TextModel.
-func (m *Model) Close() error {
-	return nil
+func (m *Model) Close() core.Result {
+	return core.Ok(nil)
 }
 
 // Capabilities implements inference.CapabilityReporter.
@@ -263,18 +284,19 @@ func (m *Model) Capabilities() inference.CapabilityReport {
 	}
 }
 
-func (m *Model) complete(ctx context.Context, messages []inference.Message, opts ...inference.GenerateOption) (string, inference.GenerateMetrics, error) {
+func (m *Model) complete(ctx context.Context, messages []inference.Message, opts ...inference.GenerateOption) core.Result {
 	if m == nil || m.backend == nil {
-		return "", inference.GenerateMetrics{}, core.E("ai.openai.complete", "model is nil", nil)
+		return core.Fail(core.E("ai.openai.complete", "model is nil", nil))
 	}
 	cfg := inference.ApplyGenerateOpts(opts)
-	messages, err := m.contextMessages(ctx, messages)
-	if err != nil {
-		return "", inference.GenerateMetrics{}, err
+	contextResult := m.contextMessages(ctx, messages)
+	if !contextResult.OK {
+		return contextResult
 	}
+	messages = contextResult.Value.([]inference.Message)
 	if limiter := m.backend.cfg.Limiter; limiter != nil {
 		if err := limiter.WaitForCapacity(ctx, m.modelID, m.estimateTokens(messages, cfg)); err != nil {
-			return "", inference.GenerateMetrics{}, err
+			return core.Fail(err)
 		}
 	}
 
@@ -295,10 +317,11 @@ func (m *Model) complete(ctx context.Context, messages []inference.Message, opts
 	}
 
 	started := time.Now()
-	response, err := m.doRequest(ctx, req)
-	if err != nil {
-		return "", inference.GenerateMetrics{}, err
+	responseResult := m.doRequest(ctx, req)
+	if !responseResult.OK {
+		return responseResult
 	}
+	response := responseResult.Value.(openaicompat.ChatCompletionResponse)
 	metrics := inference.GenerateMetrics{
 		PromptTokens:    response.Usage.PromptTokens,
 		GeneratedTokens: response.Usage.CompletionTokens,
@@ -308,38 +331,39 @@ func (m *Model) complete(ctx context.Context, messages []inference.Message, opts
 		limiter.RecordUsage(m.modelID, response.Usage.PromptTokens, response.Usage.CompletionTokens)
 	}
 	if len(response.Choices) == 0 {
-		return "", metrics, core.E("ai.openai.complete", "provider response contained no choices", nil)
+		return core.Fail(core.E("ai.openai.complete", "provider response contained no choices", nil))
 	}
-	return response.Choices[0].Message.Content, metrics, nil
+	return core.Ok(completionResult{content: response.Choices[0].Message.Content, metrics: metrics})
 }
 
-func (m *Model) contextMessages(ctx context.Context, messages []inference.Message) ([]inference.Message, error) {
+func (m *Model) contextMessages(ctx context.Context, messages []inference.Message) core.Result {
 	out := append([]inference.Message(nil), messages...)
 	assembler := m.backend.cfg.ContextAssembler
 	if assembler == nil {
-		return out, nil
+		return core.Ok(out)
 	}
-	contextText, err := assembler.AssembleContext(ctx, out)
-	if err != nil {
-		return nil, err
+	contextResult := assembler.AssembleContext(ctx, out)
+	if !contextResult.OK {
+		return contextResult
 	}
+	contextText, _ := contextResult.Value.(string)
 	contextText = core.Trim(contextText)
 	if contextText == "" {
-		return out, nil
+		return core.Ok(out)
 	}
 	contextMessage := inference.Message{
 		Role:    "system",
 		Content: core.Concat("Context:\n", contextText),
 	}
 	out = append([]inference.Message{contextMessage}, out...)
-	return out, nil
+	return core.Ok(out)
 }
 
-func (m *Model) doRequest(ctx context.Context, req openaicompat.ChatCompletionRequest) (openaicompat.ChatCompletionResponse, error) {
+func (m *Model) doRequest(ctx context.Context, req openaicompat.ChatCompletionRequest) core.Result {
 	payload := core.JSONMarshalString(req)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(m.backend.cfg.BaseURL), core.NewReader(payload))
 	if err != nil {
-		return openaicompat.ChatCompletionResponse{}, core.E("ai.openai.doRequest", "create request", err)
+		return core.Fail(core.E("ai.openai.doRequest", "create request", err))
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if key := core.Trim(m.backend.cfg.APIKey); key != "" {
@@ -354,23 +378,26 @@ func (m *Model) doRequest(ctx context.Context, req openaicompat.ChatCompletionRe
 
 	resp, err := m.client.Do(httpReq)
 	if err != nil {
-		return openaicompat.ChatCompletionResponse{}, core.E("ai.openai.doRequest", "provider request", err)
+		return core.Fail(core.E("ai.openai.doRequest", "provider request", err))
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return openaicompat.ChatCompletionResponse{}, core.E("ai.openai.doRequest", "read provider response", err)
+		return core.Fail(core.E("ai.openai.doRequest", "read provider response", err))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return openaicompat.ChatCompletionResponse{}, providerError(resp.StatusCode, string(body))
+		return providerError(resp.StatusCode, string(body))
 	}
 	var out openaicompat.ChatCompletionResponse
 	result := core.JSONUnmarshalString(string(body), &out)
 	if !result.OK {
-		return openaicompat.ChatCompletionResponse{}, core.NewError(result.Error())
+		if err, ok := result.Value.(error); ok {
+			return core.Fail(core.E("ai.openai.doRequest", "decode provider response", err))
+		}
+		return core.Fail(core.E("ai.openai.doRequest", result.Error(), nil))
 	}
-	return out, nil
+	return core.Ok(out)
 }
 
 func (m *Model) estimateTokens(messages []inference.Message, cfg inference.GenerateConfig) int {
@@ -391,11 +418,19 @@ func (m *Model) estimateTokens(messages []inference.Message, cfg inference.Gener
 	return estimate
 }
 
-func (m *Model) setResult(metrics inference.GenerateMetrics, err error) {
+func (m *Model) setResult(metrics inference.GenerateMetrics, status core.Result) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.metrics = metrics
-	m.lastErr = err
+	if status.OK {
+		m.lastErr = nil
+		return
+	}
+	if err, ok := status.Value.(error); ok {
+		m.lastErr = err
+		return
+	}
+	m.lastErr = core.E("ai.openai.result", status.Error(), nil)
 }
 
 func openaiMessages(messages []inference.Message) []openaicompat.ChatMessage {
@@ -410,15 +445,15 @@ func chatCompletionsURL(baseURL string) string {
 	return core.Concat(trimTrailingSlash(baseURL), openaicompat.DefaultChatCompletionsPath)
 }
 
-func providerError(status int, body string) error {
+func providerError(status int, body string) core.Result {
 	var payload openaicompat.ErrorResponse
 	if result := core.JSONUnmarshalString(body, &payload); result.OK && payload.Error.Message != "" {
-		return core.E("ai.openai.provider", core.Sprintf("provider returned HTTP %d: %s", status, payload.Error.Message), nil)
+		return core.Fail(core.E("ai.openai.provider", core.Sprintf("provider returned HTTP %d: %s", status, payload.Error.Message), nil))
 	}
 	if body != "" {
-		return core.E("ai.openai.provider", core.Sprintf("provider returned HTTP %d: %s", status, body), nil)
+		return core.Fail(core.E("ai.openai.provider", core.Sprintf("provider returned HTTP %d: %s", status, body), nil))
 	}
-	return core.E("ai.openai.provider", core.Sprintf("provider returned HTTP %d", status), nil)
+	return core.Fail(core.E("ai.openai.provider", core.Sprintf("provider returned HTTP %d", status), nil))
 }
 
 func httpClient(client *http.Client) *http.Client {

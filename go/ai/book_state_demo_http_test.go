@@ -10,7 +10,7 @@ import (
 	core "dappco.re/go"
 )
 
-func TestBookStateDemoHTTP_NewBookStateDemoHandler_Good_AsksDemo(t *testing.T) {
+func TestBookStateDemoHttp_NewBookStateDemoHandler_Good(t *testing.T) {
 	demo := mustBookStateDemo(t, BookStateDemoConfig{
 		State:         BookState{Title: "Meditations", Excerpt: "gentleness"},
 		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{modelType: "teacher", output: "gentleness"}}},
@@ -57,7 +57,7 @@ func TestBookStateDemoHTTP_NewBookStateDemoHandler_Good_ReturnsState(t *testing.
 	}
 }
 
-func TestBookStateDemoHTTP_NewBookStateDemoHandler_Bad_RejectsMalformedJSON(t *testing.T) {
+func TestBookStateDemoHttp_NewBookStateDemoHandler_Bad(t *testing.T) {
 	demo := mustBookStateDemo(t, BookStateDemoConfig{
 		State:         BookState{Title: "Meditations"},
 		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{modelType: "teacher", output: "ok"}}},
@@ -76,7 +76,7 @@ func TestBookStateDemoHTTP_NewBookStateDemoHandler_Bad_RejectsMalformedJSON(t *t
 	}
 }
 
-func TestBookStateDemoHTTP_NewBookStateDemoHandler_Ugly_RejectsWrongMethod(t *testing.T) {
+func TestBookStateDemoHttp_NewBookStateDemoHandler_Ugly(t *testing.T) {
 	demo := mustBookStateDemo(t, BookStateDemoConfig{
 		State:         BookState{Title: "Meditations"},
 		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{modelType: "teacher", output: "ok"}}},

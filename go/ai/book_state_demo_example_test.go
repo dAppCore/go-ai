@@ -4,8 +4,6 @@ package ai
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 
 	core "dappco.re/go"
 	"dappco.re/go/inference"
@@ -17,7 +15,8 @@ func ExampleBookStateContextAssembler() {
 		Title:   "Meditations",
 		Excerpt: "From my grandfather Verus I learned good morals.",
 	}}
-	contextText, _ := assembler.AssembleContext(context.Background(), nil)
+	contextResult := assembler.AssembleContext(context.Background(), nil)
+	contextText := contextResult.Value.(string)
 
 	core.Println(core.Contains(contextText, "grandfather Verus"))
 	// Output:
@@ -101,31 +100,6 @@ func ExampleBookStateDemo_State() {
 	// Meditations
 }
 
-func ExampleNewBookStateDemoHandler() {
-	result := NewBookStateDemo(BookStateDemoConfig{
-		State: BookState{Title: "Meditations"},
-		TeacherRoutes: []ProviderRoute{{
-			Name:    "teacher",
-			ModelID: "teacher",
-			Model:   &routerFakeModel{modelType: "teacher", output: "answer"},
-		}},
-	})
-	demo := result.Value.(*BookStateDemo)
-	handler := NewBookStateDemoHandler(demo)
-	req := httptest.NewRequest(http.MethodPost, "/ask", core.NewReader(core.JSONMarshalString(BookStateAskRequest{
-		Question: "What lesson?",
-	})))
-	rr := httptest.NewRecorder()
-
-	handler.ServeHTTP(rr, req)
-	var response BookStateAskResponse
-	_ = core.JSONUnmarshalString(rr.Body.String(), &response)
-
-	core.Println(response.TeacherAnswer)
-	// Output:
-	// answer
-}
-
 func ExampleBookStateDemoConfig() {
 	cfg := BookStateDemoConfig{
 		State: BookState{Title: "Meditations"},
@@ -170,7 +144,8 @@ func ExampleBookState() {
 
 func ExampleBookStateContextAssembler_AssembleContext() {
 	assembler := BookStateContextAssembler{State: BookState{Title: "Meditations"}}
-	contextText, _ := assembler.AssembleContext(context.Background(), []inference.Message{{Role: "user", Content: "hello"}})
+	contextResult := assembler.AssembleContext(context.Background(), []inference.Message{{Role: "user", Content: "hello"}})
+	contextText := contextResult.Value.(string)
 
 	core.Println(contextText)
 	// Output:

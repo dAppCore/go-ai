@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"dappco.re/go"
-	coreerr "dappco.re/go/log"
 )
 
 var ollamaURL = flag.String("ollama", "http://localhost:11434", "Ollama base URL")
@@ -344,7 +343,7 @@ type ollamaTag struct {
 func embed(model, text string) core.Result {
 	r := core.JSONMarshal(embedRequest{Model: model, Prompt: text})
 	if !r.OK {
-		return core.Fail(coreerr.E("embed", "marshal request", r.Value.(error)))
+		return core.Fail(core.E("embed", "marshal request", r.Value.(error)))
 	}
 	body := r.Value.([]byte)
 
@@ -353,7 +352,7 @@ func embed(model, text string) core.Result {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, *ollamaURL+"/api/embeddings", core.NewBuffer(body))
 	if err != nil {
-		return core.Fail(coreerr.E("embed", "create embeddings request", err))
+		return core.Fail(core.E("embed", "create embeddings request", err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
@@ -362,19 +361,19 @@ func embed(model, text string) core.Result {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return core.Fail(coreerr.E("embed", core.Sprintf("HTTP %d", resp.StatusCode), nil))
+		return core.Fail(core.E("embed", core.Sprintf("HTTP %d", resp.StatusCode), nil))
 	}
 	raw := core.ReadAll(resp.Body)
 	if !raw.OK {
-		return core.Fail(coreerr.E("embed", "read response", raw.Value.(error)))
+		return core.Fail(core.E("embed", "read response", raw.Value.(error)))
 	}
 	var result embedResponse
 	ur := core.JSONUnmarshal([]byte(raw.Value.(string)), &result)
 	if !ur.OK {
-		return core.Fail(coreerr.E("embed", "decode response", ur.Value.(error)))
+		return core.Fail(core.E("embed", "decode response", ur.Value.(error)))
 	}
 	if len(result.Embedding) == 0 {
-		return core.Fail(coreerr.E("embed", "empty embedding", nil))
+		return core.Fail(core.E("embed", "empty embedding", nil))
 	}
 	return core.Ok(result.Embedding)
 }
@@ -385,7 +384,7 @@ func listInstalledModelNames() core.Result {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, *ollamaURL+"/api/tags", nil)
 	if err != nil {
-		return core.Fail(coreerr.E("embed", "create model list request", err))
+		return core.Fail(core.E("embed", "create model list request", err))
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -393,11 +392,11 @@ func listInstalledModelNames() core.Result {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return core.Fail(coreerr.E("embed", core.Sprintf("list models HTTP %d", resp.StatusCode), nil))
+		return core.Fail(core.E("embed", core.Sprintf("list models HTTP %d", resp.StatusCode), nil))
 	}
 	raw := core.ReadAll(resp.Body)
 	if !raw.OK {
-		return core.Fail(coreerr.E("embed", "read model list", raw.Value.(error)))
+		return core.Fail(core.E("embed", "read model list", raw.Value.(error)))
 	}
 	return decodeInstalledModelNames([]byte(raw.Value.(string)))
 }
@@ -405,7 +404,7 @@ func listInstalledModelNames() core.Result {
 func decodeInstalledModelNames(raw []byte) core.Result {
 	var result ollamaTagsResponse
 	if r := core.JSONUnmarshal(raw, &result); !r.OK {
-		return core.Fail(coreerr.E("embed", "decode model list", r.Value.(error)))
+		return core.Fail(core.E("embed", "decode model list", r.Value.(error)))
 	}
 
 	modelNames := make([]string, 0, len(result.Models))

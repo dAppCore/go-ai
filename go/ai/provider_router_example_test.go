@@ -6,6 +6,7 @@ import (
 	"context"
 
 	core "dappco.re/go"
+	"dappco.re/go/inference"
 )
 
 func ExampleNewProviderRouter() {
@@ -24,4 +25,53 @@ func ExampleNewProviderRouter() {
 	// Output:
 	// local
 	// hello from local
+}
+
+func ExampleProviderContextAssemblerFunc_AssembleContext() {
+	assembler := ProviderContextAssemblerFunc(func(context.Context, []inference.Message) core.Result {
+		return core.Ok("retrieved context")
+	})
+	result := assembler.AssembleContext(context.Background(), nil)
+
+	core.Println(result.Value.(string))
+	// Output:
+	// retrieved context
+}
+
+func ExampleNewProviderRouterWithOptions() {
+	routerResult := NewProviderRouterWithOptions(ProviderRouterOptions{ContextRole: "system"}, ProviderRoute{
+		Name:    "local",
+		ModelID: "gemma-test",
+		Model:   &routerFakeModel{modelType: "mlx", output: "hello"},
+	})
+
+	core.Println(routerResult.OK)
+	// Output:
+	// true
+}
+
+func ExampleProviderRouter_Providers() {
+	router := core.MustCast[*ProviderRouter](NewProviderRouter(ProviderRoute{
+		Name:    "local",
+		ModelID: "gemma-test",
+		Model:   &routerFakeModel{modelType: "mlx", output: "hello"},
+	}))
+
+	core.Println(router.Providers()[0].Name)
+	// Output:
+	// local
+}
+
+func ExampleProviderRouter_Chat() {
+	router := core.MustCast[*ProviderRouter](NewProviderRouter(ProviderRoute{
+		Name:    "local",
+		ModelID: "gemma-test",
+		Model:   &routerFakeModel{modelType: "mlx", output: "hello"},
+	}))
+	result := router.Chat(context.Background(), ProviderChatRequest{Prompt: "hi"})
+	response := result.Value.(ProviderChatResponse)
+
+	core.Println(response.Text)
+	// Output:
+	// hello
 }

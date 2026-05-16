@@ -43,8 +43,8 @@ func (backend capabilityBackend) Name() string { return backend.name }
 
 func (backend capabilityBackend) Available() bool { return true }
 
-func (backend capabilityBackend) LoadModel(string, ...inference.LoadOption) (inference.TextModel, error) {
-	return nil, core.AnError
+func (backend capabilityBackend) LoadModel(string, ...inference.LoadOption) core.Result {
+	return core.Fail(core.AnError)
 }
 
 func (backend capabilityBackend) Capabilities() inference.CapabilityReport {
@@ -58,7 +58,7 @@ func (backend capabilityBackend) Capabilities() inference.CapabilityReport {
 	}
 }
 
-func TestToolsExternal_MLBackendsUsesInferenceCapabilities_Good(t *core.T) {
+func TestToolsExternal_mlBackends_Good(t *core.T) {
 	name := "ai-capability-test-" + t.Name()
 	inference.Register(capabilityBackend{name: name})
 
@@ -121,12 +121,12 @@ func (m *generateModel) Chat(context.Context, []inference.Message, ...inference.
 	return func(func(inference.Token) bool) {}
 }
 
-func (m *generateModel) Classify(context.Context, []string, ...inference.GenerateOption) ([]inference.ClassifyResult, error) {
-	return nil, core.AnError
+func (m *generateModel) Classify(context.Context, []string, ...inference.GenerateOption) core.Result {
+	return core.Fail(core.AnError)
 }
 
-func (m *generateModel) BatchGenerate(context.Context, []string, ...inference.GenerateOption) ([]inference.BatchResult, error) {
-	return nil, core.AnError
+func (m *generateModel) BatchGenerate(context.Context, []string, ...inference.GenerateOption) core.Result {
+	return core.Fail(core.AnError)
 }
 
 func (m *generateModel) ModelType() string { return "external" }
@@ -137,6 +137,11 @@ func (m *generateModel) Info() inference.ModelInfo {
 
 func (m *generateModel) Metrics() inference.GenerateMetrics { return inference.GenerateMetrics{} }
 
-func (m *generateModel) Err() error { return m.err }
+func (m *generateModel) Err() core.Result {
+	if m.err != nil {
+		return core.Fail(m.err)
+	}
+	return core.Ok(nil)
+}
 
-func (m *generateModel) Close() error { return nil }
+func (m *generateModel) Close() core.Result { return core.Ok(nil) }

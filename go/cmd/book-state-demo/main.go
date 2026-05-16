@@ -141,7 +141,10 @@ func bookStateFromOptions(options bookStateDemoOptions) core.Result {
 	if excerpt == "" && core.Trim(options.ExcerptFile) != "" {
 		dataResult := core.ReadFile(options.ExcerptFile)
 		if !dataResult.OK {
-			return core.Fail(core.E("book-state-demo.state", "read excerpt file", core.NewError(dataResult.Error())))
+			if err, ok := dataResult.Value.(error); ok {
+				return core.Fail(core.E("book-state-demo.state", "read excerpt file", err))
+			}
+			return core.Fail(core.E("book-state-demo.state", dataResult.Error(), nil))
 		}
 		excerpt = core.Trim(string(dataResult.Value.([]byte)))
 	}
@@ -186,10 +189,14 @@ func routeFromOptions(name, baseURL, modelID, apiKey, mockOutput string, mock bo
 		APIKey:       apiKey,
 		DefaultModel: modelID,
 	})
-	model, err := backend.LoadModel(modelID)
-	if err != nil {
-		return core.Fail(core.E("book-state-demo.route", "load provider model", err))
+	modelResult := backend.LoadModel(modelID)
+	if !modelResult.OK {
+		if err, ok := modelResult.Value.(error); ok {
+			return core.Fail(core.E("book-state-demo.route", "load provider model", err))
+		}
+		return core.Fail(core.E("book-state-demo.route", modelResult.Error(), nil))
 	}
+	model := modelResult.Value.(inference.TextModel)
 	return core.Ok(ai.ProviderRoute{
 		Name:    name,
 		ModelID: modelID,
@@ -240,20 +247,28 @@ func (m *staticTextModel) Chat(ctx context.Context, messages []inference.Message
 	}
 }
 
-func (m *staticTextModel) Classify(context.Context, []string, ...inference.GenerateOption) ([]inference.ClassifyResult, error) {
-	return nil, core.E("book-state-demo.static.Classify", "classification is not supported", nil)
+func (m *staticTextModel) Classify(context.Context, []string, ...inference.GenerateOption) core.Result {
+	return core.Fail(core.E("book-state-demo.static.Classify", "classification is not supported", nil))
 }
 
-func (m *staticTextModel) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) ([]inference.BatchResult, error) {
+func (m *staticTextModel) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) core.Result {
 	results := make([]inference.BatchResult, 0, len(prompts))
 	for _, prompt := range prompts {
 		var tokens []inference.Token
 		for token := range m.Generate(ctx, prompt, opts...) {
 			tokens = append(tokens, token)
 		}
-		results = append(results, inference.BatchResult{Tokens: tokens, Err: m.Err()})
+		batch := inference.BatchResult{Tokens: tokens}
+		if errResult := m.Err(); !errResult.OK {
+			if err, ok := errResult.Value.(error); ok {
+				batch.Err = err
+			} else {
+				batch.Err = core.E("book-state-demo.static.BatchGenerate", errResult.Error(), nil)
+			}
+		}
+		results = append(results, batch)
 	}
-	return results, nil
+	return core.Ok(results)
 }
 
 func (m *staticTextModel) ModelType() string {
@@ -271,10 +286,13 @@ func (m *staticTextModel) Metrics() inference.GenerateMetrics {
 	return m.metrics
 }
 
-func (m *staticTextModel) Err() error {
-	return m.lastErr
+func (m *staticTextModel) Err() core.Result {
+	if m.lastErr != nil {
+		return core.Fail(m.lastErr)
+	}
+	return core.Ok(nil)
 }
 
-func (m *staticTextModel) Close() error {
-	return nil
+func (m *staticTextModel) Close() core.Result {
+	return core.Ok(nil)
 }

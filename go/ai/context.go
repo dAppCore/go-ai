@@ -17,13 +17,13 @@ type RAGContextAssembler struct {
 }
 
 // AssembleContext returns formatted retrieval context for the current chat.
-func (a RAGContextAssembler) AssembleContext(_ context.Context, messages []inference.Message) (string, error) {
+func (a RAGContextAssembler) AssembleContext(_ context.Context, messages []inference.Message) core.Result {
 	task := a.Task
 	if core.Trim(task.Title) == "" && core.Trim(task.Description) == "" {
 		task.Title = lastUserMessage(messages)
 	}
 	if core.Trim(task.Title) == "" && core.Trim(task.Description) == "" {
-		return "", nil
+		return core.Ok("")
 	}
 	query := a.Query
 	if query == nil {
@@ -31,10 +31,10 @@ func (a RAGContextAssembler) AssembleContext(_ context.Context, messages []infer
 	}
 	result := query(task)
 	if !result.OK {
-		return "", core.NewError(result.Error())
+		return result
 	}
 	contextText, _ := result.Value.(string)
-	return contextText, nil
+	return core.Ok(contextText)
 }
 
 func lastUserMessage(messages []inference.Message) string {

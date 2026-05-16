@@ -111,11 +111,12 @@ func TestBookStateContextAssembler_Good_FormatsState(t *testing.T) {
 		Labels:       map[string]string{"source": "state"},
 	}}
 
-	text, err := assembler.AssembleContext(context.Background(), []inference.Message{{Role: "user", Content: "question"}})
+	result := assembler.AssembleContext(context.Background(), []inference.Message{{Role: "user", Content: "question"}})
 
-	if err != nil {
-		t.Fatalf("AssembleContext() error = %v", err)
+	if !result.OK {
+		t.Fatalf("AssembleContext() error = %s", result.Error())
 	}
+	text, _ := result.Value.(string)
 	for _, want := range []string{"Meditations", "Verus taught gentleness", "mlx://entry", "prefix_tokens: 12", "source=state"} {
 		if !core.Contains(text, want) {
 			t.Fatalf("AssembleContext() = %q, want %q", text, want)
@@ -177,6 +178,192 @@ func TestBookStateFromRef_Good_CopiesDurableRefMetadata(t *testing.T) {
 		if !found {
 			t.Fatalf("Metadata = %+v, want value %q", state.Metadata, want)
 		}
+	}
+}
+
+func TestBookStateDemo_BookStateFromWakeResult_Good(t *testing.T) {
+	state := BookStateFromWakeResult(inferstate.WakeResult{
+		Entry:        inferstate.Ref{URI: "memvid://entry", Title: "Meditations"},
+		Bundle:       inferstate.StateRef{URI: "memvid://bundle"},
+		PrefixTokens: 12,
+	})
+
+	if state.Title != "Meditations" || state.BundleURI != "memvid://bundle" || state.PrefixTokens != 12 {
+		t.Fatalf("BookStateFromWakeResult() = %+v, want wake metadata", state)
+	}
+}
+
+func TestBookStateDemo_BookStateFromWakeResult_Bad(t *testing.T) {
+	state := BookStateFromWakeResult(inferstate.WakeResult{})
+
+	if state.Title != "" || state.PrefixTokens != 0 || len(state.Labels) != 0 {
+		t.Fatalf("BookStateFromWakeResult() = %+v, want empty state", state)
+	}
+}
+
+func TestBookStateDemo_BookStateFromWakeResult_Ugly(t *testing.T) {
+	state := BookStateFromWakeResult(inferstate.WakeResult{
+		Entry:  inferstate.Ref{Labels: map[string]string{"entry": "yes"}},
+		Labels: map[string]string{"wake": "yes"},
+	})
+
+	if state.Labels["entry"] != "yes" || state.Labels["wake"] != "yes" {
+		t.Fatalf("BookStateFromWakeResult() labels = %+v, want merged labels", state.Labels)
+	}
+}
+
+func TestBookStateDemo_BookStateFromRef_Good(t *testing.T) {
+	state := BookStateFromRef(inferstate.Ref{URI: "memvid://entry", BundleURI: "memvid://bundle", TokenCount: 20})
+
+	if state.EntryURI != "memvid://entry" || state.BundleURI != "memvid://bundle" || state.PrefixTokens != 20 {
+		t.Fatalf("BookStateFromRef() = %+v, want ref metadata", state)
+	}
+}
+
+func TestBookStateDemo_BookStateFromRef_Bad(t *testing.T) {
+	state := BookStateFromRef(inferstate.Ref{})
+
+	if state.EntryURI != "" || state.PrefixTokens != 0 || len(state.Metadata) != 0 {
+		t.Fatalf("BookStateFromRef() = %+v, want empty state", state)
+	}
+}
+
+func TestBookStateDemo_BookStateFromRef_Ugly(t *testing.T) {
+	state := BookStateFromRef(inferstate.Ref{Kind: "book", Hash: "sha256:test", TokenStart: 3, ByteStart: 4, ByteCount: 5})
+
+	for _, want := range []string{"book", "sha256:test", "3", "4", "5"} {
+		found := false
+		for _, value := range state.Metadata {
+			if value == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("BookStateFromRef() metadata = %+v, want %q", state.Metadata, want)
+		}
+	}
+}
+
+func TestBookStateDemo_BookStateContextAssembler_AssembleContext_Good(t *testing.T) {
+	assembler := BookStateContextAssembler{State: BookState{Title: "Meditations", Excerpt: "gentleness"}}
+	result := assembler.AssembleContext(context.Background(), nil)
+
+	if !result.OK || !core.Contains(result.Value.(string), "gentleness") {
+		t.Fatalf("BookStateContextAssembler.AssembleContext() = %#v, want context", result)
+	}
+}
+
+func TestBookStateDemo_BookStateContextAssembler_AssembleContext_Bad(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assembler := BookStateContextAssembler{State: BookState{Title: "Meditations"}}
+	result := assembler.AssembleContext(ctx, nil)
+
+	if result.OK {
+		t.Fatalf("BookStateContextAssembler.AssembleContext() = %#v, want cancelled context failure", result)
+	}
+}
+
+func TestBookStateDemo_BookStateContextAssembler_AssembleContext_Ugly(t *testing.T) {
+	assembler := BookStateContextAssembler{State: BookState{}}
+	result := assembler.AssembleContext(context.Background(), nil)
+
+	if !result.OK || result.Value.(string) != "" {
+		t.Fatalf("BookStateContextAssembler.AssembleContext() = %#v, want empty context", result)
+	}
+}
+
+func TestBookStateDemo_NewBookStateDemo_Good(t *testing.T) {
+	result := NewBookStateDemo(BookStateDemoConfig{
+		State:         BookState{Title: "Meditations"},
+		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{modelType: "teacher", output: "ok"}}},
+	})
+
+	if !result.OK || result.Value.(*BookStateDemo).State().Title != "Meditations" {
+		t.Fatalf("NewBookStateDemo() = %#v, want configured demo", result)
+	}
+}
+
+func TestBookStateDemo_NewBookStateDemo_Bad(t *testing.T) {
+	result := NewBookStateDemo(BookStateDemoConfig{})
+
+	if result.OK || !core.Contains(result.Error(), "teacher route") {
+		t.Fatalf("NewBookStateDemo() = %#v, want missing teacher failure", result)
+	}
+}
+
+func TestBookStateDemo_NewBookStateDemo_Ugly(t *testing.T) {
+	result := NewBookStateDemo(BookStateDemoConfig{
+		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{}}},
+		StudentRoutes: []ProviderRoute{{Name: "student"}},
+	})
+
+	if result.OK || !core.Contains(result.Error(), "student") {
+		t.Fatalf("NewBookStateDemo() = %#v, want invalid student route failure", result)
+	}
+}
+
+func TestBookStateDemo_BookStateDemo_State_Good(t *testing.T) {
+	demo := mustBookStateDemo(t, BookStateDemoConfig{
+		State:         BookState{Title: "Meditations"},
+		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{}}},
+	})
+
+	if state := demo.State(); state.Title != "Meditations" {
+		t.Fatalf("BookStateDemo.State() = %+v, want title", state)
+	}
+}
+
+func TestBookStateDemo_BookStateDemo_State_Bad(t *testing.T) {
+	var demo *BookStateDemo
+
+	if state := demo.State(); state.Title != "" || state.EntryURI != "" {
+		t.Fatalf("BookStateDemo.State() = %+v, want zero state", state)
+	}
+}
+
+func TestBookStateDemo_BookStateDemo_State_Ugly(t *testing.T) {
+	demo := mustBookStateDemo(t, BookStateDemoConfig{
+		State:         BookState{Labels: map[string]string{"source": "original"}},
+		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{}}},
+	})
+	state := demo.State()
+	state.Labels["source"] = "mutated"
+
+	if again := demo.State(); again.Labels["source"] != "original" {
+		t.Fatalf("BookStateDemo.State() leaked labels = %+v", again.Labels)
+	}
+}
+
+func TestBookStateDemo_BookStateDemo_Ask_Good(t *testing.T) {
+	demo := mustBookStateDemo(t, BookStateDemoConfig{
+		State:         BookState{Title: "Meditations", Excerpt: "gentleness"},
+		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{output: "answer"}}},
+	})
+	result := demo.Ask(context.Background(), BookStateAskRequest{Question: "What lesson?"})
+
+	if !result.OK || result.Value.(BookStateAskResponse).TeacherAnswer != "answer" {
+		t.Fatalf("BookStateDemo.Ask() = %#v, want teacher answer", result)
+	}
+}
+
+func TestBookStateDemo_BookStateDemo_Ask_Bad(t *testing.T) {
+	demo := mustBookStateDemo(t, BookStateDemoConfig{
+		TeacherRoutes: []ProviderRoute{{Name: "teacher", ModelID: "teacher", Model: &routerFakeModel{}}},
+	})
+	result := demo.Ask(context.Background(), BookStateAskRequest{})
+
+	if result.OK || !core.Contains(result.Error(), "question") {
+		t.Fatalf("BookStateDemo.Ask() = %#v, want missing question failure", result)
+	}
+}
+
+func TestBookStateDemo_BookStateDemo_Ask_Ugly(t *testing.T) {
+	var demo *BookStateDemo
+	result := demo.Ask(context.Background(), BookStateAskRequest{Question: "What lesson?"})
+
+	if result.OK || !core.Contains(result.Error(), "demo is nil") {
+		t.Fatalf("BookStateDemo.Ask() = %#v, want nil demo failure", result)
 	}
 }
 

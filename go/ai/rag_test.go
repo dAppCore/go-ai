@@ -110,8 +110,8 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		runRAGQuery = origRunRAGQuery
 	})
 
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
-		return nil, core.NewError("qdrant unavailable")
+	newQdrantClient = func(rag.QdrantConfig) core.Result {
+		return core.Fail(core.NewError("qdrant unavailable"))
 	}
 
 	if result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); !result.OK {
@@ -121,8 +121,8 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 	}
 
 	newQdrantClient = origNewQdrantClient
-	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
-		return nil, core.NewError("ollama unavailable")
+	newOllamaClient = func(rag.OllamaConfig) core.Result {
+		return core.Fail(core.NewError("ollama unavailable"))
 	}
 
 	if result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); !result.OK {
@@ -138,8 +138,8 @@ func TestQueryRAGForTask_Good_DegradesOnClientErrors(t *testing.T) {
 		_ rag.Embedder,
 		_ string,
 		_ rag.QueryConfig,
-	) ([]rag.QueryResult, error) {
-		return nil, core.NewError("query failed")
+	) core.Result {
+		return core.Fail(core.NewError("query failed"))
 	}
 
 	if result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"}); !result.OK {
@@ -163,30 +163,30 @@ func TestRag_QueryRAGForTask_Good_ReturnsFormattedContext(t *testing.T) {
 
 	var seenQuery string
 	var seenConfig rag.QueryConfig
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
-		return nil, nil
+	newQdrantClient = func(rag.QdrantConfig) core.Result {
+		return core.Ok((*rag.QdrantClient)(nil))
 	}
-	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
-		return nil, nil
+	newOllamaClient = func(rag.OllamaConfig) core.Result {
+		return core.Ok((*rag.OllamaClient)(nil))
 	}
-	closeQdrant = func(*rag.QdrantClient) error { return nil }
+	closeQdrant = func(*rag.QdrantClient) core.Result { return core.Ok(nil) }
 	runRAGQuery = func(
 		_ context.Context,
 		_ rag.VectorStore,
 		_ rag.Embedder,
 		query string,
 		cfg rag.QueryConfig,
-	) ([]rag.QueryResult, error) {
+	) core.Result {
 		seenQuery = query
 		seenConfig = cfg
-		return []rag.QueryResult{
+		return core.Ok([]rag.QueryResult{
 			{
 				Text:    "Build failure runbook",
 				Source:  "docs/build.md",
 				Section: "Troubleshooting",
 				Score:   0.91,
 			},
-		}, nil
+		})
 	}
 
 	result := QueryRAGForTask(TaskInfo{
@@ -231,18 +231,18 @@ func TestRag_QueryRAGForTask_Good_ClosesOpenedQdrantClient(t *testing.T) {
 	})
 
 	var closed bool
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
-		return &rag.QdrantClient{}, nil
+	newQdrantClient = func(rag.QdrantConfig) core.Result {
+		return core.Ok(&rag.QdrantClient{})
 	}
-	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
-		return &rag.OllamaClient{}, nil
+	newOllamaClient = func(rag.OllamaConfig) core.Result {
+		return core.Ok(&rag.OllamaClient{})
 	}
-	closeQdrant = func(client *rag.QdrantClient) error {
+	closeQdrant = func(client *rag.QdrantClient) core.Result {
 		if client == nil {
 			t.Fatal("expected closeQdrant to receive a client")
 		}
 		closed = true
-		return nil
+		return core.Ok(nil)
 	}
 	runRAGQuery = func(
 		_ context.Context,
@@ -250,8 +250,8 @@ func TestRag_QueryRAGForTask_Good_ClosesOpenedQdrantClient(t *testing.T) {
 		_ rag.Embedder,
 		_ string,
 		_ rag.QueryConfig,
-	) ([]rag.QueryResult, error) {
-		return []rag.QueryResult{{Text: "Doc", Source: "docs.md"}}, nil
+	) core.Result {
+		return core.Ok([]rag.QueryResult{{Text: "Doc", Source: "docs.md"}})
 	}
 
 	result := QueryRAGForTask(TaskInfo{
@@ -282,21 +282,21 @@ func TestRag_QueryRAGForTask_Bad_ReturnsEmptyStringWhenNoResults(t *testing.T) {
 		closeQdrant = origCloseQdrant
 	})
 
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
-		return nil, nil
+	newQdrantClient = func(rag.QdrantConfig) core.Result {
+		return core.Ok((*rag.QdrantClient)(nil))
 	}
-	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
-		return nil, nil
+	newOllamaClient = func(rag.OllamaConfig) core.Result {
+		return core.Ok((*rag.OllamaClient)(nil))
 	}
-	closeQdrant = func(*rag.QdrantClient) error { return nil }
+	closeQdrant = func(*rag.QdrantClient) core.Result { return core.Ok(nil) }
 	runRAGQuery = func(
 		_ context.Context,
 		_ rag.VectorStore,
 		_ rag.Embedder,
 		_ string,
 		_ rag.QueryConfig,
-	) ([]rag.QueryResult, error) {
-		return nil, nil
+	) core.Result {
+		return core.Ok([]rag.QueryResult(nil))
 	}
 
 	result := QueryRAGForTask(TaskInfo{
@@ -324,13 +324,13 @@ func TestRag_QueryRAGForTask_Ugly_EmptyTaskShortCircuitsSeams(t *testing.T) {
 		closeQdrant = origCloseQdrant
 	})
 
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
+	newQdrantClient = func(rag.QdrantConfig) core.Result {
 		t.Fatal("newQdrantClient should not be called for an empty task")
-		return nil, nil
+		return core.Ok((*rag.QdrantClient)(nil))
 	}
-	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) {
+	newOllamaClient = func(rag.OllamaConfig) core.Result {
 		t.Fatal("newOllamaClient should not be called for an empty task")
-		return nil, nil
+		return core.Ok((*rag.OllamaClient)(nil))
 	}
 	runRAGQuery = func(
 		_ context.Context,
@@ -338,13 +338,13 @@ func TestRag_QueryRAGForTask_Ugly_EmptyTaskShortCircuitsSeams(t *testing.T) {
 		_ rag.Embedder,
 		_ string,
 		_ rag.QueryConfig,
-	) ([]rag.QueryResult, error) {
+	) core.Result {
 		t.Fatal("runRAGQuery should not be called for an empty task")
-		return nil, nil
+		return core.Ok([]rag.QueryResult(nil))
 	}
-	closeQdrant = func(*rag.QdrantClient) error {
+	closeQdrant = func(*rag.QdrantClient) core.Result {
 		t.Fatal("closeQdrant should not be called for an empty task")
-		return nil
+		return core.Ok(nil)
 	}
 
 	result := QueryRAGForTask(TaskInfo{})
@@ -392,10 +392,10 @@ func TestRag_QueryRAGForTask_Good(t *core.T) {
 		runRAGQuery = origRunRAGQuery
 	})
 
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) { return nil, nil }
-	newOllamaClient = func(rag.OllamaConfig) (*rag.OllamaClient, error) { return nil, nil }
-	runRAGQuery = func(_ context.Context, _ rag.VectorStore, _ rag.Embedder, _ string, _ rag.QueryConfig) ([]rag.QueryResult, error) {
-		return []rag.QueryResult{{Text: "Runbook", Source: "docs/build.md", Score: 0.9}}, nil
+	newQdrantClient = func(rag.QdrantConfig) core.Result { return core.Ok((*rag.QdrantClient)(nil)) }
+	newOllamaClient = func(rag.OllamaConfig) core.Result { return core.Ok((*rag.OllamaClient)(nil)) }
+	runRAGQuery = func(_ context.Context, _ rag.VectorStore, _ rag.Embedder, _ string, _ rag.QueryConfig) core.Result {
+		return core.Ok([]rag.QueryResult{{Text: "Runbook", Source: "docs/build.md", Score: 0.9}})
 	}
 
 	result := QueryRAGForTask(TaskInfo{Title: "Investigate", Description: "failure"})
@@ -418,8 +418,8 @@ func TestRag_QueryRAGForTask_Ugly(t *core.T) {
 	t.Cleanup(func() {
 		newQdrantClient = origNewQdrantClient
 	})
-	newQdrantClient = func(rag.QdrantConfig) (*rag.QdrantClient, error) {
-		return nil, core.NewError("qdrant unavailable")
+	newQdrantClient = func(rag.QdrantConfig) core.Result {
+		return core.Fail(core.NewError("qdrant unavailable"))
 	}
 
 	result := QueryRAGForTask(TaskInfo{Title: "Investigate"})

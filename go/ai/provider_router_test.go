@@ -95,11 +95,11 @@ func TestProviderRouter_Chat_Good_PrependsRouterContext(t *testing.T) {
 	model := &routerFakeModel{modelType: "mlx", output: "context ok"}
 	router := mustProviderRouterWithOptions(t,
 		ProviderRouterOptions{
-			ContextAssembler: ProviderContextAssemblerFunc(func(_ context.Context, messages []inference.Message) (string, error) {
+			ContextAssembler: ProviderContextAssemblerFunc(func(_ context.Context, messages []inference.Message) core.Result {
 				if len(messages) != 1 || messages[0].Content != "question" {
 					t.Fatalf("assembler messages = %+v, want original user message", messages)
 				}
-				return "retrieved context", nil
+				return core.Ok("retrieved context")
 			}),
 		},
 		ProviderRoute{Name: "mlx", ModelID: "gemma", Model: model},
@@ -128,8 +128,8 @@ func TestProviderRouter_Chat_Good_RequestContextOverridesRouterContext(t *testin
 	model := &routerFakeModel{modelType: "mlx", output: "context ok"}
 	router := mustProviderRouterWithOptions(t,
 		ProviderRouterOptions{
-			ContextAssembler: ProviderContextAssemblerFunc(func(context.Context, []inference.Message) (string, error) {
-				return "router context", nil
+			ContextAssembler: ProviderContextAssemblerFunc(func(context.Context, []inference.Message) core.Result {
+				return core.Ok("router context")
 			}),
 		},
 		ProviderRoute{Name: "mlx", ModelID: "gemma", Model: model},
@@ -137,8 +137,8 @@ func TestProviderRouter_Chat_Good_RequestContextOverridesRouterContext(t *testin
 
 	result := router.Chat(context.Background(), ProviderChatRequest{
 		Prompt: "question",
-		ContextAssembler: ProviderContextAssemblerFunc(func(context.Context, []inference.Message) (string, error) {
-			return "request context", nil
+		ContextAssembler: ProviderContextAssemblerFunc(func(context.Context, []inference.Message) core.Result {
+			return core.Ok("request context")
 		}),
 	})
 	if !result.OK {
@@ -153,8 +153,8 @@ func TestProviderRouter_Chat_Bad_ContextAssemblerErrorFailsBeforeProvider(t *tes
 	model := &routerFakeModel{modelType: "mlx", output: "should not run"}
 	router := mustProviderRouterWithOptions(t,
 		ProviderRouterOptions{
-			ContextAssembler: ProviderContextAssemblerFunc(func(context.Context, []inference.Message) (string, error) {
-				return "", core.E("fake.Context", "retrieval failed", nil)
+			ContextAssembler: ProviderContextAssemblerFunc(func(context.Context, []inference.Message) core.Result {
+				return core.Fail(core.E("fake.Context", "retrieval failed", nil))
 			}),
 		},
 		ProviderRoute{Name: "mlx", ModelID: "gemma", Model: model},
@@ -211,6 +211,153 @@ func TestProviderRouter_Chat_Ugly_ReturnsFailureWhenAllProvidersFail(t *testing.
 	}
 }
 
+func TestProviderRouter_ProviderContextAssemblerFunc_AssembleContext_Good(t *testing.T) {
+	assembler := ProviderContextAssemblerFunc(func(context.Context, []inference.Message) core.Result {
+		return core.Ok("router context")
+	})
+	result := assembler.AssembleContext(context.Background(), nil)
+
+	if !result.OK || result.Value.(string) != "router context" {
+		t.Fatalf("ProviderContextAssemblerFunc.AssembleContext() = %#v, want context text", result)
+	}
+}
+
+func TestProviderRouter_ProviderContextAssemblerFunc_AssembleContext_Bad(t *testing.T) {
+	var assembler ProviderContextAssemblerFunc
+	result := assembler.AssembleContext(context.Background(), nil)
+
+	if !result.OK || result.Value.(string) != "" {
+		t.Fatalf("ProviderContextAssemblerFunc.AssembleContext() = %#v, want empty context", result)
+	}
+}
+
+func TestProviderRouter_ProviderContextAssemblerFunc_AssembleContext_Ugly(t *testing.T) {
+	assembler := ProviderContextAssemblerFunc(func(context.Context, []inference.Message) core.Result {
+		return core.Fail(core.E("test.context", "failed", nil))
+	})
+	result := assembler.AssembleContext(context.Background(), nil)
+
+	if result.OK || !core.Contains(result.Error(), "failed") {
+		t.Fatalf("ProviderContextAssemblerFunc.AssembleContext() = %#v, want failure", result)
+	}
+}
+
+func TestProviderRouter_NewProviderRouter_Good(t *testing.T) {
+	result := NewProviderRouter(ProviderRoute{Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx"}})
+
+	if !result.OK {
+		t.Fatalf("NewProviderRouter() error = %s", result.Error())
+	}
+	if providers := result.Value.(*ProviderRouter).Providers(); len(providers) != 1 || providers[0].Name != "local" {
+		t.Fatalf("NewProviderRouter() providers = %+v, want local provider", providers)
+	}
+}
+
+func TestProviderRouter_NewProviderRouter_Bad(t *testing.T) {
+	result := NewProviderRouter(ProviderRoute{Name: "broken"})
+
+	if result.OK || !core.Contains(result.Error(), "model is required") {
+		t.Fatalf("NewProviderRouter() = %#v, want missing model failure", result)
+	}
+}
+
+func TestProviderRouter_NewProviderRouter_Ugly(t *testing.T) {
+	result := NewProviderRouter()
+
+	if result.OK || !core.Contains(result.Error(), "at least one provider") {
+		t.Fatalf("NewProviderRouter() = %#v, want empty routes failure", result)
+	}
+}
+
+func TestProviderRouter_NewProviderRouterWithOptions_Good(t *testing.T) {
+	result := NewProviderRouterWithOptions(ProviderRouterOptions{ContextRole: "developer"}, ProviderRoute{
+		Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx"},
+	})
+
+	if !result.OK {
+		t.Fatalf("NewProviderRouterWithOptions() error = %s", result.Error())
+	}
+	if role := result.Value.(*ProviderRouter).options.ContextRole; role != "developer" {
+		t.Fatalf("NewProviderRouterWithOptions() ContextRole = %q, want developer", role)
+	}
+}
+
+func TestProviderRouter_NewProviderRouterWithOptions_Bad(t *testing.T) {
+	result := NewProviderRouterWithOptions(ProviderRouterOptions{}, ProviderRoute{Name: "broken"})
+
+	if result.OK || !core.Contains(result.Error(), "model is required") {
+		t.Fatalf("NewProviderRouterWithOptions() = %#v, want missing model failure", result)
+	}
+}
+
+func TestProviderRouter_NewProviderRouterWithOptions_Ugly(t *testing.T) {
+	result := NewProviderRouterWithOptions(ProviderRouterOptions{ContextRole: "  "}, ProviderRoute{
+		Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx"},
+	})
+
+	if !result.OK {
+		t.Fatalf("NewProviderRouterWithOptions() error = %s", result.Error())
+	}
+	if role := result.Value.(*ProviderRouter).options.ContextRole; role != "" {
+		t.Fatalf("NewProviderRouterWithOptions() ContextRole = %q, want trimmed empty role", role)
+	}
+}
+
+func TestProviderRouter_ProviderRouter_Providers_Good(t *testing.T) {
+	router := mustProviderRouter(t, ProviderRoute{Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx"}})
+	providers := router.Providers()
+
+	if len(providers) != 1 || providers[0].Name != "local" {
+		t.Fatalf("ProviderRouter.Providers() = %+v, want local provider", providers)
+	}
+}
+
+func TestProviderRouter_ProviderRouter_Providers_Bad(t *testing.T) {
+	var router *ProviderRouter
+
+	if providers := router.Providers(); providers != nil {
+		t.Fatalf("ProviderRouter.Providers() = %+v, want nil for nil router", providers)
+	}
+}
+
+func TestProviderRouter_ProviderRouter_Providers_Ugly(t *testing.T) {
+	labels := map[string]string{"tier": "remote"}
+	router := mustProviderRouter(t, ProviderRoute{Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx"}, Labels: labels})
+	providers := router.Providers()
+	providers[0].Labels["tier"] = "mutated"
+
+	if again := router.Providers(); again[0].Labels["tier"] != "remote" {
+		t.Fatalf("ProviderRouter.Providers() leaked labels = %+v", again[0].Labels)
+	}
+}
+
+func TestProviderRouter_ProviderRouter_Chat_Good(t *testing.T) {
+	router := mustProviderRouter(t, ProviderRoute{Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx", output: "ok"}})
+	result := router.Chat(context.Background(), ProviderChatRequest{Prompt: "hello"})
+
+	if !result.OK || result.Value.(ProviderChatResponse).Text != "ok" {
+		t.Fatalf("ProviderRouter.Chat() = %#v, want ok response", result)
+	}
+}
+
+func TestProviderRouter_ProviderRouter_Chat_Bad(t *testing.T) {
+	router := mustProviderRouter(t, ProviderRoute{Name: "local", ModelID: "model", Model: &routerFakeModel{err: core.E("fake.Chat", "offline", nil)}})
+	result := router.Chat(context.Background(), ProviderChatRequest{Prompt: "hello"})
+
+	if result.OK || !core.Contains(result.Error(), "offline") {
+		t.Fatalf("ProviderRouter.Chat() = %#v, want provider failure", result)
+	}
+}
+
+func TestProviderRouter_ProviderRouter_Chat_Ugly(t *testing.T) {
+	router := mustProviderRouter(t, ProviderRoute{Name: "local", ModelID: "model", Model: &routerFakeModel{modelType: "mlx", output: "ok"}})
+	result := router.Chat(context.Background(), ProviderChatRequest{})
+
+	if result.OK || !core.Contains(result.Error(), "prompt or messages") {
+		t.Fatalf("ProviderRouter.Chat() = %#v, want missing prompt failure", result)
+	}
+}
+
 func mustProviderRouter(t *testing.T, routes ...ProviderRoute) *ProviderRouter {
 	t.Helper()
 	result := NewProviderRouter(routes...)
@@ -262,20 +409,28 @@ func (m *routerFakeModel) Chat(ctx context.Context, messages []inference.Message
 	}
 }
 
-func (m *routerFakeModel) Classify(context.Context, []string, ...inference.GenerateOption) ([]inference.ClassifyResult, error) {
-	return nil, core.E("fake.Classify", "not implemented", nil)
+func (m *routerFakeModel) Classify(context.Context, []string, ...inference.GenerateOption) core.Result {
+	return core.Fail(core.E("fake.Classify", "not implemented", nil))
 }
 
-func (m *routerFakeModel) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) ([]inference.BatchResult, error) {
+func (m *routerFakeModel) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) core.Result {
 	results := make([]inference.BatchResult, 0, len(prompts))
 	for _, prompt := range prompts {
 		var tokens []inference.Token
 		for token := range m.Generate(ctx, prompt, opts...) {
 			tokens = append(tokens, token)
 		}
-		results = append(results, inference.BatchResult{Tokens: tokens, Err: m.Err()})
+		batch := inference.BatchResult{Tokens: tokens}
+		if errResult := m.Err(); !errResult.OK {
+			if err, ok := errResult.Value.(error); ok {
+				batch.Err = err
+			} else {
+				batch.Err = core.E("fake.BatchGenerate", errResult.Error(), nil)
+			}
+		}
+		results = append(results, batch)
 	}
-	return results, nil
+	return core.Ok(results)
 }
 
 func (m *routerFakeModel) ModelType() string { return m.modelType }
@@ -286,6 +441,11 @@ func (m *routerFakeModel) Info() inference.ModelInfo {
 
 func (m *routerFakeModel) Metrics() inference.GenerateMetrics { return m.metrics }
 
-func (m *routerFakeModel) Err() error { return m.lastErr }
+func (m *routerFakeModel) Err() core.Result {
+	if m.lastErr != nil {
+		return core.Fail(m.lastErr)
+	}
+	return core.Ok(nil)
+}
 
-func (m *routerFakeModel) Close() error { return nil }
+func (m *routerFakeModel) Close() core.Result { return core.Ok(nil) }
