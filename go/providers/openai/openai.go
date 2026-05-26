@@ -102,25 +102,30 @@ func (b *Backend) Available() bool {
 // LoadModel creates a lightweight model handle for the requested provider
 // model. path is interpreted as the provider model id; an empty path uses
 // Config.DefaultModel.
-func (b *Backend) LoadModel(path string, _ ...inference.LoadOption) core.Result {
+//
+// Returns (TextModel, error) per the modern inference.Backend contract —
+// matches the metalbackend pattern in core/go-mlx/go/register_metal.go
+// (Mantis #79). All historical core.Result internals stay; only the
+// outward boundary is the stdlib-error shape the interface requires.
+func (b *Backend) LoadModel(path string, _ ...inference.LoadOption) (inference.TextModel, error) {
 	if b == nil {
-		return core.Fail(core.E("ai.openai.LoadModel", "backend is nil", nil))
+		return nil, core.E("ai.openai.LoadModel", "backend is nil", nil)
 	}
 	modelID := core.Trim(path)
 	if modelID == "" {
 		modelID = core.Trim(b.cfg.DefaultModel)
 	}
 	if modelID == "" {
-		return core.Fail(core.E("ai.openai.LoadModel", "model id is required", nil))
+		return nil, core.E("ai.openai.LoadModel", "model id is required", nil)
 	}
 	if core.Trim(b.cfg.BaseURL) == "" {
-		return core.Fail(core.E("ai.openai.LoadModel", "base URL is required", nil))
+		return nil, core.E("ai.openai.LoadModel", "base URL is required", nil)
 	}
-	return core.Ok(&Model{
+	return &Model{
 		backend: b,
 		modelID: modelID,
 		client:  httpClient(b.cfg.HTTPClient),
-	})
+	}, nil
 }
 
 // Capabilities implements inference.CapabilityReporter.
@@ -189,13 +194,18 @@ func (m *Model) Chat(ctx context.Context, messages []inference.Message, opts ...
 	}
 }
 
-// Classify is not exposed for external chat providers yet.
-func (m *Model) Classify(context.Context, []string, ...inference.GenerateOption) core.Result {
-	return core.Fail(core.E("ai.openai.Classify", "classification is not supported by this provider backend", nil))
+// Classify is not exposed for external chat providers yet. Returns the
+// nil slice + a typed error so callers can distinguish "not supported"
+// from "no results".
+func (m *Model) Classify(context.Context, []string, ...inference.GenerateOption) ([]inference.ClassifyResult, error) {
+	return nil, core.E("ai.openai.Classify", "classification is not supported by this provider backend", nil)
 }
 
-// BatchGenerate runs Generate sequentially for each prompt.
-func (m *Model) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) core.Result {
+// BatchGenerate runs Generate sequentially for each prompt. Per-prompt
+// errors land on BatchResult.Err so the caller can tell which prompts
+// succeeded; a transport-level failure halting the loop would surface
+// via the second return value (today we always continue per-prompt).
+func (m *Model) BatchGenerate(ctx context.Context, prompts []string, opts ...inference.GenerateOption) ([]inference.BatchResult, error) {
 	results := make([]inference.BatchResult, 0, len(prompts))
 	for _, prompt := range prompts {
 		var tokens []inference.Token
@@ -203,16 +213,12 @@ func (m *Model) BatchGenerate(ctx context.Context, prompts []string, opts ...inf
 			tokens = append(tokens, token)
 		}
 		batch := inference.BatchResult{Tokens: tokens}
-		if errResult := m.Err(); !errResult.OK {
-			if err, ok := errResult.Value.(error); ok {
-				batch.Err = err
-			} else {
-				batch.Err = core.E("ai.openai.BatchGenerate", errResult.Error(), nil)
-			}
+		if err := m.Err(); err != nil {
+			batch.Err = err
 		}
 		results = append(results, batch)
 	}
-	return core.Ok(results)
+	return results, nil
 }
 
 // ModelType implements inference.TextModel.
@@ -233,18 +239,16 @@ func (m *Model) Metrics() inference.GenerateMetrics {
 }
 
 // Err implements inference.TextModel.
-func (m *Model) Err() core.Result {
+func (m *Model) Err() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.lastErr != nil {
-		return core.Fail(m.lastErr)
-	}
-	return core.Ok(nil)
+	return m.lastErr
 }
 
-// Close implements inference.TextModel.
-func (m *Model) Close() core.Result {
-	return core.Ok(nil)
+// Close implements inference.TextModel. No-op for HTTP-backed providers
+// (no GPU memory / subprocess to release); returns nil unconditionally.
+func (m *Model) Close() error {
+	return nil
 }
 
 // Capabilities implements inference.CapabilityReporter.

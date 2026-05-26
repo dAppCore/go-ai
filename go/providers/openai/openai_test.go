@@ -89,19 +89,18 @@ func TestOpenAI_Chat_Good_PostsRequestAndRecordsUsage(t *testing.T) {
 		},
 	})
 
-	modelResult := backend.LoadModel("", inference.WithBackend("ignored"))
-	if !modelResult.OK {
-		t.Fatalf("LoadModel() error = %s", modelResult.Error())
+	model, err := backend.LoadModel("", inference.WithBackend("ignored"))
+	if err != nil {
+		t.Fatalf("LoadModel() error = %v", err)
 	}
-	model := modelResult.Value.(inference.TextModel)
 	defer model.Close()
 
 	var got string
 	for token := range model.Chat(context.Background(), []inference.Message{{Role: "user", Content: "hello"}}, inference.WithMaxTokens(8)) {
 		got += token.Text
 	}
-	if errResult := model.Err(); !errResult.OK {
-		t.Fatalf("Chat() Err() = %s", errResult.Error())
+	if err := model.Err(); err != nil {
+		t.Fatalf("Chat() Err() = %v", err)
 	}
 	if got != "hello back" {
 		t.Fatalf("Chat() = %q, want hello back", got)
@@ -145,18 +144,17 @@ func TestOpenAI_Chat_Good_PrependsContextAssemblerOutput(t *testing.T) {
 			return core.Ok("retrieved context")
 		}),
 	})
-	modelResult := backend.LoadModel("")
-	if !modelResult.OK {
-		t.Fatalf("LoadModel() error = %s", modelResult.Error())
+	model, err := backend.LoadModel("")
+	if err != nil {
+		t.Fatalf("LoadModel() error = %v", err)
 	}
-	model := modelResult.Value.(inference.TextModel)
 
 	var got string
 	for token := range model.Chat(context.Background(), []inference.Message{{Role: "user", Content: "question"}}) {
 		got += token.Text
 	}
-	if errResult := model.Err(); !errResult.OK {
-		t.Fatalf("Chat() Err() = %s", errResult.Error())
+	if err := model.Err(); err != nil {
+		t.Fatalf("Chat() Err() = %v", err)
 	}
 	if got != "context answer" {
 		t.Fatalf("Chat() = %q, want context answer", got)
@@ -187,15 +185,14 @@ func TestOpenAI_Chat_Bad_ProviderErrorDoesNotRecordUsage(t *testing.T) {
 			recorded: &recorded,
 		},
 	})
-	modelResult := backend.LoadModel("")
-	if !modelResult.OK {
-		t.Fatalf("LoadModel() error = %s", modelResult.Error())
+	model, err := backend.LoadModel("")
+	if err != nil {
+		t.Fatalf("LoadModel() error = %v", err)
 	}
-	model := modelResult.Value.(inference.TextModel)
 
 	for range model.Generate(context.Background(), "hello") {
 	}
-	if model.Err().OK {
+	if model.Err() == nil {
 		t.Fatal("Generate() Err() = nil, want provider error")
 	}
 	if recorded.Load() {
@@ -220,11 +217,10 @@ func TestOpenAI_Capabilities_Good_ReportProviderIdentity(t *testing.T) {
 		t.Fatalf("Backend Capabilities() = %+v, want generate and chat", backendReport.Capabilities)
 	}
 
-	modelResult := backend.LoadModel("")
-	if !modelResult.OK {
-		t.Fatalf("LoadModel() error = %s", modelResult.Error())
+	model, err := backend.LoadModel("")
+	if err != nil {
+		t.Fatalf("LoadModel() error = %v", err)
 	}
-	model := modelResult.Value.(inference.TextModel)
 	report := model.(inference.CapabilityReporter).Capabilities()
 	if report.Runtime.Backend != "openai-test" {
 		t.Fatalf("Runtime.Backend = %q, want openai-test", report.Runtime.Backend)
@@ -407,33 +403,33 @@ func TestOpenai_Backend_Available_Ugly(t *testing.T) {
 
 func TestOpenai_Backend_LoadModel_Good(t *testing.T) {
 	backend := NewBackend(Config{BaseURL: "https://api.example.test", DefaultModel: "gpt"})
-	result := backend.LoadModel("")
+	textModel, err := backend.LoadModel("")
 
-	if !result.OK {
-		t.Fatalf("Backend.LoadModel() error = %s", result.Error())
+	if err != nil {
+		t.Fatalf("Backend.LoadModel() error = %v", err)
 	}
-	if model := result.Value.(*Model); model.modelID != "gpt" {
+	if model := textModel.(*Model); model.modelID != "gpt" {
 		t.Fatalf("Backend.LoadModel() modelID = %q, want default model", model.modelID)
 	}
 }
 
 func TestOpenai_Backend_LoadModel_Bad(t *testing.T) {
 	var backend *Backend
-	result := backend.LoadModel("gpt")
+	model, err := backend.LoadModel("gpt")
 
-	if result.OK || !core.Contains(result.Error(), "backend is nil") {
-		t.Fatalf("Backend.LoadModel() = %#v, want nil backend failure", result)
+	if err == nil || !core.Contains(err.Error(), "backend is nil") {
+		t.Fatalf("Backend.LoadModel() = (%v, %v), want nil backend failure", model, err)
 	}
 }
 
 func TestOpenai_Backend_LoadModel_Ugly(t *testing.T) {
 	backend := NewBackend(Config{BaseURL: "https://api.example.test", DefaultModel: "fallback"})
-	result := backend.LoadModel("override")
+	textModel, err := backend.LoadModel("override")
 
-	if !result.OK {
-		t.Fatalf("Backend.LoadModel() error = %s", result.Error())
+	if err != nil {
+		t.Fatalf("Backend.LoadModel() error = %v", err)
 	}
-	if model := result.Value.(*Model); model.modelID != "override" {
+	if model := textModel.(*Model); model.modelID != "override" {
 		t.Fatalf("Backend.LoadModel() modelID = %q, want explicit path", model.modelID)
 	}
 }
@@ -477,8 +473,8 @@ func TestOpenai_Model_Generate_Good(t *testing.T) {
 	if got != "generated text" {
 		t.Fatalf("Model.Generate() = %q, want generated text", got)
 	}
-	if errResult := model.Err(); !errResult.OK {
-		t.Fatalf("Model.Generate() Err() = %s", errResult.Error())
+	if err := model.Err(); err != nil {
+		t.Fatalf("Model.Generate() Err() = %v", err)
 	}
 }
 
@@ -490,8 +486,8 @@ func TestOpenai_Model_Generate_Bad(t *testing.T) {
 		t.Fatal("Model.Generate() yielded token for provider error")
 	}
 
-	if errResult := model.Err(); errResult.OK || !core.Contains(errResult.Error(), "HTTP") {
-		t.Fatalf("Model.Generate() Err() = %#v, want provider failure", errResult)
+	if err := model.Err(); err == nil || !core.Contains(err.Error(), "HTTP") {
+		t.Fatalf("Model.Generate() Err() = %v, want provider failure", err)
 	}
 }
 
@@ -530,8 +526,8 @@ func TestOpenai_Model_Chat_Bad(t *testing.T) {
 	for range model.Chat(context.Background(), []inference.Message{{Role: "user", Content: "hi"}}) {
 		t.Fatal("Model.Chat() yielded token for failed provider")
 	}
-	if errResult := model.Err(); errResult.OK {
-		t.Fatal("Model.Chat() Err() OK = true, want failure")
+	if err := model.Err(); err == nil {
+		t.Fatal("Model.Chat() Err() = nil, want failure")
 	}
 }
 
@@ -545,47 +541,47 @@ func TestOpenai_Model_Chat_Ugly(t *testing.T) {
 	for range model.Chat(context.Background(), []inference.Message{{Role: "user", Content: "hi"}}) {
 	}
 
-	if errResult := model.Err(); !errResult.OK {
-		t.Fatalf("Model.Chat() Err() = %s, want context-injected success", errResult.Error())
+	if err := model.Err(); err != nil {
+		t.Fatalf("Model.Chat() Err() = %v, want context-injected success", err)
 	}
 }
 
 func TestOpenai_Model_Classify_Good(t *testing.T) {
 	model := &Model{}
-	result := model.Classify(context.Background(), []string{"prompt"})
+	results, err := model.Classify(context.Background(), []string{"prompt"})
 
-	if result.OK || !core.Contains(result.Error(), "not supported") {
-		t.Fatalf("Model.Classify() = %#v, want unsupported failure", result)
+	if err == nil || !core.Contains(err.Error(), "not supported") {
+		t.Fatalf("Model.Classify() = (%v, %v), want unsupported failure", results, err)
 	}
 }
 
 func TestOpenai_Model_Classify_Bad(t *testing.T) {
 	var model *Model
-	result := model.Classify(context.Background(), nil)
+	_, err := model.Classify(context.Background(), nil)
 
-	if result.OK {
-		t.Fatal("Model.Classify() OK = true, want unsupported failure")
+	if err == nil {
+		t.Fatal("Model.Classify() err = nil, want unsupported failure")
 	}
 }
 
 func TestOpenai_Model_Classify_Ugly(t *testing.T) {
 	model := &Model{}
-	result := model.Classify(context.Background(), []string{"a", "b"}, inference.WithMaxTokens(1))
+	_, err := model.Classify(context.Background(), []string{"a", "b"}, inference.WithMaxTokens(1))
 
-	if !core.Contains(result.Error(), "classification") {
-		t.Fatalf("Model.Classify() error = %q, want classification context", result.Error())
+	if err == nil || !core.Contains(err.Error(), "classification") {
+		t.Fatalf("Model.Classify() error = %v, want classification context", err)
 	}
 }
 
 func TestOpenai_Model_BatchGenerate_Good(t *testing.T) {
 	model, cleanup := newTestModel(t, "batch", http.StatusOK)
 	defer cleanup()
-	result := model.BatchGenerate(context.Background(), []string{"a", "b"})
+	batches, err := model.BatchGenerate(context.Background(), []string{"a", "b"})
 
-	if !result.OK {
-		t.Fatalf("Model.BatchGenerate() error = %s", result.Error())
+	if err != nil {
+		t.Fatalf("Model.BatchGenerate() error = %v", err)
 	}
-	if batches := result.Value.([]inference.BatchResult); len(batches) != 2 || len(batches[0].Tokens) != 1 {
+	if len(batches) != 2 || len(batches[0].Tokens) != 1 {
 		t.Fatalf("Model.BatchGenerate() = %+v, want two token batches", batches)
 	}
 }
@@ -593,12 +589,12 @@ func TestOpenai_Model_BatchGenerate_Good(t *testing.T) {
 func TestOpenai_Model_BatchGenerate_Bad(t *testing.T) {
 	model, cleanup := newTestModel(t, "bad", http.StatusBadGateway)
 	defer cleanup()
-	result := model.BatchGenerate(context.Background(), []string{"a"})
+	batches, err := model.BatchGenerate(context.Background(), []string{"a"})
 
-	if !result.OK {
-		t.Fatalf("Model.BatchGenerate() outer error = %s, want per-prompt error", result.Error())
+	if err != nil {
+		t.Fatalf("Model.BatchGenerate() outer error = %v, want per-prompt error", err)
 	}
-	if batches := result.Value.([]inference.BatchResult); len(batches) != 1 || batches[0].Err == nil {
+	if len(batches) != 1 || batches[0].Err == nil {
 		t.Fatalf("Model.BatchGenerate() = %+v, want per-prompt error", batches)
 	}
 }
@@ -606,10 +602,10 @@ func TestOpenai_Model_BatchGenerate_Bad(t *testing.T) {
 func TestOpenai_Model_BatchGenerate_Ugly(t *testing.T) {
 	model, cleanup := newTestModel(t, "unused", http.StatusOK)
 	defer cleanup()
-	result := model.BatchGenerate(context.Background(), nil)
+	batches, err := model.BatchGenerate(context.Background(), nil)
 
-	if !result.OK || len(result.Value.([]inference.BatchResult)) != 0 {
-		t.Fatalf("Model.BatchGenerate() = %#v, want empty batch success", result)
+	if err != nil || len(batches) != 0 {
+		t.Fatalf("Model.BatchGenerate() = (%+v, %v), want empty batch success", batches, err)
 	}
 }
 
@@ -694,56 +690,56 @@ func TestOpenai_Model_Metrics_Ugly(t *testing.T) {
 
 func TestOpenai_Model_Err_Good(t *testing.T) {
 	model := &Model{}
-	result := model.Err()
+	err := model.Err()
 
-	if !result.OK {
-		t.Fatalf("Model.Err() = %#v, want OK before failure", result)
+	if err != nil {
+		t.Fatalf("Model.Err() = %v, want nil before failure", err)
 	}
 }
 
 func TestOpenai_Model_Err_Bad(t *testing.T) {
 	model := &Model{lastErr: core.E("test", "failed", nil)}
-	result := model.Err()
+	err := model.Err()
 
-	if result.OK || !core.Contains(result.Error(), "failed") {
-		t.Fatalf("Model.Err() = %#v, want stored error", result)
+	if err == nil || !core.Contains(err.Error(), "failed") {
+		t.Fatalf("Model.Err() = %v, want stored error", err)
 	}
 }
 
 func TestOpenai_Model_Err_Ugly(t *testing.T) {
 	model := &Model{}
 	model.setResult(inference.GenerateMetrics{}, core.Fail(core.E("test", "set failure", nil)))
-	result := model.Err()
+	err := model.Err()
 
-	if result.OK || !core.Contains(result.Error(), "set failure") {
-		t.Fatalf("Model.Err() = %#v, want setResult failure", result)
+	if err == nil || !core.Contains(err.Error(), "set failure") {
+		t.Fatalf("Model.Err() = %v, want setResult failure", err)
 	}
 }
 
 func TestOpenai_Model_Close_Good(t *testing.T) {
 	model := &Model{}
-	result := model.Close()
+	err := model.Close()
 
-	if !result.OK {
-		t.Fatalf("Model.Close() = %#v, want OK", result)
+	if err != nil {
+		t.Fatalf("Model.Close() = %v, want nil", err)
 	}
 }
 
 func TestOpenai_Model_Close_Bad(t *testing.T) {
 	var model *Model
-	result := model.Close()
+	err := model.Close()
 
-	if !result.OK {
-		t.Fatalf("Model.Close() = %#v, want nil receiver close OK", result)
+	if err != nil {
+		t.Fatalf("Model.Close() = %v, want nil receiver close nil", err)
 	}
 }
 
 func TestOpenai_Model_Close_Ugly(t *testing.T) {
 	model := &Model{lastErr: core.AnError}
-	result := model.Close()
+	err := model.Close()
 
-	if !result.OK || model.lastErr == nil {
-		t.Fatalf("Model.Close() = %#v lastErr=%v, want close without clearing generation error", result, model.lastErr)
+	if err != nil || model.lastErr == nil {
+		t.Fatalf("Model.Close() = %v lastErr=%v, want close without clearing generation error", err, model.lastErr)
 	}
 }
 
@@ -800,11 +796,11 @@ func newTestModel(t *testing.T, content string, status int) (*Model, func()) {
 		DefaultModel: "gpt-test",
 		HTTPClient:   server.Client(),
 	})
-	result := backend.LoadModel("")
-	if !result.OK {
-		t.Fatalf("LoadModel() error = %s", result.Error())
+	textModel, err := backend.LoadModel("")
+	if err != nil {
+		t.Fatalf("LoadModel() error = %v", err)
 	}
-	return result.Value.(*Model), server.Close
+	return textModel.(*Model), server.Close
 }
 
 type waitRecordLimiter struct {

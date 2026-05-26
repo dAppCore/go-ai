@@ -272,8 +272,8 @@ func chatProvider(ctx context.Context, route ProviderRoute, messages []inference
 	for token := range route.Model.Chat(ctx, messages, options...) {
 		text = core.Concat(text, token.Text)
 	}
-	if errResult := route.Model.Err(); !errResult.OK {
-		return errResult
+	if err := route.Model.Err(); err != nil {
+		return core.Fail(err)
 	}
 	return core.Ok(chatProviderResponse{text: text, metrics: route.Model.Metrics()})
 }

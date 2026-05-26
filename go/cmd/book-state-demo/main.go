@@ -189,14 +189,10 @@ func routeFromOptions(name, baseURL, modelID, apiKey, mockOutput string, mock bo
 		APIKey:       apiKey,
 		DefaultModel: modelID,
 	})
-	modelResult := backend.LoadModel(modelID)
-	if !modelResult.OK {
-		if err, ok := modelResult.Value.(error); ok {
-			return core.Fail(core.E("book-state-demo.route", "load provider model", err))
-		}
-		return core.Fail(core.E("book-state-demo.route", modelResult.Error(), nil))
+	model, err := backend.LoadModel(modelID)
+	if err != nil {
+		return core.Fail(core.E("book-state-demo.route", "load provider model", err))
 	}
-	model := modelResult.Value.(inference.TextModel)
 	return core.Ok(ai.ProviderRoute{
 		Name:    name,
 		ModelID: modelID,

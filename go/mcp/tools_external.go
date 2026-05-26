@@ -177,11 +177,8 @@ func (s *Service) mlGenerate(ctx context.Context, input MLGenerateInput) core.Re
 		for token := range s.mlModel.Generate(ctx, input.Prompt, opts...) {
 			parts = append(parts, token.Text)
 		}
-		if errResult := s.mlModel.Err(); !errResult.OK {
-			if err, ok := errResult.Value.(error); ok {
-				return core.Fail(core.Errorf("ml_generate: %w", err))
-			}
-			return core.Fail(core.Errorf("ml_generate: %s", errResult.Error()))
+		if err := s.mlModel.Err(); err != nil {
+			return core.Fail(core.Errorf("ml_generate: %w", err))
 		}
 		return core.Ok(MLGenerateOutput{
 			Response: core.Join("", parts...),

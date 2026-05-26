@@ -80,10 +80,9 @@ func ExampleBackend_Available() {
 
 func ExampleBackend_LoadModel() {
 	backend := NewBackend(Config{BaseURL: "https://api.example.test", DefaultModel: "gpt"})
-	result := backend.LoadModel("")
-	model := result.Value.(inference.TextModel)
+	model, err := backend.LoadModel("")
 
-	core.Println(result.OK)
+	core.Println(err == nil)
 	core.Println(model.ModelType())
 	// Output:
 	// true
@@ -131,20 +130,19 @@ func ExampleModel_Chat() {
 
 func ExampleModel_Classify() {
 	model := &Model{}
-	result := model.Classify(context.Background(), []string{"prompt"})
+	results, err := model.Classify(context.Background(), []string{"prompt"})
 
-	core.Println(result.OK)
-	core.Println(core.Contains(result.Error(), "not supported"))
+	core.Println(results == nil)
+	core.Println(core.Contains(err.Error(), "not supported"))
 	// Output:
-	// false
+	// true
 	// true
 }
 
 func ExampleModel_BatchGenerate() {
 	model, cleanup := exampleOpenAIModel("batch")
 	defer cleanup()
-	result := model.BatchGenerate(context.Background(), []string{"a", "b"})
-	batches := result.Value.([]inference.BatchResult)
+	batches, _ := model.BatchGenerate(context.Background(), []string{"a", "b"})
 
 	core.Println(len(batches))
 	core.Println(batches[0].Tokens[0].Text)
@@ -182,10 +180,10 @@ func ExampleModel_Metrics() {
 
 func ExampleModel_Err() {
 	model := &Model{lastErr: core.NewError("failed")}
-	result := model.Err()
+	err := model.Err()
 
-	core.Println(result.OK)
-	core.Println(result.Error())
+	core.Println(err == nil)
+	core.Println(err.Error())
 	// Output:
 	// false
 	// failed
@@ -193,9 +191,9 @@ func ExampleModel_Err() {
 
 func ExampleModel_Close() {
 	model := &Model{}
-	result := model.Close()
+	err := model.Close()
 
-	core.Println(result.OK)
+	core.Println(err == nil)
 	// Output:
 	// true
 }
@@ -227,5 +225,6 @@ func exampleOpenAIModel(content string) (*Model, func()) {
 		DefaultModel: "gpt",
 		HTTPClient:   server.Client(),
 	})
-	return backend.LoadModel("").Value.(*Model), server.Close
+	textModel, _ := backend.LoadModel("")
+	return textModel.(*Model), server.Close
 }
