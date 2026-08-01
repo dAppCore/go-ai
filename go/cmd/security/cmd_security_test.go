@@ -560,28 +560,29 @@ func TestCmdSecurity_AlertSummary_PlainString_Ugly(t *core.T) {
 }
 
 func TestCmdSecurity_AddSecurityCommands_Good(t *core.T) {
-	root := &cli.Command{Use: "core"}
-	AddSecurityCommands(root)
-	cmd, _, err := root.Find([]string{"security"})
+	root := core.New()
+	r := AddSecurityCommands(root)
+	cmd := root.Command("security")
 
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "security", cmd.Name())
+	core.AssertTrue(t, r.OK)
+	core.AssertTrue(t, cmd.OK)
+	core.AssertEqual(t, "security", cmd.Value.(*core.Command).Name)
 }
 
 func TestCmdSecurity_AddSecurityCommands_Bad(t *core.T) {
-	root := &cli.Command{Use: "core"}
+	root := core.New()
 	AddSecurityCommands(root)
 	AddSecurityCommands(root)
 
-	core.AssertLen(t, root.Commands(), 1)
-	core.AssertEqual(t, "security", root.Commands()[0].Name())
+	core.AssertLen(t, root.Commands(), 6)
+	core.AssertEqual(t, "security", root.Commands()[0])
 }
 
 func TestCmdSecurity_AddSecurityCommands_Ugly(t *core.T) {
-	root := &cli.Command{Use: "core"}
-	root.AddCommand(&cli.Command{Use: "security"})
+	root := core.New()
+	root.Command("security", core.Command{Description: "pre-existing"})
 	AddSecurityCommands(root)
 
-	core.AssertLen(t, root.Commands(), 1)
-	core.AssertEqual(t, "security", root.Commands()[0].Name())
+	core.AssertLen(t, root.Commands(), 6)
+	core.AssertEqual(t, "security", root.Commands()[0])
 }

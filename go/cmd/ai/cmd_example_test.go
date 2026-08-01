@@ -2,16 +2,15 @@ package ai
 
 import (
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func ExampleAddAICommands() {
-	root := &cli.Command{Use: "core"}
-	AddAICommands(root)
-	cmd, _, err := root.Find([]string{"ai", "metrics"})
+	root := core.New()
+	r := AddAICommands(root)
+	cmd := root.Command("ai/metrics")
 
-	core.Println(err == nil)
-	core.Println(cmd.Name())
+	core.Println(r.OK && cmd.OK)
+	core.Println(cmd.Value.(*core.Command).Name)
 	// Output:
 	// true
 	// metrics

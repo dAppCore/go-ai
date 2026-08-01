@@ -7,31 +7,14 @@ import (
 	"dappco.re/go/cli/pkg/cli"
 )
 
-func addScanCommand(parent *cli.Command) {
-	commandOptions := &ScanCommandOptions{}
-
-	cmd := &cli.Command{
-		Use:   "scan",
-		Short: cli.T("cmd.security.scan.short"),
-		Long:  cli.T("cmd.security.scan.long"),
-		RunE: func(c *cli.Command, args []string) error {
-			r := runScan(*commandOptions)
-			if !r.OK {
-				err, _ := coreResultError(r).(error)
-				return err
-			}
-			return nil
+func addScanCommand(c *core.Core, path string) core.Result {
+	return registerSecurityCommand(c, path, core.Command{
+		Description: cli.T("cmd.security.scan.long"),
+		Flags:       scanCommandFlags(),
+		Action: func(opts core.Options) core.Result {
+			return runScan(scanCommandFromOptions(opts))
 		},
-	}
-
-	cmd.Flags().StringVar(&commandOptions.Selection.RegistryPath, "registry", "", cli.T("common.flag.registry"))
-	cmd.Flags().StringVar(&commandOptions.Selection.RepositoryName, "repo", "", cli.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&commandOptions.Selection.SeverityFilter, "severity", "", cli.T("cmd.security.flag.severity"))
-	cmd.Flags().StringVar(&commandOptions.ToolName, "tool", "", cli.T("cmd.security.scan.flag.tool"))
-	cmd.Flags().BoolVar(&commandOptions.Selection.JSONOutput, "json", false, cli.T("common.flag.json"))
-	cmd.Flags().StringVar(&commandOptions.Selection.ExternalTarget, "target", "", cli.T("cmd.security.flag.target"))
-
-	parent.AddCommand(cmd)
+	})
 }
 
 // ScanAlert is the normalised row emitted by `core security scan --json`.

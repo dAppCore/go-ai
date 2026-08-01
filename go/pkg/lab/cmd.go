@@ -29,49 +29,38 @@ func init() {
 }
 
 // AddLabCommands registers the top-level lab command group.
-func AddLabCommands(root *cli.Command) {
-	if commandExists(root, "lab") {
-		return
+func AddLabCommands(c *core.Core) core.Result {
+	if r := registerLabCommand(c, "lab", core.Command{Description: "Run local lab dashboard and health endpoints."}); !r.OK {
+		return r
 	}
-
-	labCommand := &cli.Command{
-		Use:   "lab",
-		Short: "Local lab dashboard",
-		Long:  "Run local lab dashboard and health endpoints.",
-	}
-
-	addServeCommand(labCommand)
-	root.AddCommand(labCommand)
+	return addServeCommand(c, "lab/serve")
 }
 
-func addServeCommand(parent *cli.Command) {
-	options := &CommandOptions{
-		Bind: defaultBindAddr,
+func registerLabCommand(c *core.Core, path string, command core.Command) core.Result {
+	if c.Command(path).OK {
+		return core.Ok(nil)
 	}
+	return c.Command(path, command)
+}
 
-	serveCommand := &cli.Command{
-		Use:   "serve",
-		Short: "Serve the lab dashboard",
-		Long:  "Start the local lab dashboard HTTP server.",
-		RunE: func(cmd *cli.Command, args []string) error {
-			if len(args) > 0 {
-				return core.E("lab.serve", core.Sprintf("unexpected argument %q", args[0]), nil)
+func addServeCommand(c *core.Core, path string) core.Result {
+	return registerLabCommand(c, path, core.Command{
+		Description: "Start the local lab dashboard HTTP server.",
+		Flags: core.NewOptions(
+			core.Option{Key: "bind", Value: defaultBindAddr},
+			core.Option{Key: "allow-remote", Value: false},
+		),
+		Action: func(opts core.Options) core.Result {
+			bind := opts.String("bind")
+			if bind == "" {
+				bind = defaultBindAddr
 			}
-			r := RunServe(*options)
-			if !r.OK {
-				if err, ok := r.Value.(error); ok {
-					return err
-				}
-				return core.NewError(r.Error())
-			}
-			return nil
+			return RunServe(CommandOptions{
+				Bind:        bind,
+				AllowRemote: opts.Bool("allow-remote"),
+			})
 		},
-	}
-
-	serveCommand.Flags().StringVar(&options.Bind, "bind", options.Bind, "HTTP listen address")
-	serveCommand.Flags().BoolVar(&options.AllowRemote, "allow-remote", false, "Allow binding to non-loopback interfaces")
-
-	parent.AddCommand(serveCommand)
+	})
 }
 
 // RunServe starts the lab dashboard HTTP server.
@@ -198,13 +187,4 @@ func ValidateRemoteAuth(allowRemote bool, authToken string) core.Result {
 		return core.Ok(nil)
 	}
 	return core.Fail(core.E("lab.serve", "refusing to start lab dashboard with --allow-remote without CORE_LAB_API_TOKEN", nil))
-}
-
-func commandExists(parent *cli.Command, name string) bool {
-	for _, child := range parent.Commands() {
-		if child.Name() == name {
-			return true
-		}
-	}
-	return false
 }

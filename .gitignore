@@ -6,3 +6,14 @@ mlx/dist/
 *.dylib
 .core/
 .idea/
+.DS_Store
+.lintdeps/
+.scannerwork/
+node_modules/
+node_modules.bak/
+dist/
+__pycache__/
+*.pyc
+coverage/
+htmlcov/
+.coverage

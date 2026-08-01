@@ -17,10 +17,31 @@ const (
 )
 
 var (
-	newQdrantClient = rag.NewQdrantClient
-	newOllamaClient = rag.NewOllamaClient
-	runRAGQuery     = rag.Query
-	closeQdrant     = func(client *rag.QdrantClient) error { return client.Close() }
+	newQdrantClient = func(cfg rag.QdrantConfig) core.Result {
+		result := rag.NewQdrantClient(cfg)
+		if !result.OK {
+			return result
+		}
+		client, _ := result.Value.(*rag.QdrantClient)
+		return core.Ok(client)
+	}
+	newOllamaClient = func(cfg rag.OllamaConfig) core.Result {
+		result := rag.NewOllamaClient(cfg)
+		if !result.OK {
+			return result
+		}
+		client, _ := result.Value.(*rag.OllamaClient)
+		return core.Ok(client)
+	}
+	runRAGQuery = func(ctx context.Context, store rag.VectorStore, embedder rag.Embedder, query string, cfg rag.QueryConfig) core.Result {
+		result := rag.Query(ctx, store, embedder, query, cfg)
+		if !result.OK {
+			return result
+		}
+		results, _ := result.Value.([]rag.QueryResult)
+		return core.Ok(results)
+	}
+	closeQdrant = func(client *rag.QdrantClient) core.Result { return client.Close() }
 )
 
 // ai.TaskInfo{Title: "Investigate build failure", Description: "CI compile step fails"} carries the minimal task data needed for RAG queries.
@@ -40,19 +61,21 @@ func QueryRAGForTask(task TaskInfo) core.Result {
 	}
 
 	qdrantConfiguration := rag.DefaultQdrantConfig()
-	qdrantClient, err := newQdrantClient(qdrantConfiguration)
-	if err != nil {
+	qdrantResult := newQdrantClient(qdrantConfiguration)
+	if !qdrantResult.OK {
 		return core.Ok("")
 	}
+	qdrantClient, _ := qdrantResult.Value.(*rag.QdrantClient)
 	if qdrantClient != nil {
-		defer func() { _ = closeQdrant(qdrantClient) }()
+		defer func() { closeQdrant(qdrantClient) }()
 	}
 
 	ollamaConfiguration := rag.DefaultOllamaConfig()
-	ollamaClient, err := newOllamaClient(ollamaConfiguration)
-	if err != nil {
+	ollamaResult := newOllamaClient(ollamaConfiguration)
+	if !ollamaResult.OK {
 		return core.Ok("")
 	}
+	ollamaClient, _ := ollamaResult.Value.(*rag.OllamaClient)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -63,10 +86,11 @@ func QueryRAGForTask(task TaskInfo) core.Result {
 		Threshold:  ragTaskSimilarityThreshold,
 	}
 
-	results, err := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfiguration)
-	if err != nil {
+	resultsResult := runRAGQuery(ctx, qdrantClient, ollamaClient, queryText, queryConfiguration)
+	if !resultsResult.OK {
 		return core.Ok("")
 	}
+	results, _ := resultsResult.Value.([]rag.QueryResult)
 	if len(results) == 0 {
 		return core.Ok("")
 	}

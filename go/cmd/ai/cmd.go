@@ -2,6 +2,7 @@
 package ai
 
 import (
+	"dappco.re/go"
 	metricscmd "dappco.re/go/ai/cmd/metrics"
 	ragcmd "dappco.re/go/ai/cmd/rag"
 	_ "dappco.re/go/ai/cmd/security" // registers core security commands when cmd/ai is imported.
@@ -15,28 +16,19 @@ func init() {
 
 // core ai metrics --since 24h
 // core ai rag query --question "What changed?"
-func AddAICommands(root *cli.Command) {
-	if commandExists(root, "ai") {
-		return
+func AddAICommands(c *core.Core) core.Result {
+	if r := registerAICommand(c, "ai", core.Command{Description: "Unified AI commands for metrics and RAG workflows."}); !r.OK {
+		return r
 	}
-
-	aiCmd := cli.NewGroup(
-		"ai",
-		"AI facade and delegated tooling",
-		"Unified AI commands for metrics and RAG workflows.",
-	)
-
-	metricscmd.AddMetricsCommand(aiCmd)
-	ragcmd.AddRAGSubcommands(aiCmd)
-
-	root.AddCommand(aiCmd)
+	if r := metricscmd.RegisterMetricsCommand(c, "ai/metrics"); !r.OK {
+		return r
+	}
+	return ragcmd.AddRAGSubcommands(c, "ai/rag")
 }
 
-func commandExists(parent *cli.Command, name string) bool {
-	for _, child := range parent.Commands() {
-		if child.Name() == name {
-			return true
-		}
+func registerAICommand(c *core.Core, path string, command core.Command) core.Result {
+	if c.Command(path).OK {
+		return core.Ok(nil)
 	}
-	return false
+	return c.Command(path, command)
 }

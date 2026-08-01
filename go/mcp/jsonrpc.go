@@ -214,7 +214,7 @@ func resultError(r core.Result) any {
 	if err, ok := r.Value.(error); ok {
 		return err
 	}
-	return core.NewError(r.Error())
+	return core.E("mcp.result", r.Error(), nil)
 }
 
 func rpcCodeForError(err error) int {

@@ -10,7 +10,6 @@ import (
 	"dappco.re/go/ai/ai"
 	"dappco.re/go/cli/pkg/cli"
 	"dappco.re/go/io"
-	coreerr "dappco.re/go/log"
 	"dappco.re/go/scm/repos"
 	execabs "golang.org/x/sys/execabs"
 )
@@ -64,33 +63,90 @@ type JobsCommandOptions struct {
 
 // core security alerts --repo core-php
 // core security jobs --targets all --copies 4
-func AddSecurityCommands(root *cli.Command) {
-	if commandExists(root, "security") {
-		return
+func AddSecurityCommands(c *core.Core) core.Result {
+	if r := registerSecurityCommand(c, "security", core.Command{Description: cli.T("cmd.security.long")}); !r.OK {
+		return r
 	}
-
-	securityCommand := &cli.Command{
-		Use:   "security",
-		Short: cli.T("cmd.security.short"),
-		Long:  cli.T("cmd.security.long"),
+	if r := addAlertsCommand(c, "security/alerts"); !r.OK {
+		return r
 	}
-
-	addAlertsCommand(securityCommand)
-	addDepsCommand(securityCommand)
-	addScanCommand(securityCommand)
-	addSecretsCommand(securityCommand)
-	addJobsCommand(securityCommand)
-
-	root.AddCommand(securityCommand)
+	if r := addDepsCommand(c, "security/deps"); !r.OK {
+		return r
+	}
+	if r := addScanCommand(c, "security/scan"); !r.OK {
+		return r
+	}
+	if r := addSecretsCommand(c, "security/secrets"); !r.OK {
+		return r
+	}
+	if r := addJobsCommand(c, "security/jobs"); !r.OK {
+		return r
+	}
+	return core.Ok(nil)
 }
 
-func commandExists(parent *cli.Command, name string) bool {
-	for _, child := range parent.Commands() {
-		if child.Name() == name {
-			return true
-		}
+func registerSecurityCommand(c *core.Core, path string, command core.Command) core.Result {
+	if c.Command(path).OK {
+		return core.Ok(nil)
 	}
-	return false
+	return c.Command(path, command)
+}
+
+func securitySelectionFlags() core.Options {
+	return core.NewOptions(
+		core.Option{Key: "registry", Value: ""},
+		core.Option{Key: "repo", Value: ""},
+		core.Option{Key: "severity", Value: ""},
+		core.Option{Key: "json", Value: false},
+		core.Option{Key: "target", Value: ""},
+	)
+}
+
+func securitySelectionFromOptions(opts core.Options) SecuritySelectionOptions {
+	return SecuritySelectionOptions{
+		RegistryPath:   opts.String("registry"),
+		RepositoryName: opts.String("repo"),
+		SeverityFilter: opts.String("severity"),
+		JSONOutput:     opts.Bool("json"),
+		ExternalTarget: opts.String("target"),
+	}
+}
+
+func scanCommandFlags() core.Options {
+	flags := securitySelectionFlags()
+	flags.Set("tool", "")
+	return flags
+}
+
+func scanCommandFromOptions(opts core.Options) ScanCommandOptions {
+	return ScanCommandOptions{
+		Selection: securitySelectionFromOptions(opts),
+		ToolName:  opts.String("tool"),
+	}
+}
+
+func jobsCommandFlags() core.Options {
+	return core.NewOptions(
+		core.Option{Key: "registry", Value: ""},
+		core.Option{Key: "targets", Value: ""},
+		core.Option{Key: "issue-repo", Value: ""},
+		core.Option{Key: "dry-run", Value: false},
+		core.Option{Key: "copies", Value: 1},
+	)
+}
+
+func jobsCommandFromOptions(opts core.Options) JobsCommandOptions {
+	workerCount := opts.Int("copies")
+	if workerCount == 0 {
+		workerCount = 1
+	}
+	return JobsCommandOptions{
+		RegistryPath:    opts.String("registry"),
+		Targets:         opts.String("targets"),
+		IssueRepository: opts.String("issue-repo"),
+		DryRun:          opts.Bool("dry-run"),
+		WorkerCount:     workerCount,
+	}
 }
 
 // DependabotAlert represents a Dependabot vulnerability alert.
@@ -184,7 +240,7 @@ func loadRegistry(registryPath string) core.Result {
 
 func checkGitHubCLI() core.Result {
 	if _, err := execabs.LookPath("gh"); err != nil {
-		return core.Fail(coreerr.E("security", cli.T("error.gh_not_found"), nil))
+		return core.Fail(core.E("security", cli.T("error.gh_not_found"), nil))
 	}
 	return core.Ok(nil)
 }
@@ -284,7 +340,7 @@ func decodeGitHubArrayItems(output []byte) core.Result {
 	var pages []any
 	if result := core.JSONUnmarshal(trimmed, &pages); !result.OK {
 		err, _ := coreResultError(result).(error)
-		return core.Fail(coreerr.E("security", "parse GitHub API response", err))
+		return core.Fail(core.E("security", "parse GitHub API response", err))
 	}
 
 	items := make([]githubRawMessage, 0, len(pages))
@@ -307,7 +363,7 @@ func decodeGitHubArrayItems(output []byte) core.Result {
 		var pageItems []any
 		if result := core.JSONUnmarshal(pageData, &pageItems); !result.OK {
 			err, _ := coreResultError(result).(error)
-			return core.Fail(coreerr.E("security", "parse GitHub API page", err))
+			return core.Fail(core.E("security", "parse GitHub API page", err))
 		}
 		for _, pageItem := range pageItems {
 			rawItem := core.JSONMarshal(pageItem)
@@ -333,7 +389,7 @@ func decodeDependabotAlerts(output []byte) core.Result {
 		var alert DependabotAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
 			err, _ := coreResultError(result).(error)
-			return core.Fail(coreerr.E("security", "parse dependabot alert", err))
+			return core.Fail(core.E("security", "parse dependabot alert", err))
 		}
 		alerts = append(alerts, alert)
 	}
@@ -352,7 +408,7 @@ func decodeCodeScanningAlerts(output []byte) core.Result {
 		var alert CodeScanningAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
 			err, _ := coreResultError(result).(error)
-			return core.Fail(coreerr.E("security", "parse code scanning alert", err))
+			return core.Fail(core.E("security", "parse code scanning alert", err))
 		}
 		alerts = append(alerts, alert)
 	}
@@ -371,7 +427,7 @@ func decodeSecretScanningAlerts(output []byte) core.Result {
 		var alert SecretScanningAlert
 		if result := core.JSONUnmarshal(item, &alert); !result.OK {
 			err, _ := coreResultError(result).(error)
-			return core.Fail(coreerr.E("security", "parse secret scanning alert", err))
+			return core.Fail(core.E("security", "parse secret scanning alert", err))
 		}
 		alerts = append(alerts, alert)
 	}
@@ -391,7 +447,7 @@ func decodeGitHubRepositoryNames(output []byte) core.Result {
 		var repository githubRepoResponse
 		if result := core.JSONUnmarshal(item, &repository); !result.OK {
 			err, _ := coreResultError(result).(error)
-			return core.Fail(coreerr.E("security", "parse GitHub repository", err))
+			return core.Fail(core.E("security", "parse GitHub repository", err))
 		}
 		if repository.FullName == "" {
 			continue
@@ -436,7 +492,7 @@ func combineSecurityCollectorErrors(target string, collectorErrors map[string]er
 		messages = append(messages, core.Sprintf("%s: %v", failure.name, failure.err))
 	}
 
-	return core.Fail(coreerr.E("security", core.Sprintf("failed to fetch %s for %s: %s",
+	return core.Fail(core.E("security", core.Sprintf("failed to fetch %s for %s: %s",
 		core.Join(", ", missingCollectors...),
 		target,
 		core.Join("; ", messages...),
@@ -459,7 +515,7 @@ func combineSecurityTargetErrors(commandName string, targetErrors map[string]err
 		messages = append(messages, core.Sprintf("%s: %v", targetName, targetErrors[targetName]))
 	}
 
-	return core.Fail(coreerr.E("security", core.Sprintf("%s failed for %d target(s): %s",
+	return core.Fail(core.E("security", core.Sprintf("%s failed for %d target(s): %s",
 		commandName,
 		len(targetNames),
 		core.Join("; ", messages...),

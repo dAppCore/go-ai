@@ -3,24 +3,12 @@ module dappco.re/go/ai
 go 1.26.0
 
 require (
-	dappco.re/go v0.9.0
-	dappco.re/go/api v0.8.0-alpha.1
-	dappco.re/go/cli v0.8.0-alpha.1
-	dappco.re/go/i18n v0.8.0-alpha.1
-	dappco.re/go/io v0.8.0-alpha.1
-	dappco.re/go/log v0.8.0-alpha.1
-	dappco.re/go/rag v0.8.0-alpha.1
-	dappco.re/go/scm v0.8.0-alpha.1
+	dappco.re/go/inference v0.9.0
 	github.com/gin-gonic/gin v1.12.0
 	golang.org/x/sys v0.43.0
 )
 
 require (
-	dappco.re/go/core v0.8.0-alpha.1 // indirect
-	dappco.re/go/core/i18n v0.2.3 // indirect
-	dappco.re/go/core/inference v0.2.1 // indirect
-	dappco.re/go/core/log v0.1.2 // indirect
-	dappco.re/go/inference v0.8.0-alpha.1 // indirect
 	github.com/99designs/gqlgen v0.17.88 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
@@ -138,15 +126,4 @@ require (
 	google.golang.org/grpc v1.79.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-)
-
-replace (
-	dappco.re/go/api => github.com/dappcore/api v0.8.0-alpha.1
-	dappco.re/go/cli => dappco.re/go/core/cli v0.5.2
-	dappco.re/go/i18n => github.com/dappcore/go-i18n v0.8.0-alpha.1
-	dappco.re/go/inference => github.com/dappcore/go-inference v0.8.0-alpha.1
-	dappco.re/go/io => github.com/dappcore/go-io v0.8.0-alpha.1
-	dappco.re/go/log => github.com/dappcore/go-log v0.8.0-alpha.1
-	dappco.re/go/rag => github.com/dappcore/go-rag v0.8.0-alpha.1
-	dappco.re/go/scm => github.com/dappcore/go-scm v0.8.0-alpha.1
 )

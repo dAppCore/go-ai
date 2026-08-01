@@ -62,6 +62,19 @@ func ExampleWithWSHub() {
 	// true
 }
 
+func ExampleWithInferenceModel() {
+	result := New(WithInferenceModel(&generateModel{}, "openai", "gpt-test"))
+	service := result.Value.(*Service)
+
+	core.Println(result.OK)
+	core.Println(service.mlBackend)
+	core.Println(service.mlModelName)
+	// Output:
+	// true
+	// openai
+	// gpt-test
+}
+
 func ExampleWithSubsystem() {
 	result := New(WithSubsystem(exampleSubsystem{}))
 	service := result.Value.(*Service)

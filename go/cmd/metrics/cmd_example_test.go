@@ -2,17 +2,28 @@ package metrics
 
 import (
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 func ExampleAddMetricsCommand() {
-	root := &cli.Command{Use: "core"}
-	AddMetricsCommand(root)
-	cmd, _, err := root.Find([]string{"metrics"})
+	root := core.New()
+	r := AddMetricsCommand(root)
+	cmd := root.Command("metrics")
 
-	core.Println(err == nil)
-	core.Println(cmd.Name())
+	core.Println(r.OK && cmd.OK)
+	core.Println(cmd.Value.(*core.Command).Name)
 	// Output:
 	// true
 	// metrics
+}
+
+func ExampleRegisterMetricsCommand() {
+	root := core.New()
+	r := RegisterMetricsCommand(root, "ai/metrics")
+	cmd := root.Command("ai/metrics")
+
+	core.Println(r.OK)
+	core.Println(cmd.Value.(*core.Command).Path)
+	// Output:
+	// true
+	// ai/metrics
 }

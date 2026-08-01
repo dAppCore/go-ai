@@ -2,36 +2,36 @@ package lab
 
 import (
 	core "dappco.re/go"
-	"dappco.re/go/cli/pkg/cli"
 )
 
 // --- AX-7 canonical triplets ---
 
 func TestCmd_AddLabCommands_Good(t *core.T) {
-	root := &cli.Command{Use: "core"}
-	AddLabCommands(root)
-	cmd, _, err := root.Find([]string{"lab"})
+	root := core.New()
+	r := AddLabCommands(root)
+	cmd := root.Command("lab")
 
-	core.AssertNoError(t, err)
-	core.AssertEqual(t, "lab", cmd.Name())
+	core.AssertTrue(t, r.OK)
+	core.AssertTrue(t, cmd.OK)
+	core.AssertEqual(t, "lab", cmd.Value.(*core.Command).Name)
 }
 
 func TestCmd_AddLabCommands_Bad(t *core.T) {
-	root := &cli.Command{Use: "core"}
+	root := core.New()
 	AddLabCommands(root)
 	AddLabCommands(root)
 
-	core.AssertLen(t, root.Commands(), 1)
-	core.AssertEqual(t, "lab", root.Commands()[0].Name())
+	core.AssertLen(t, root.Commands(), 2)
+	core.AssertEqual(t, "lab", root.Commands()[0])
 }
 
 func TestCmd_AddLabCommands_Ugly(t *core.T) {
-	root := &cli.Command{Use: "core"}
-	root.AddCommand(&cli.Command{Use: "lab"})
+	root := core.New()
+	root.Command("lab", core.Command{Description: "pre-existing"})
 	AddLabCommands(root)
 
-	core.AssertLen(t, root.Commands(), 1)
-	core.AssertEqual(t, "lab", root.Commands()[0].Name())
+	core.AssertLen(t, root.Commands(), 2)
+	core.AssertEqual(t, "lab", root.Commands()[0])
 }
 
 func TestCmd_RunServe_Good(t *core.T) {

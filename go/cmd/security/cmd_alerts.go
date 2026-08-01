@@ -7,30 +7,14 @@ import (
 	"dappco.re/go/cli/pkg/cli"
 )
 
-func addAlertsCommand(parent *cli.Command) {
-	selectionOptions := &SecuritySelectionOptions{}
-
-	cmd := &cli.Command{
-		Use:   "alerts",
-		Short: cli.T("cmd.security.alerts.short"),
-		Long:  cli.T("cmd.security.alerts.long"),
-		RunE: func(c *cli.Command, args []string) error {
-			r := runAlerts(*selectionOptions)
-			if !r.OK {
-				err, _ := coreResultError(r).(error)
-				return err
-			}
-			return nil
+func addAlertsCommand(c *core.Core, path string) core.Result {
+	return registerSecurityCommand(c, path, core.Command{
+		Description: cli.T("cmd.security.alerts.long"),
+		Flags:       securitySelectionFlags(),
+		Action: func(opts core.Options) core.Result {
+			return runAlerts(securitySelectionFromOptions(opts))
 		},
-	}
-
-	cmd.Flags().StringVar(&selectionOptions.RegistryPath, "registry", "", cli.T("common.flag.registry"))
-	cmd.Flags().StringVar(&selectionOptions.RepositoryName, "repo", "", cli.T("cmd.security.flag.repo"))
-	cmd.Flags().StringVar(&selectionOptions.SeverityFilter, "severity", "", cli.T("cmd.security.flag.severity"))
-	cmd.Flags().BoolVar(&selectionOptions.JSONOutput, "json", false, cli.T("common.flag.json"))
-	cmd.Flags().StringVar(&selectionOptions.ExternalTarget, "target", "", cli.T("cmd.security.flag.target"))
-
-	parent.AddCommand(cmd)
+	})
 }
 
 // AlertOutput is the normalised row emitted by `core security alerts --json`.

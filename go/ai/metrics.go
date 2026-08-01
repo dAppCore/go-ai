@@ -12,7 +12,6 @@ import (
 
 	"dappco.re/go"
 	coreio "dappco.re/go/io"
-	coreerr "dappco.re/go/log"
 )
 
 var metricsWriteLock = core.New().Lock("ai.metrics.write")
@@ -77,39 +76,39 @@ func Record(event Event) (result core.Result) {
 
 	dirResult := metricsDir()
 	if !dirResult.OK {
-		return core.Fail(coreerr.E("ai", "record event", core.NewError(dirResult.Error())))
+		return metricsFailureResult("record event", dirResult)
 	}
 	dir := dirResult.Value.(string)
 
 	if err := coreio.Local.EnsureDir(dir); err != nil {
-		return core.Fail(coreerr.E("ai", "record event", err))
+		return metricsFailure("record event", err)
 	}
 	if r := chmodMetricsPath(dir, metricsDirMode); !r.OK {
-		return core.Fail(coreerr.E("ai", "record event", core.NewError(r.Error())))
+		return metricsFailureResult("record event", r)
 	}
 
 	path := metricsFilePath(dir, recordedAt)
 	fileResult := openMetricsEventFile(path)
 	if !fileResult.OK {
-		return core.Fail(coreerr.E("ai", "record event", core.NewError(fileResult.Error())))
+		return metricsFailureResult("record event", fileResult)
 	}
 	file := fileResult.Value.(goio.WriteCloser)
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil && result.OK {
-			result = core.Fail(coreerr.E("ai", "record event", closeErr))
+			result = metricsFailure("record event", closeErr)
 		}
 	}()
 
 	data := core.JSONMarshal(event)
 	if !data.OK {
 		if marshalErr, ok := data.Value.(error); ok {
-			return core.Fail(coreerr.E("ai", "record event", marshalErr))
+			return metricsFailure("record event", marshalErr)
 		}
-		return core.Fail(coreerr.E("ai", "record event", nil))
+		return metricsFailure("record event", nil)
 	}
 
 	if _, err := file.Write(append(data.Value.([]byte), '\n')); err != nil {
-		return core.Fail(coreerr.E("ai", "record event", err))
+		return metricsFailure("record event", err)
 	}
 
 	return core.Ok(nil)
@@ -119,7 +118,7 @@ func Record(event Event) (result core.Result) {
 func ReadEvents(since time.Time) core.Result {
 	dirResult := metricsDir()
 	if !dirResult.OK {
-		return core.Fail(coreerr.E("ai", "read events", core.NewError(dirResult.Error())))
+		return metricsFailureResult("read events", dirResult)
 	}
 	dir := dirResult.Value.(string)
 
@@ -178,13 +177,13 @@ func readMetricsFile(path string, since time.Time) core.Result {
 
 	content, err := coreio.Local.Read(path)
 	if err != nil {
-		return core.Fail(coreerr.E("ai", "read events", err))
+		return metricsFailure("read events", err)
 	}
 
 	var events []Event
 	for _, line := range core.Split(content, "\n") {
 		if len(line) > maxMetricsLineBytes {
-			return core.Fail(coreerr.E("ai", "read events", core.E("ai.readMetricsFile", "metrics line exceeds maximum size", nil)))
+			return metricsFailure("read events", core.E("ai.readMetricsFile", "metrics line exceeds maximum size", nil))
 		}
 
 		var event Event
@@ -196,6 +195,17 @@ func readMetricsFile(path string, since time.Time) core.Result {
 		}
 	}
 	return core.Ok(events)
+}
+
+func metricsFailure(message string, err error) core.Result {
+	return core.Fail(core.E("ai", message, err))
+}
+
+func metricsFailureResult(message string, failure core.Result) core.Result {
+	if err, ok := failure.Value.(error); ok {
+		return metricsFailure(message, err)
+	}
+	return core.Fail(core.E("ai", core.Concat(message, ": ", failure.Error()), nil))
 }
 
 func openMetricsEventFile(path string) core.Result {
@@ -212,7 +222,7 @@ func openMetricsEventFile(path string) core.Result {
 
 	if r := chmodMetricsPath(path, metricsFileMode); !r.OK {
 		file.Close()
-		return core.Fail(core.NewError(r.Error()))
+		return metricsFailureResult("open metrics event file", r)
 	}
 	return core.Ok(file)
 }
